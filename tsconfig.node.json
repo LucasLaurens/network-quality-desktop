@@ -10,7 +10,8 @@
     "checkJs": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    "resolveJsonModule": true
   },
-  "include": ["vite.config.ts", "eslint.config.js", "scripts/**/*.mjs"]
+  "include": ["vite.config.ts", "eslint.config.js", "scripts/**/*.mjs", "src-tauri/tauri.conf.json"]
 }
