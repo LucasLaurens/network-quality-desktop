@@ -46,7 +46,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
     }
 
     /// Probes the targets concurrently, so one tick costs one probe timeout at most.
-    /// O(k log k) time for k targets plus O(1) window work.
+    /// O(k log k + n log n) time and O(k + n) space, k targets and n ≤ 15 window samples.
     pub async fn handle(&mut self, message: EngineMessage) {
         match message {
             EngineMessage::Tick => self.measure_one_second().await,
@@ -74,7 +74,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
                 let observed = self.thresholds.latency.compute_grade(p90);
                 self.hysteresis.observe(observed, self.clock.read_now())
             }
-            None => self.hysteresis.read_displayed(),
+            None => self.hysteresis.restart(),
         };
         self.presenter.present(&VerdictView {
             verdict,

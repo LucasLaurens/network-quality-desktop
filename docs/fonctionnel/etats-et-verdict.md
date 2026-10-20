@@ -2,12 +2,12 @@
 
 La pastille de la barre des menus montre l'état de la connexion. Chaque état a une forme et une couleur, pour rester lisible sans distinguer les couleurs.
 
-| État            | Forme                 | Quand                           |
-| --------------- | --------------------- | ------------------------------- |
-| Solide          | disque plein vert     | latence p90 sous 100 ms         |
-| Instable        | demi-disque ambre     | latence p90 entre 100 et 300 ms |
-| Dégradée        | triangle rouge        | latence p90 au-delà de 300 ms   |
-| Mesure en cours | anneau pointillé bleu | aucune mesure encore reçue      |
+| État            | Forme                 | Quand                                              |
+| --------------- | --------------------- | -------------------------------------------------- |
+| Solide          | disque plein vert     | latence p90 sous 100 ms                            |
+| Instable        | demi-disque ambre     | latence p90 entre 100 et 300 ms                    |
+| Dégradée        | triangle rouge        | latence p90 au-delà de 300 ms                      |
+| Mesure en cours | anneau pointillé bleu | aucune réponse depuis 15 secondes, ou au démarrage |
 
 Survoler la pastille affiche le nom de l'état (sauf sous Linux).
 

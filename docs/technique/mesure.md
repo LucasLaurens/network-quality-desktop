@@ -11,6 +11,7 @@
 ## Moteur
 
 - Un acteur unique, `MeasurementEngine`, possède tout l'état et reçoit des messages par un canal tokio. L'app lui envoie `Tick` chaque seconde (`MissedTickBehavior::Delay`) ; tout tourne côté Rust, jamais dans le webview.
+- La fenêtre compte des `Tick` : si le système retarde l'horloge (veille, App Nap), « 15 s » devient « 15 ticks ».
 - À chaque `Tick` : sondes en parallèle, médiane des réponses, ajout à la fenêtre, p90, niveau, hystérésis, puis envoi d'un `VerdictView` au `VerdictPresenter`.
 - L'horloge passe par le port `Clock` (`SystemClock` en production, horloge manuelle en test).
 

@@ -4,8 +4,14 @@ use std::f64::consts::PI;
 
 use domain::{Grade, Verdict};
 
+/// Pixel size of the drawn icon; the OS scales it to the menu-bar height.
+pub const ICON_SIZE: u32 = 44;
 const RING_WIDTH: f64 = 4.0;
 const DASHES: f64 = 12.0;
+/// Empty border around the shapes, so anti-aliased edges are not clipped.
+const MARGIN: f64 = 3.0;
+/// The triangle sits a little higher, so its base aligns with the bottom of the discs.
+const TRIANGLE_BASE_LIFT: f64 = 2.0;
 
 /// State colours, mirrored from the light values of `src/styles/tokens.css` (guarded by a test).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,7 +38,7 @@ impl StateColour {
 
     /// (lightness 0..1, chroma, hue in degrees)
     #[must_use]
-    pub const fn oklch(self) -> (f64, f64, f64) {
+    pub const fn to_oklch(self) -> (f64, f64, f64) {
         match self {
             Self::Solid => (0.56, 0.13, 150.0),
             Self::Unstable => (0.62, 0.14, 70.0),
@@ -44,7 +50,7 @@ impl StateColour {
     /// OKLCH to gamma-encoded sRGB (Björn Ottosson's reference matrices). O(1).
     #[must_use]
     pub fn to_srgb(self) -> [u8; 3] {
-        let (lightness, chroma, hue) = self.oklch();
+        let (lightness, chroma, hue) = self.to_oklch();
         let (green_red, blue_yellow) = (
             chroma * hue.to_radians().cos(),
             chroma * hue.to_radians().sin(),
@@ -63,6 +69,17 @@ impl StateColour {
     }
 }
 
+impl From<Verdict> for StateColour {
+    fn from(verdict: Verdict) -> Self {
+        match verdict {
+            Verdict::Graded(Grade::Solid) => Self::Solid,
+            Verdict::Graded(Grade::Unstable) => Self::Unstable,
+            Verdict::Graded(Grade::Degraded) => Self::Degraded,
+            Verdict::Measuring => Self::Measuring,
+        }
+    }
+}
+
 fn encode_srgb_channel(linear: f64) -> u8 {
     let encoded = if linear <= 0.003_130_8 {
         12.92 * linear
@@ -78,13 +95,7 @@ fn encode_srgb_channel(linear: f64) -> u8 {
 /// Returns `size`×`size` RGBA pixels for the verdict. O(size²) time and space.
 #[must_use]
 pub fn render_verdict_icon(verdict: Verdict, size: u32) -> Vec<u8> {
-    let colour = match verdict {
-        Verdict::Graded(Grade::Solid) => StateColour::Solid,
-        Verdict::Graded(Grade::Unstable) => StateColour::Unstable,
-        Verdict::Graded(Grade::Degraded) => StateColour::Degraded,
-        Verdict::Measuring => StateColour::Measuring,
-    }
-    .to_srgb();
+    let colour = StateColour::from(verdict).to_srgb();
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
     for y in 0..size {
         for x in 0..size {
@@ -102,13 +113,13 @@ pub fn render_verdict_icon(verdict: Verdict, size: u32) -> Vec<u8> {
 /// Negative inside the shape, positive outside, in pixels. O(1).
 fn compute_signed_distance(verdict: Verdict, (x, y): (f64, f64), size: f64) -> f64 {
     let centre = size / 2.0;
-    let radius = centre - 3.0;
+    let radius = centre - MARGIN;
     let from_centre = (x - centre).hypot(y - centre);
     let disc = from_centre - radius;
     let ring = (from_centre - (radius - RING_WIDTH / 2.0)).abs() - RING_WIDTH / 2.0;
     match verdict {
         Verdict::Graded(Grade::Solid) => disc,
-        Verdict::Graded(Grade::Unstable) => ring.min(disc.max(x - centre)),
+        Verdict::Graded(Grade::Unstable) => ring.min(disc.max(centre - x)),
         Verdict::Graded(Grade::Degraded) => compute_triangle_distance((x, y), size),
         Verdict::Measuring => {
             let turn = ((y - centre).atan2(x - centre) + PI) / (2.0 * PI);
@@ -120,9 +131,10 @@ fn compute_signed_distance(verdict: Verdict, (x, y): (f64, f64), size: f64) -> f
 
 /// Upward triangle filling the icon, as the max of the distances to its three edges.
 fn compute_triangle_distance(point: (f64, f64), size: f64) -> f64 {
-    let top = (size / 2.0, 3.0);
-    let left = (3.0, size - 5.0);
-    let right = (size - 3.0, size - 5.0);
+    let bottom = size - MARGIN - TRIANGLE_BASE_LIFT;
+    let top = (size / 2.0, MARGIN);
+    let left = (MARGIN, bottom);
+    let right = (size - MARGIN, bottom);
     [(top, right), (right, left), (left, top)]
         .into_iter()
         .map(|(from, to)| compute_edge_distance(point, from, to))
@@ -140,7 +152,7 @@ mod tests {
     use super::*;
     use domain::{Grade, Verdict};
 
-    const SIZE: u32 = 44;
+    const SIZE: u32 = ICON_SIZE;
 
     fn read_pixel(rgba: &[u8], x: u32, y: u32) -> [u8; 4] {
         let index = ((y * SIZE + x) * 4) as usize;
@@ -173,14 +185,14 @@ mod tests {
     }
 
     #[test]
-    fn draws_unstable_as_a_half_filled_ring() {
+    fn draws_unstable_as_a_ring_filled_on_its_right_half() {
         // Act
         let rgba = render_verdict_icon(Verdict::Graded(Grade::Unstable), SIZE);
 
         // Assert
-        assert!(is_opaque(read_pixel(&rgba, SIZE / 2 - 8, SIZE / 2)));
-        assert!(is_transparent(read_pixel(&rgba, SIZE / 2 + 8, SIZE / 2)));
-        assert!(is_opaque(read_pixel(&rgba, SIZE - 5, SIZE / 2)));
+        assert!(is_opaque(read_pixel(&rgba, SIZE / 2 + 8, SIZE / 2)));
+        assert!(is_transparent(read_pixel(&rgba, SIZE / 2 - 8, SIZE / 2)));
+        assert!(is_opaque(read_pixel(&rgba, 4, SIZE / 2)));
     }
 
     #[test]
@@ -220,7 +232,7 @@ mod tests {
             let declared = read_light_token(tokens, colour.token_name());
             assert_eq!(
                 declared,
-                colour.oklch(),
+                colour.to_oklch(),
                 "{} drifted from tokens.css",
                 colour.token_name()
             );

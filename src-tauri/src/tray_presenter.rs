@@ -7,14 +7,11 @@ use domain::{Grade, Verdict};
 use tauri::image::Image;
 use tauri::tray::TrayIcon;
 
-use crate::tray_icon::render_verdict_icon;
-
-/// Pixel size of the drawn icon; the OS scales it to the menu-bar height.
-const ICON_SIZE: u32 = 44;
+use crate::tray_icon::{ICON_SIZE, render_verdict_icon};
 
 pub struct TrayPresenter {
     tray: TrayIcon,
-    shown: Mutex<Option<Verdict>>,
+    shown: Mutex<Verdict>,
 }
 
 impl TrayPresenter {
@@ -22,7 +19,7 @@ impl TrayPresenter {
     pub fn new(tray: TrayIcon) -> Self {
         Self {
             tray,
-            shown: Mutex::new(None),
+            shown: Mutex::new(Verdict::Measuring),
         }
     }
 }
@@ -30,16 +27,18 @@ impl TrayPresenter {
 impl VerdictPresenter for TrayPresenter {
     fn present(&self, view: &VerdictView) {
         let mut shown = self.shown.lock().unwrap_or_else(PoisonError::into_inner);
-        if *shown == Some(view.verdict) {
+        if *shown == view.verdict {
             return;
         }
         if let Err(error) = self.tray.set_icon(Some(create_icon_image(view.verdict))) {
             eprintln!("Updating the menu-bar icon failed: {error}");
             return;
         }
-        // Tooltips are not supported on Linux; the shape still carries the state there.
-        let _ = self.tray.set_tooltip(Some(describe_verdict(view.verdict)));
-        *shown = Some(view.verdict);
+        // Linux ignores tooltips without failing; an error elsewhere is worth knowing about.
+        if let Err(error) = self.tray.set_tooltip(Some(describe_verdict(view.verdict))) {
+            eprintln!("Updating the menu-bar tooltip failed: {error}");
+        }
+        *shown = view.verdict;
     }
 }
 

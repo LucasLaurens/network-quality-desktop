@@ -10,6 +10,7 @@ use std::time::Duration;
 use application::{EngineMessage, MeasurementEngine, list_default_targets};
 use domain::Verdict;
 use infrastructure::{IcmpLatencyProbe, SystemClock};
+use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri_specta::{Builder, collect_commands};
 use tokio::sync::mpsc;
@@ -17,6 +18,7 @@ use tokio::time::MissedTickBehavior;
 use tray_presenter::{TrayPresenter, create_icon_image, describe_verdict};
 
 const TRAY_ID: &str = "connection-state";
+const QUIT_ID: &str = "quit";
 const TICK_EVERY: Duration = Duration::from_secs(1);
 /// A few pending ticks at most: if the engine falls behind, older ticks are not worth replaying.
 const ENGINE_INBOX_CAPACITY: usize = 4;
@@ -44,10 +46,19 @@ pub fn run() {
 
 /// Creates the menu-bar dot and starts the measurement actor with its 1 Hz clock, all on the Rust side.
 fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
+    // Linux tray backends may hide an icon that has no menu; the full native menu comes later.
+    let quit = MenuItem::with_id(app, QUIT_ID, "Quitter", true, None::<&str>)?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(create_icon_image(Verdict::Measuring))
         .icon_as_template(false)
         .tooltip(describe_verdict(Verdict::Measuring))
+        .menu(&Menu::with_items(app, &[&quit])?)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| {
+            if event.id() == QUIT_ID {
+                app.exit(0);
+            }
+        })
         .build(app)?;
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
     let engine = MeasurementEngine::new(

@@ -12,23 +12,34 @@ enum Direction {
 }
 
 /// Keeps the dot steady: a worse grade shows after 10 sustained seconds, a better one after 30.
-#[derive(Debug, Clone, Default)]
+/// The direction is what must persist: Solid, then Unstable, then Degraded shows Degraded 10 s
+/// after the connection first got worse.
+#[derive(Debug, Clone)]
 pub struct Hysteresis {
-    displayed: Option<Grade>,
+    displayed: Verdict,
     pending_since: Option<(Direction, Timestamp)>,
+}
+
+impl Default for Hysteresis {
+    fn default() -> Self {
+        Self {
+            displayed: Verdict::Measuring,
+            pending_since: None,
+        }
+    }
 }
 
 impl Hysteresis {
     /// Feeds the grade observed now and returns the verdict to display. O(1) time and space.
     pub fn observe(&mut self, observed: Grade, now: Timestamp) -> Verdict {
-        let Some(displayed) = self.displayed else {
-            self.displayed = Some(observed);
-            return Verdict::Graded(observed);
+        let Verdict::Graded(displayed) = self.displayed else {
+            self.displayed = Verdict::Graded(observed);
+            return self.displayed;
         };
         let direction = match observed.cmp(&displayed) {
             std::cmp::Ordering::Equal => {
                 self.pending_since = None;
-                return Verdict::Graded(displayed);
+                return self.displayed;
             }
             std::cmp::Ordering::Greater => Direction::Worse,
             std::cmp::Ordering::Less => Direction::Better,
@@ -45,16 +56,15 @@ impl Hysteresis {
             Direction::Better => IMPROVE_AFTER,
         };
         if now.compute_elapsed_since(since) >= required {
-            self.displayed = Some(observed);
+            self.displayed = Verdict::Graded(observed);
             self.pending_since = None;
-            return Verdict::Graded(observed);
         }
-        Verdict::Graded(displayed)
+        self.displayed
     }
 
-    /// The verdict shown before any grade could be observed.
-    #[must_use]
-    pub fn read_displayed(&self) -> Verdict {
-        self.displayed.map_or(Verdict::Measuring, Verdict::Graded)
+    /// Forgets what was displayed: nothing measured in the whole window, so the next grade starts afresh.
+    pub fn restart(&mut self) -> Verdict {
+        *self = Self::default();
+        self.displayed
     }
 }

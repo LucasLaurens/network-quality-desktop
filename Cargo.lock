@@ -73,6 +73,7 @@ dependencies = [
 name = "application"
 version = "0.1.0"
 dependencies = [
+ "application",
  "domain",
  "futures-util",
  "tokio",

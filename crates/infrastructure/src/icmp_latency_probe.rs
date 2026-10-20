@@ -32,9 +32,10 @@ mod tests {
     async fn measures_a_round_trip_to_a_public_resolver() {
         // Arrange
         let probe = IcmpLatencyProbe;
+        let target = application::list_default_targets()[0];
 
         // Act
-        let round_trip = probe.measure_round_trip(Target::parse("1.1.1.1")).await;
+        let round_trip = probe.measure_round_trip(target).await;
 
         // Assert
         assert!(round_trip.is_some_and(|rtt| rtt < PROBE_TIMEOUT));

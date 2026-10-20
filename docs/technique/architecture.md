@@ -14,9 +14,9 @@ Le cœur est en Rust, organisé en workspace Cargo de quatre crates. Le sens des
 État actuel :
 
 - `domain` : niveaux, seuils, fenêtre de latence, médiane, hystérésis, verdict.
-- `application` : moteur de mesure (acteur), ports `LatencyProbe`, `Clock`, `VerdictPresenter`, faux en mémoire.
+- `application` : moteur de mesure (acteur sur un canal tokio, seule dépendance d'exécution de cette crate), ports `LatencyProbe`, `Clock`, `VerdictPresenter`. Les faux en mémoire ne sont compilés que pour les tests (feature `test-support`).
 - `infrastructure` : sonde ICMP et horloge système.
-- `app` : icône de barre système, horloge à 1 Hz, commande `read_app_info`.
+- `app` : icône de barre système (avec un menu minimal « Quitter »), horloge à 1 Hz, commande `read_app_info`.
 
 ## Front
 

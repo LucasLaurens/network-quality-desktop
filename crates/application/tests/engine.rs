@@ -6,8 +6,9 @@ use application::test_support::{InMemoryNetwork, InMemoryVerdictPresenter, Manua
 use application::{EngineMessage, MeasurementEngine};
 use domain::{Grade, Target, Verdict};
 
-const CLOUDFLARE: &str = "1.1.1.1";
-const GOOGLE: &str = "8.8.8.8";
+// Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
+const FIRST_TARGET: &str = "192.0.2.1";
+const SECOND_TARGET: &str = "198.51.100.1";
 const FAST: Duration = Duration::from_millis(20);
 const SLOW: Duration = Duration::from_millis(180);
 const VERY_SLOW: Duration = Duration::from_millis(400);
@@ -23,7 +24,7 @@ fn create_harness() -> Harness {
     let network = InMemoryNetwork::default();
     let clock = ManualClock::default();
     let presenter = InMemoryVerdictPresenter::default();
-    let targets = vec![Target::parse(CLOUDFLARE), Target::parse(GOOGLE)];
+    let targets = vec![Target::parse(FIRST_TARGET), Target::parse(SECOND_TARGET)];
     let engine = MeasurementEngine::new(network.clone(), clock.clone(), presenter.clone(), targets);
     Harness {
         network,
@@ -36,9 +37,9 @@ fn create_harness() -> Harness {
 impl Harness {
     fn set_latency_to_every_target(&self, round_trip: Option<Duration>) {
         self.network
-            .set_round_trip(Target::parse(CLOUDFLARE), round_trip);
+            .set_round_trip(Target::parse(FIRST_TARGET), round_trip);
         self.network
-            .set_round_trip(Target::parse(GOOGLE), round_trip);
+            .set_round_trip(Target::parse(SECOND_TARGET), round_trip);
     }
 
     async fn run_seconds(&mut self, seconds: u32) {
@@ -107,8 +108,10 @@ async fn uses_the_median_of_the_targets_that_answered() {
     let mut harness = create_harness();
     harness
         .network
-        .set_round_trip(Target::parse(CLOUDFLARE), Some(FAST));
-    harness.network.set_round_trip(Target::parse(GOOGLE), None);
+        .set_round_trip(Target::parse(FIRST_TARGET), Some(FAST));
+    harness
+        .network
+        .set_round_trip(Target::parse(SECOND_TARGET), None);
 
     // Act
     harness.run_seconds(1).await;
@@ -198,5 +201,40 @@ async fn grades_latency_between_100_and_300_ms_as_unstable() {
     assert_eq!(
         harness.read_presented_verdict(),
         Verdict::Graded(Grade::Unstable)
+    );
+}
+
+#[tokio::test]
+async fn falls_back_to_measuring_once_a_whole_window_went_unanswered() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.set_latency_to_every_target(Some(FAST));
+    harness.run_seconds(20).await;
+    harness.set_latency_to_every_target(None);
+
+    // Act
+    harness.run_seconds(15).await;
+
+    // Assert
+    assert_eq!(harness.read_presented_verdict(), Verdict::Measuring);
+}
+
+#[tokio::test]
+async fn shows_the_first_grade_measured_after_an_outage_at_once() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.set_latency_to_every_target(Some(FAST));
+    harness.run_seconds(20).await;
+    harness.set_latency_to_every_target(None);
+    harness.run_seconds(15).await;
+    harness.set_latency_to_every_target(Some(VERY_SLOW));
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Degraded)
     );
 }

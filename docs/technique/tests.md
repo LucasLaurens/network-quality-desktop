@@ -9,7 +9,7 @@
 | Adaptateurs        | Test réel de la sonde ICMP, lancé à la demande                                                                                                                        | `crates/infrastructure`              |
 | Shell              | Dessin des icônes, couleurs identiques aux tokens CSS, export des bindings                                                                                            | `src-tauri`                          |
 
-Les faux en mémoire sont des implémentations concrètes des ports (`crates/application/src/test_support.rs`), jamais des mocks.
+Les faux en mémoire sont des implémentations concrètes des ports (`crates/application/src/test_support.rs`), jamais des mocks. Ils ne sont compilés que pour les tests, via la feature `test-support`. Les tests du moteur utilisent des adresses de documentation (RFC 5737) : le moteur ne dépend pas des cibles choisies.
 
 ## Preuve que les tests détectent les erreurs
 
