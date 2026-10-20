@@ -30,7 +30,7 @@ mod tests {
         let info = read_app_info();
 
         // Assert
-        assert_eq!(info.name, env!("CARGO_PKG_NAME"));
+        assert_eq!(info.name, "app");
         assert_eq!(info.version, env!("CARGO_PKG_VERSION"));
     }
 }

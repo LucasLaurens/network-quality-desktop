@@ -4,7 +4,7 @@ import pluginVue from 'eslint-plugin-vue'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'target', 'src-tauri', 'src/bindings.ts', 'coverage', '.*/**', 'graft'] },
+  { ignores: ['src/bindings.ts'] },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
@@ -19,6 +19,8 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
+    // TypeScript already resolves globals; the core rule only reports false positives here.
+    rules: { 'no-undef': 'off' },
   },
   { files: ['**/*.{js,mjs}'], ...tseslint.configs.disableTypeChecked },
   { files: ['scripts/**/*.mjs'], languageOptions: { globals: { process: 'readonly', console: 'readonly' } } },

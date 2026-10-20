@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@12.14.0",
   "engines": {
-    "node": ">=24"
+    "node": "^24"
   },
   "scripts": {
     "dev": "tauri dev",
@@ -14,17 +14,18 @@
     "dev:web": "vite",
     "build:web": "vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.node.json",
-    "lint": "eslint . --max-warnings 0",
-    "lint:back": "cargo fmt --all --check && cargo clippy --workspace --all-targets",
-    "format": "prettier --write . && cargo fmt --all",
-    "format:check": "prettier --check .",
+    "lint": "eslint src tests scripts vite.config.ts eslint.config.js --max-warnings 0",
+    "lint:back": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings",
+    "format": "prettier --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude --write . && cargo fmt --all",
+    "format:check": "prettier --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude --check .",
     "test": "pnpm test:front && pnpm test:back",
     "test:front": "vitest run",
     "test:back": "cargo nextest run --workspace && cargo test --workspace --doc",
-    "bindings:check": "cargo test -p app --lib exports_up_to_date_typescript_bindings && git diff --exit-code -- src/bindings.ts",
+    "bindings:check": "cargo test -p app --lib exports_typescript_bindings && git diff --exit-code -- src/bindings.ts",
     "tauri": "tauri",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:front && pnpm build:web && pnpm lint:back && pnpm test:back && pnpm bindings:check",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "lint:all": "pnpm lint && pnpm lint:back"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",

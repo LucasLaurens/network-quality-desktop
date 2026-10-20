@@ -7,7 +7,7 @@ App de bureau (macOS, Linux, Windows) qui affiche en temps réel l'état de la c
 ## Prérequis
 
 - Rust : la version est fixée par `rust-toolchain.toml` (installée automatiquement par rustup).
-- Node 24 (fichier `.node-version`) et pnpm 12 (`npm i -g pnpm@12.14.0`).
+- Node : version de `.node-version`. pnpm : version du champ `packageManager` de `package.json` (`npm i -g pnpm@<version>`).
 - Dépendances système de Tauri 2 : voir <https://v2.tauri.app/start/prerequisites/>.
 - `cargo-nextest` pour les tests Rust : `cargo install cargo-nextest --locked`.
 

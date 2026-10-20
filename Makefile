@@ -20,7 +20,7 @@ test-front:
 	pnpm test:front
 
 lint:
-	pnpm lint && pnpm lint:back
+	pnpm lint:all
 
 fmt:
 	pnpm format

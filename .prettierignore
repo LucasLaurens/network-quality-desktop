@@ -4,7 +4,3 @@ pnpm-lock.yaml
 src/bindings.ts
 src-tauri/gen
 src-tauri/icons
-graft
-# Local tool folders stay untouched; only versioned dot-folders are formatted.
-/.*/
-!/.github/

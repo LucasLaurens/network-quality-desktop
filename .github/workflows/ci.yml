@@ -40,12 +40,6 @@ jobs:
           tool: cargo-nextest
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test:front
-      - run: pnpm build:web
-      - run: pnpm lint:back
-      - run: pnpm test:back
-      - run: pnpm bindings:check
+      # Same gate as `make ci`, defined once in package.json.
+      - run: pnpm verify
         shell: bash

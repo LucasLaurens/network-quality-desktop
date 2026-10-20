@@ -4,14 +4,14 @@
 
 Le cœur est en Rust, organisé en workspace Cargo de quatre crates. Le sens des dépendances est garanti par le compilateur : une crate ne peut pas importer une crate de la couche au-dessus.
 
-| Crate                       | Rôle                                                                                              | Dépend de               |
-| --------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------- |
-| `domain`                    | Règles pures de la mesure (verdict, seuils, hystérésis). Aucune entrée-sortie. `unsafe` interdit. | rien                    |
-| `application`               | Cas d'usage et ports (traits) que l'infrastructure implémente. `unsafe` interdit.                 | `domain`                |
-| `infrastructure`            | Adaptateurs par OS, stockage, clients HTTP. Seul endroit où l'`unsafe` est permis (FFI native).   | `domain`, `application` |
-| `app` (dossier `src-tauri`) | Shell Tauri : assemble les adaptateurs et expose des commandes typées au front.                   | toutes                  |
+| Crate                       | Rôle                                                                                              | Dépend de                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `domain`                    | Règles pures de la mesure (verdict, seuils, hystérésis). Aucune entrée-sortie. `unsafe` interdit. | rien                                                  |
+| `application`               | Cas d'usage et ports (traits) que l'infrastructure implémente. `unsafe` interdit.                 | `domain`                                              |
+| `infrastructure`            | Adaptateurs par OS, stockage, clients HTTP. Seul endroit où l'`unsafe` est permis (FFI native).   | `domain`, `application`                               |
+| `app` (dossier `src-tauri`) | Shell Tauri : assemble les adaptateurs et expose des commandes typées au front.                   | les trois autres, au fur et à mesure qu'elles servent |
 
-État actuel : `domain`, `application` et `infrastructure` sont vides ; `app` expose une seule commande, `read_app_info`.
+État actuel : `domain`, `application` et `infrastructure` sont vides et `app` ne dépend encore d'aucune d'elles ; `app` expose une seule commande, `read_app_info`.
 
 ## Front
 

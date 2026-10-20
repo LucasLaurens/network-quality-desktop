@@ -1,21 +1,24 @@
 /* Single source of the design tokens described in DESIGN.md. */
 :root {
   color-scheme: light dark;
+  /* Warm stone tint shared by every neutral. */
+  --hue: 85;
+  --content-max: 900px;
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
-  --bg: oklch(97.6% 0.004 85);
-  --surface: oklch(99.4% 0.003 85);
-  --sunken: oklch(95.2% 0.005 85);
-  --ink: oklch(23% 0.01 85);
-  --muted: oklch(48% 0.012 85);
-  --line: oklch(90% 0.006 85);
-  --zone: oklch(93.5% 0.005 85);
+  --bg: oklch(97.6% 0.004 var(--hue));
+  --surface: oklch(99.4% 0.003 var(--hue));
+  --sunken: oklch(95.2% 0.005 var(--hue));
+  --ink: oklch(23% 0.01 var(--hue));
+  --muted: oklch(48% 0.012 var(--hue));
+  --line: oklch(90% 0.006 var(--hue));
+  --zone: oklch(93.5% 0.005 var(--hue));
   --focus: oklch(55% 0.12 250);
   --solid: oklch(56% 0.13 150);
   --unstable: oklch(62% 0.14 70);
   --degraded: oklch(55% 0.18 27);
-  --offline: oklch(56% 0.01 85);
+  --offline: oklch(56% 0.01 var(--hue));
   --measuring: oklch(56% 0.1 250);
-  --shadow: 0 1px 2px oklch(20% 0.01 85 / 6%), 0 12px 32px oklch(20% 0.01 85 / 10%);
+  --shadow: 0 1px 2px oklch(20% 0.01 var(--hue) / 6%), 0 12px 32px oklch(20% 0.01 var(--hue) / 10%);
   --radius: 8px;
   --radius-nested: 6px;
   --s1: 4px;
@@ -35,18 +38,18 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: oklch(18.5% 0.006 85);
-    --surface: oklch(22% 0.007 85);
-    --sunken: oklch(20% 0.006 85);
-    --ink: oklch(94% 0.006 85);
-    --muted: oklch(71% 0.01 85);
-    --line: oklch(31% 0.008 85);
-    --zone: oklch(31% 0.008 85);
+    --bg: oklch(18.5% 0.006 var(--hue));
+    --surface: oklch(22% 0.007 var(--hue));
+    --sunken: oklch(20% 0.006 var(--hue));
+    --ink: oklch(94% 0.006 var(--hue));
+    --muted: oklch(71% 0.01 var(--hue));
+    --line: oklch(31% 0.008 var(--hue));
+    --zone: oklch(31% 0.008 var(--hue));
     --focus: oklch(72% 0.11 250);
     --solid: oklch(72% 0.14 150);
     --unstable: oklch(80% 0.14 75);
     --degraded: oklch(68% 0.17 27);
-    --offline: oklch(66% 0.01 85);
+    --offline: oklch(66% 0.01 var(--hue));
     --measuring: oklch(70% 0.1 250);
     --shadow: 0 1px 2px oklch(0% 0 0 / 30%), 0 12px 32px oklch(0% 0 0 / 45%);
   }

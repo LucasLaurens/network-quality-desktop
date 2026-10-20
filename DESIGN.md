@@ -5,7 +5,7 @@ Système visuel de l'app, tiré de la maquette validée (ticket « Maquetter pas
 ## Thème
 
 - Suit le thème clair ou sombre du système par défaut. Chaque token a une valeur claire et une valeur sombre.
-- Couleurs en OKLCH. Neutres légèrement teintés vers une pierre chaude ; jamais de noir ou de blanc purs.
+- Couleurs en OKLCH. Neutres légèrement teintés vers une pierre chaude (teinte commune `--hue`) ; jamais de noir ou de blanc purs.
 
 ## Couleur
 
@@ -24,13 +24,13 @@ Un état n'est jamais porté par la couleur seule : chaque état a aussi une for
 ## Typographie
 
 - Police système (SF Pro sur macOS, Segoe UI sur Windows, `system-ui` ailleurs). Aucune police téléchargée.
-- Échelle : `--t-xs` 11, `--t-sm` 12, `--t-md` 13 (corps), `--t-lg` 16, `--t-xl` 19, `--t-2xl` 28.
+- Échelle de six tailles, de `--t-xs` à `--t-2xl` ; le corps de texte utilise `--t-md`.
 - Chiffres alignés (`font-variant-numeric: tabular-nums`) pour toutes les valeurs mesurées.
 
 ## Espace et formes
 
-- Espacements sur une grille de 4 : `--s1` 4 à `--s7` 48.
-- Un rayon (`--radius` 8 px) et un rayon imbriqué (`--radius-nested` 6 px).
+- Espacements sur une grille de 4 px, de `--s1` à `--s7`.
+- Un rayon (`--radius`) et un rayon imbriqué plus petit (`--radius-nested`).
 - Une seule ombre (`--shadow`), réservée aux surfaces flottantes (popover, fenêtre).
 - Ni dégradé, ni effet de verre, ni emoji, ni grille de cartes identiques.
 

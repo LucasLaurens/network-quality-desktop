@@ -9,7 +9,7 @@ describe('App', () => {
   it('shows the version reported by the Rust core', async () => {
     // Arrange
     const version = faker.system.semver()
-    const client = new InMemoryNetworkQualityClient({ name: 'app', version })
+    const client = new InMemoryNetworkQualityClient({ name: faker.word.noun(), version })
 
     // Act
     const wrapper = mount(App, { global: { provide: { [NETWORK_QUALITY_CLIENT_KEY as symbol]: client } } })

@@ -10,7 +10,8 @@ const version = ref('…')
 onMounted(async () => {
   try {
     version.value = (await client.readAppInfo()).version
-  } catch {
+  } catch (error) {
+    console.error('Reading the app version failed', error)
     version.value = 'inconnue'
   }
 })
@@ -26,7 +27,7 @@ onMounted(async () => {
 
 <style scoped>
 .window {
-  max-width: 900px;
+  max-width: var(--content-max);
   padding: var(--s6);
 }
 

@@ -9,14 +9,13 @@ publish.workspace = true
 tauri-build = { workspace = true, features = [] }
 
 [dependencies]
-application.workspace = true
-domain.workspace = true
-infrastructure.workspace = true
 serde.workspace = true
 specta.workspace = true
-specta-typescript.workspace = true
 tauri = { workspace = true, features = [] }
 tauri-specta.workspace = true
+
+[dev-dependencies]
+specta-typescript.workspace = true
 
 [features]
 default = ["custom-protocol"]
