@@ -9,9 +9,13 @@ publish.workspace = true
 tauri-build = { workspace = true, features = [] }
 
 [dependencies]
+application.workspace = true
+domain.workspace = true
+infrastructure.workspace = true
 serde.workspace = true
 specta.workspace = true
-tauri = { workspace = true, features = [] }
+tauri = { workspace = true, features = ["tray-icon"] }
+tokio.workspace = true
 tauri-specta.workspace = true
 
 [dev-dependencies]

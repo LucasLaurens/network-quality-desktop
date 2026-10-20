@@ -6,4 +6,4 @@ Une pastille dans la barre des menus donne l'état de la connexion Internet, mes
 
 ## Ce que l'app fait aujourd'hui
 
-Version 0.1.0 (squelette) : l'app s'ouvre dans une fenêtre et affiche sa version. Aucune mesure n'est encore faite et aucune donnée ne quitte l'ordinateur.
+Une pastille dans la barre des menus suit la latence vers Internet, mesurée chaque seconde par un petit ping vers deux serveurs publics (voir [États et verdict](etats-et-verdict.md)). La fenêtre s'ouvre et affiche la version de l'app.

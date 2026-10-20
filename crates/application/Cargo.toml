@@ -7,6 +7,8 @@ publish.workspace = true
 
 [dependencies]
 domain.workspace = true
+futures-util.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true
