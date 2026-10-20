@@ -1,0 +1,28 @@
+[workspace]
+members = ["crates/domain", "crates/application", "crates/infrastructure", "src-tauri"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+warnings = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+
+[workspace.dependencies]
+domain = { path = "crates/domain" }
+application = { path = "crates/application" }
+infrastructure = { path = "crates/infrastructure" }
+serde = { version = "1.0.229", features = ["derive"] }
+specta = "=2.0.0-rc.25"
+specta-typescript = "=0.0.12"
+tauri = "2.12.4"
+tauri-build = "2.7.3"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }

@@ -1,0 +1,41 @@
+# Qualité de connexion
+
+App de bureau (macOS, Linux, Windows) qui affiche en temps réel l'état de la connexion Internet : **Solide**, **Instable**, **Dégradée**, **Hors ligne** ou **Mesure en cours**, avec la raison en une phrase et un historique par réseau. Locale d'abord et gratuite : par défaut, seuls de petits pings quittent l'ordinateur.
+
+> État actuel : **squelette** (version 0.1.0). L'app s'ouvre et affiche sa version ; la mesure arrive dans les prochaines versions. La feuille de route est suivie dans les issues GitHub.
+
+## Prérequis
+
+- Rust : la version est fixée par `rust-toolchain.toml` (installée automatiquement par rustup).
+- Node 24 (fichier `.node-version`) et pnpm 12 (`npm i -g pnpm@12.14.0`).
+- Dépendances système de Tauri 2 : voir <https://v2.tauri.app/start/prerequisites/>.
+- `cargo-nextest` pour les tests Rust : `cargo install cargo-nextest --locked`.
+
+## Démarrer
+
+```bash
+pnpm install
+make dev
+```
+
+## Commandes
+
+| Commande                             | Effet                                                         |
+| ------------------------------------ | ------------------------------------------------------------- |
+| `make dev`                           | Lance l'app en développement (rechargement à chaud du front). |
+| `make build`                         | Construit les installeurs de l'app.                           |
+| `make install`                       | Construit l'app ; sur macOS, la copie dans Applications.      |
+| `make test`                          | Tous les tests (front puis Rust).                             |
+| `make test-front` / `make test-back` | Tests du front (Vitest) ou de Rust (nextest).                 |
+| `make lint`                          | Lint du front (ESLint) et de Rust (rustfmt, clippy).          |
+| `make fmt`                           | Formate tout le code.                                         |
+| `make ci`                            | Rejoue en local toute la barrière de la CI.                   |
+
+Les commandes sont définies une seule fois dans `package.json` ; le `Makefile` n'est qu'un raccourci (sous Windows, utiliser `pnpm <script>`).
+
+## Documentation
+
+- [Documentation fonctionnelle](docs/fonctionnel/) : ce que fait l'app.
+- [Documentation technique](docs/technique/) : architecture, outillage, glossaire.
+- [PRODUCT.md](PRODUCT.md) : utilisateurs, personnalité, principes de design.
+- [DESIGN.md](DESIGN.md) : système visuel.
