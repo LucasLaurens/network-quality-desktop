@@ -1,0 +1,479 @@
+<!doctype html>
+<!--
+  PROTOTYPE, throwaway. Clean direction built from the confirmed design brief (ticket #15).
+  Menu-bar shape, popover and dashboard window, all states simulated in memory.
+  Open this file directly in a browser. The dark strip at the top is the simulator, not the design.
+-->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qualité de connexion, maquette épurée</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    /* Neutrals tinted toward a warm stone hue; colour is reserved for state. */
+    --bg: oklch(97.6% 0.004 85);
+    --surface: oklch(99.4% 0.003 85);
+    --sunken: oklch(95.2% 0.005 85);
+    --ink: oklch(23% 0.01 85);
+    --muted: oklch(48% 0.012 85);
+    --line: oklch(90% 0.006 85);
+    --focus: oklch(55% 0.12 250);
+    --solid: oklch(56% 0.13 150);
+    --unstable: oklch(62% 0.14 70);
+    --degraded: oklch(55% 0.18 27);
+    --offline: oklch(56% 0.01 85);
+    --measuring: oklch(56% 0.1 250);
+    --zone: oklch(93.5% 0.005 85);
+    --shadow: 0 1px 2px oklch(20% 0.01 85 / .06), 0 12px 32px oklch(20% 0.01 85 / .10);
+    --radius: 8px;
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+    --t-xs: 11px; --t-sm: 12px; --t-md: 13px; --t-lg: 16px; --t-xl: 19px; --t-2xl: 28px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: oklch(18.5% 0.006 85); --surface: oklch(22% 0.007 85); --sunken: oklch(20% 0.006 85);
+      --ink: oklch(94% 0.006 85); --muted: oklch(71% 0.01 85); --line: oklch(31% 0.008 85);
+      --focus: oklch(72% 0.11 250);
+      --solid: oklch(72% 0.14 150); --unstable: oklch(80% 0.14 75); --degraded: oklch(68% 0.17 27);
+      --offline: oklch(66% 0.01 85); --measuring: oklch(70% 0.1 250); --zone: oklch(31% 0.008 85);
+      --shadow: 0 1px 2px oklch(0% 0 0 / .3), 0 12px 32px oklch(0% 0 0 / .45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: oklch(18.5% 0.006 85); --surface: oklch(22% 0.007 85); --sunken: oklch(20% 0.006 85);
+    --ink: oklch(94% 0.006 85); --muted: oklch(71% 0.01 85); --line: oklch(31% 0.008 85);
+    --focus: oklch(72% 0.11 250);
+    --solid: oklch(72% 0.14 150); --unstable: oklch(80% 0.14 75); --degraded: oklch(68% 0.17 27);
+    --offline: oklch(66% 0.01 85); --measuring: oklch(70% 0.1 250); --zone: oklch(31% 0.008 85);
+    --shadow: 0 1px 2px oklch(0% 0 0 / .3), 0 12px 32px oklch(0% 0 0 / .45);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: var(--t-md)/1.45 var(--font); -webkit-font-smoothing: antialiased; }
+  h1, h2, h3, p { margin: 0; }
+  .num { font-variant-numeric: tabular-nums; }
+  .muted { color: var(--muted); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+  /* Simulator: outside the design under review */
+  .sim { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; padding: var(--s2) var(--s4); background: oklch(28% 0.01 85); color: oklch(96% 0.004 85); font-size: var(--t-sm); }
+  .sim select, .sim button { font: inherit; padding: 2px 6px; border-radius: 6px; border: 1px solid oklch(40% 0.01 85); background: oklch(33% 0.01 85); color: inherit; }
+  .sim label { display: flex; gap: 6px; align-items: center; }
+  .sim strong { letter-spacing: .04em; }
+
+  /* Fake menu bar */
+  .menubar { height: 26px; display: flex; justify-content: flex-end; align-items: center; gap: var(--s4); padding: 0 var(--s4); background: var(--sunken); border-bottom: 1px solid var(--line); font-size: var(--t-sm); }
+  .menubar .other { color: var(--muted); }
+  .tray { display: inline-flex; align-items: center; padding: 3px 6px; border-radius: 6px; border: 0; background: none; color: inherit; cursor: pointer; }
+  .tray:hover, .tray[aria-expanded="true"] { background: var(--line); }
+
+  .stage { display: flex; flex-wrap: wrap; gap: var(--s6); padding: var(--s5) var(--s4) var(--s7); align-items: flex-start; }
+  .label { font-size: var(--t-xs); color: var(--muted); margin-bottom: var(--s2); }
+
+  /* State shape: colour plus a distinct form for each state */
+  .shape { flex: none; display: inline-block; }
+
+  /* Popover */
+  .popover { width: 320px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: var(--s4); }
+  .pop-head { display: flex; align-items: center; gap: var(--s2); }
+  .pop-head h2 { font-size: var(--t-xl); font-weight: 600; }
+  .pop-head .where { margin-left: auto; color: var(--muted); font-size: var(--t-sm); }
+  .cause { margin-top: var(--s2); font-size: var(--t-md); }
+  .pop-metrics { margin-top: var(--s4); display: grid; gap: var(--s3); }
+  .pm { display: grid; grid-template-columns: 1fr auto; row-gap: var(--s1); align-items: baseline; }
+  .pm .val { font-weight: 600; }
+  .pm .range { grid-column: 1 / -1; }
+  .divider { border: 0; border-top: 1px solid var(--line); margin: var(--s4) 0; }
+  .quiet-line { font-size: var(--t-sm); color: var(--muted); display: flex; justify-content: space-between; gap: var(--s2); }
+
+  /* Buttons: one primary per view */
+  .btn { font: inherit; font-weight: 500; min-height: 32px; padding: 0 var(--s3); border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+  .btn:hover { background: var(--sunken); }
+  .btn[aria-busy="true"] { cursor: progress; color: var(--muted); }
+  .btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); width: 100%; margin-top: var(--s4); }
+  .btn.primary:hover { background: oklch(from var(--ink) calc(l + .06) c h); }
+  .link { font: inherit; border: 0; background: none; padding: var(--s1) 0; min-height: 28px; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+  /* Range bar: zones in neutral steps, marker shows the value */
+  .range { position: relative; height: 6px; display: flex; gap: 2px; }
+  .range span { height: 100%; background: var(--zone); border-radius: 2px; }
+  .range i { position: absolute; top: -3px; width: 3px; height: 12px; border-radius: 2px; background: var(--ink); }
+  .near { font-size: var(--t-xs); color: var(--muted); grid-column: 1 / -1; }
+
+  /* Path: Ce Mac, box, Internet */
+  .path { display: grid; grid-template-columns: auto 1fr auto 1fr auto; align-items: center; column-gap: var(--s2); row-gap: var(--s1); margin-top: var(--s4); }
+  .path .node { font-size: var(--t-sm); white-space: nowrap; }
+  .path .seg { height: 4px; border-radius: 2px; background: var(--line); position: relative; }
+  .path .seg.fault { height: 6px; }
+  .path .seg-label { font-size: var(--t-xs); color: var(--muted); text-align: center; }
+  .path .seg-label b { color: var(--ink); font-weight: 600; }
+  .path .gap { grid-column: span 1; }
+
+  /* Window */
+  .window { flex: 1 1 640px; max-width: 900px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .titlebar { height: 38px; display: flex; align-items: center; gap: var(--s2); padding: 0 var(--s4); border-bottom: 1px solid var(--line); }
+  .titlebar .lights { display: flex; gap: 8px; }
+  .titlebar .lights i { width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
+  .titlebar h1 { font-size: var(--t-md); font-weight: 600; margin-left: var(--s3); }
+  .titlebar .settings { margin-left: auto; }
+  .content { padding: var(--s6) var(--s6) var(--s5); }
+  section + section { margin-top: var(--s7); }
+  .sec-head { display: flex; align-items: baseline; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s4); }
+  .sec-head h2 { font-size: var(--t-lg); font-weight: 600; }
+  .sec-head .controls { margin-left: auto; display: flex; gap: var(--s3); flex-wrap: wrap; }
+
+  /* The answer */
+  .answer-head { display: flex; align-items: center; gap: var(--s3); }
+  .answer-head h2 { font-size: var(--t-2xl); font-weight: 600; letter-spacing: -0.01em; }
+  .answer-head .net { margin-left: auto; text-align: right; font-size: var(--t-sm); }
+  .answer .cause { font-size: var(--t-lg); margin-top: var(--s2); max-width: 62ch; }
+  .answer .path { max-width: 640px; margin-top: var(--s5); }
+  .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: var(--s6); border-top: 1px solid var(--line); }
+  .metric { padding: var(--s4) var(--s5) 0 0; display: grid; gap: var(--s1); align-content: start; }
+  .metric + .metric { padding-left: var(--s5); border-left: 1px solid var(--line); }
+  .metric .name { font-size: var(--t-sm); color: var(--muted); }
+  .metric .val { font-size: var(--t-xl); font-weight: 600; }
+  .metric .how { font-size: var(--t-xs); color: var(--muted); }
+
+  /* Segmented controls */
+  .seg-ctl { display: inline-flex; padding: 2px; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--radius); }
+  .seg-ctl button { font: inherit; font-size: var(--t-sm); min-height: 26px; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+  .seg-ctl button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+
+  /* Chart */
+  .chart > svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart .axis { font-size: 15px; fill: var(--muted); }
+  .ribbon { display: flex; height: 6px; gap: 0; margin-top: var(--s2); }
+  .ribbon span { flex: 1; }
+  .legend { display: flex; gap: var(--s4); flex-wrap: wrap; margin-top: var(--s2); font-size: var(--t-xs); color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* Networks table */
+  table { border-collapse: collapse; width: 100%; }
+  th { font-size: var(--t-xs); font-weight: 500; color: var(--muted); text-align: left; padding: 0 var(--s3) var(--s2) 0; border-bottom: 1px solid var(--line); }
+  td { padding: var(--s3) var(--s3) var(--s3) 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  td.r, th.r { text-align: right; }
+  .stack { display: flex; height: 6px; width: 140px; gap: 1px; }
+  .stack span { height: 100%; }
+  .tag { font-size: var(--t-xs); color: var(--muted); margin-left: var(--s2); }
+  .best { font-size: var(--t-xs); font-weight: 600; }
+
+  /* Details */
+  details > summary { cursor: pointer; font-size: var(--t-lg); font-weight: 600; list-style: none; display: flex; align-items: center; gap: var(--s2); }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform .15s ease-out; }
+  details[open] > summary::before { transform: rotate(45deg); }
+  .details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s5); margin-top: var(--s4); }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: var(--s2) var(--s4); }
+  dt { color: var(--muted); }
+  dd { margin: 0; }
+  .details-grid h3 { font-size: var(--t-sm); font-weight: 600; margin-bottom: var(--s2); }
+  .test-actions { display: flex; gap: var(--s2); margin-top: var(--s3); flex-wrap: wrap; }
+  .foot { margin-top: var(--s6); font-size: var(--t-xs); color: var(--muted); }
+  .empty { padding: var(--s5) 0; color: var(--muted); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .pulse { animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .4; } }
+  }
+  @media (max-width: 720px) {
+    .content { padding: var(--s5) var(--s4); }
+    .metrics { grid-template-columns: 1fr; }
+    .metric + .metric { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
+    .stack { width: 80px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sim" role="region" aria-label="Simulateur de maquette">
+  <strong>SIMULATEUR</strong>
+  <label>Scénario <select id="scenario">
+    <option value="solid">Solide</option>
+    <option value="near">Solide, proche du seuil (partage iPhone)</option>
+    <option value="jitter">Instable, gigue côté opérateur</option>
+    <option value="wifi">Dégradée, Wi-Fi faible</option>
+    <option value="isp">Dégradée, perte chez l'opérateur</option>
+    <option value="offline">Hors ligne, box sans Internet</option>
+    <option value="measuring">Mesure en cours (nouveau réseau)</option>
+    <option value="first">Premier lancement (historique vide)</option>
+  </select></label>
+  <label>Mode <select id="mode"><option value="local">Local d'abord</option><option value="provider">Fournisseur activé</option></select></label>
+  <label><input type="checkbox" id="permission" checked> Permission localisation</label>
+  <label>Thème <select id="theme"><option value="">Système</option><option value="light">Clair</option><option value="dark">Sombre</option></select></label>
+</div>
+
+<div class="menubar">
+  <span class="other">Finder</span><span class="other">Batterie 87 %</span>
+  <button class="tray" id="tray" aria-haspopup="dialog" aria-expanded="true" aria-controls="popover"></button>
+  <span class="other num" id="clock"></span>
+</div>
+
+<div class="stage">
+  <div>
+    <div class="label">Popover, ouvert depuis la barre des menus</div>
+    <div class="popover" id="popover" role="dialog" aria-label="État de la connexion"></div>
+  </div>
+  <div class="window" role="region" aria-label="Fenêtre tableau de bord">
+    <div class="titlebar"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><h1>Qualité de connexion</h1><button class="btn settings">Réglages</button></div>
+    <div class="content" id="dashboard"></div>
+  </div>
+</div>
+
+<script>
+const THRESHOLDS = { latency: [100, 300], jitter: [30, 50], loss: [1, 5] };
+const METRICS = {
+  latency: { name: 'Latence', how: 'p90 sur 15 s', max: 400 },
+  jitter: { name: 'Gigue', how: 'sur 15 s', max: 70 },
+  loss: { name: 'Perte', how: 'sur 60 s, 2 cibles', max: 8 },
+};
+const STATE_WORD = { solid: 'Solide', unstable: 'Instable', degraded: 'Dégradée', offline: 'Hors ligne', measuring: 'Mesure en cours' };
+const RANK = { solid: 0, unstable: 1, degraded: 2 };
+const NETWORKS = {
+  box: { name: 'Box maison', ssid: 'Livebox-4F2A', kind: 'Wi-Fi', access: 'Fibre (déclarée par la box)', line: '1 000 / 700 Mbit/s', hotspot: false, vpn: 'Non', metered: 'Non' },
+  iphone: { name: 'Partage iPhone', ssid: 'iPhone de Lucas', kind: 'Wi-Fi, partage de connexion', access: 'Réseau mobile', line: 'Inconnue', hotspot: true, vpn: 'Non', metered: 'Oui' },
+  office: { name: 'Ethernet bureau', ssid: null, kind: 'Ethernet', access: 'Inconnu', line: 'Inconnue', hotspot: false, vpn: 'Non', metered: 'Non' },
+};
+const SCENARIOS = {
+  solid: { lat: 24, jit: 3, loss: 0.1, localLat: 3, localLoss: 0, rssi: -54, noise: -92, phy: 866, band: '5 GHz', channel: 36, net: 'box', peak: 412 },
+  near: { lat: 86, jit: 17, loss: 0.4, localLat: 6, localLoss: 0, rssi: -61, noise: -90, phy: 433, band: '5 GHz', channel: 149, net: 'iphone', peak: 38 },
+  jitter: { lat: 72, jit: 41, loss: 0.7, localLat: 4, localLoss: 0, rssi: -57, noise: -91, phy: 866, band: '5 GHz', channel: 36, net: 'box', peak: 180 },
+  wifi: { lat: 165, jit: 64, loss: 3.4, localLat: 52, localLoss: 2.6, rssi: -79, noise: -88, phy: 58, band: '2,4 GHz', channel: 6, net: 'box', peak: 22 },
+  isp: { lat: 340, jit: 24, loss: 6.2, localLat: 3, localLoss: 0, rssi: -52, noise: -92, phy: 866, band: '5 GHz', channel: 36, net: 'box', peak: 9 },
+  offline: { lat: null, jit: null, loss: null, localLat: 3, localLoss: 0, rssi: -55, noise: -92, phy: 866, band: '5 GHz', channel: 36, net: 'box', peak: 0 },
+  measuring: { lat: null, jit: null, loss: null, localLat: null, localLoss: null, rssi: null, noise: null, phy: null, band: null, channel: null, net: 'office', peak: 0 },
+  first: { lat: 22, jit: 2, loss: 0, localLat: 1, localLoss: 0, rssi: null, noise: null, phy: null, band: null, channel: null, net: 'office', peak: 0 },
+};
+const HISTORY = [
+  { id: 'office', solid: 96, unstable: 4, degraded: 0, p90: 14, loss: 0.0 },
+  { id: 'box', solid: 81, unstable: 14, degraded: 5, p90: 38, loss: 0.3 },
+  { id: 'iphone', solid: 52, unstable: 35, degraded: 13, p90: 118, loss: 1.1 },
+];
+const TESTS = [
+  { when: 'Il y a 4 min', profile: 'Rapide', down: 412, up: 298, react: 31, mo: 4 },
+  { when: 'Il y a 34 min', profile: 'Léger', down: 398, up: 305, react: 28, mo: 17 },
+  { when: 'Hier, 18:02', profile: 'Complet', down: 451, up: 322, react: 46, mo: 138 },
+];
+
+const ui = { popover: true, metric: 'latency', period: '1 h', testing: null, testFailed: false };
+let series = [];
+
+const $ = id => document.getElementById(id);
+const wobble = (v, f) => v === null ? null : Math.max(0, v + (Math.random() - .5) * v * f);
+const gradeOf = (m, v) => { const [a, b] = THRESHOLDS[m]; return v < a ? 'solid' : v <= b ? 'unstable' : 'degraded'; };
+const isNear = (m, v) => { const [a, b] = THRESHOLDS[m]; const g = gradeOf(m, v); return g === 'solid' ? v >= a * .8 : g === 'unstable' ? v >= b * .8 : false; };
+const fmt = (m, v) => v === null || v === undefined ? '–' : m === 'loss' ? `${v.toFixed(1).replace('.', ',')} %` : `${Math.round(v)} ms`;
+
+function readState() {
+  const id = $('scenario').value, s = SCENARIOS[id], net = NETWORKS[s.net];
+  const internet = { latency: wobble(s.lat, .12), jitter: wobble(s.jit, .2), loss: s.loss === null ? null : wobble(s.loss, .3) };
+  const local = { latency: wobble(s.localLat, .3), loss: s.localLoss };
+  let verdict = id === 'offline' ? 'offline' : id === 'measuring' ? 'measuring' : null;
+  const grades = {};
+  if (!verdict) {
+    for (const m in THRESHOLDS) grades[m] = gradeOf(m, internet[m]);
+    verdict = Object.values(grades).sort((x, y) => RANK[y] - RANK[x])[0];
+  }
+  const worst = Object.keys(grades).find(m => grades[m] === verdict);
+  const near = verdict === 'solid' ? Object.keys(grades).filter(m => isNear(m, internet[m])) : [];
+  const localBad = local.latency !== null && (local.latency > 30 || local.loss > 1);
+  let fault = null, cause;
+  if (verdict === 'offline') { fault = 'internet'; cause = "La box répond, mais Internet ne répond plus depuis 5 s. Le problème vient de la box ou de l'opérateur."; }
+  else if (verdict === 'measuring') cause = 'Nouveau réseau détecté. Premières mesures en cours, 6 sur 10.';
+  else if (verdict === 'solid') cause = near.length ? `Bonne connexion pour la visio. ${METRICS[near[0]].name} proche du seuil Instable.` : 'Bonne connexion pour la visio.';
+  else if (localBad) { fault = 'local'; cause = `Le Wi-Fi est en cause : signal faible (${s.rssi} dBm). Se rapprocher de la box ou passer en 5 GHz.`; }
+  else { fault = 'internet'; cause = `${net.hotspot ? 'Le réseau mobile' : "L'opérateur"} est en cause, le Wi-Fi va bien. ${METRICS[worst].name} à ${fmt(worst, internet[worst])}.`; }
+  const permission = $('permission').checked;
+  return {
+    scenario: id, verdict, grades, near, cause, fault, internet, local, mode: $('mode').value,
+    network: { ...net, id: s.net, label: permission ? (net.ssid ?? net.name) : (net.ssid ? 'Wi-Fi (nom masqué)' : net.name) },
+    wifi: s.rssi === null ? null : { rssi: s.rssi, noise: s.noise, phy: s.phy, band: s.band, channel: s.channel },
+    peak: s.peak, firstRun: id === 'first',
+  };
+}
+
+function shape(state, size = 14) {
+  const c = `var(--${state})`, h = size / 2;
+  const forms = {
+    solid: `<circle cx="${h}" cy="${h}" r="${h - 1}" fill="${c}"/>`,
+    unstable: `<circle cx="${h}" cy="${h}" r="${h - 1.5}" fill="none" stroke="${c}" stroke-width="2"/><path d="M${h} 1.5 A${h - 1.5} ${h - 1.5} 0 0 1 ${h} ${size - 1.5} Z" fill="${c}"/>`,
+    degraded: `<path d="M${h} 1 L${size - 1} ${size - 1.5} L1 ${size - 1.5} Z" fill="${c}"/>`,
+    offline: `<circle cx="${h}" cy="${h}" r="${h - 1.5}" fill="none" stroke="${c}" stroke-width="2"/><path d="M3 ${size - 3} L${size - 3} 3" stroke="${c}" stroke-width="2" stroke-linecap="round"/>`,
+    measuring: `<circle cx="${h}" cy="${h}" r="${h - 1.5}" fill="none" stroke="${c}" stroke-width="2" stroke-dasharray="2.4 2.4"/>`,
+  };
+  return `<svg class="shape ${state === 'measuring' ? 'pulse' : ''}" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">${forms[state]}</svg>`;
+}
+
+function range(m, v) {
+  const { max } = METRICS[m], [a, b] = THRESHOLDS[m];
+  const marker = v === null ? '' : `<i style="left:calc(${Math.min(100, v / max * 100)}% - 1.5px)"></i>`;
+  return `<div class="range" role="img" aria-label="${METRICS[m].name} : ${fmt(m, v)}, seuils ${a} et ${b}"><span style="width:${a / max * 100}%"></span><span style="width:${(b - a) / max * 100}%"></span><span style="flex:1"></span>${marker}</div>`;
+}
+
+function segColor(kind, st) {
+  if (st.verdict === 'measuring') return 'var(--line)';
+  if (kind === 'local') return st.local.latency === null ? 'var(--line)' : st.fault === 'local' ? `var(--${st.verdict})` : 'var(--solid)';
+  if (st.verdict === 'offline') return 'var(--offline)';
+  return st.fault === 'internet' ? `var(--${st.verdict})` : 'var(--solid)';
+}
+
+function path(st, compact) {
+  const gw = st.network.hotspot ? 'iPhone' : 'Box';
+  const tag = kind => st.fault === kind ? `<b>${st.verdict === 'offline' ? 'coupé' : 'en cause'}</b>` : '';
+  const localTxt = st.local.latency === null ? 'en attente' : `${fmt('latency', st.local.latency)}`;
+  const netTxt = st.internet.latency === null ? (st.verdict === 'offline' ? 'aucune réponse' : 'en attente') : `${fmt('latency', st.internet.latency)}`;
+  return `<div class="path" role="img" aria-label="Chemin : ce Mac, ${gw}, Internet. ${st.fault ? 'Tronçon ' + (st.fault === 'local' ? 'Wi-Fi' : 'Internet') + ' en cause.' : 'Aucun tronçon en cause.'}">
+    <span class="node">Ce Mac</span><span class="seg ${st.fault === 'local' ? 'fault' : ''}" style="background:${segColor('local', st)}"></span>
+    <span class="node">${gw}</span><span class="seg ${st.fault === 'internet' ? 'fault' : ''}" style="${st.verdict === 'offline' ? 'background:none;height:0;border-top:3px dashed var(--offline)' : 'background:' + segColor('internet', st)}"></span>
+    <span class="node">Internet</span>
+    ${compact ? '' : `<span></span><span class="seg-label">${st.network.kind.startsWith('Wi-Fi') ? 'Wi-Fi' : st.network.kind} · ${localTxt} ${tag('local')}</span><span></span><span class="seg-label">${st.network.hotspot ? 'Mobile' : 'Opérateur'} · ${netTxt} ${tag('internet')}</span><span></span>`}
+  </div>`;
+}
+
+function renderTray(st) {
+  $('tray').innerHTML = shape(st.verdict, 14);
+  $('tray').setAttribute('aria-label', `Connexion : ${STATE_WORD[st.verdict]}`);
+  $('tray').setAttribute('aria-expanded', String(ui.popover));
+}
+
+function renderPopover(st) {
+  const el = $('popover');
+  el.hidden = !ui.popover;
+  const metrics = Object.keys(METRICS).map(m => `<div class="pm">
+      <span>${METRICS[m].name} <span class="muted">${METRICS[m].how.split(' ')[0] === 'p90' ? 'p90' : ''}</span></span>
+      <span class="val num">${fmt(m, st.internet[m])}</span>
+      <div class="range">${''}</div>
+    </div>`.replace('<div class="range"></div>', range(m, st.internet[m]))).join('');
+  const speed = st.mode === 'local'
+    ? `<div class="quiet-line"><span>Tests de débit désactivés</span><button class="link">Réglages</button></div>`
+    : `<div class="test-actions">${testButtons()}</div>`;
+  el.innerHTML = `<div class="pop-head">${shape(st.verdict, 16)}<h2>${STATE_WORD[st.verdict]}</h2><span class="where">${st.network.label}</span></div>
+    <p class="cause">${st.cause}</p>
+    ${path(st, true)}
+    <div class="pop-metrics">${metrics}</div>
+    <hr class="divider">${speed}
+    <button class="btn primary">Ouvrir le tableau de bord</button>`;
+}
+
+function testButtons() {
+  const busy = k => ui.testing === k;
+  return `<button class="btn" data-test="quick" ${ui.testing ? 'disabled' : ''} aria-busy="${busy('quick')}">${busy('quick') ? 'Test en cours…' : 'Test rapide'}</button>
+    <button class="btn" data-test="full" ${ui.testing ? 'disabled' : ''} aria-busy="${busy('full')}">${busy('full') ? 'Test en cours…' : 'Tester maintenant'}</button>`;
+}
+
+function chart(st) {
+  if (st.firstRun) return `<p class="empty">L'historique se remplit au fil des mesures. La première courbe apparaît après une minute.</p>`;
+  const m = ui.metric, { max } = METRICS[m], [a, b] = THRESHOLDS[m];
+  const W = 820, H = 170, padL = 44, padB = 18;
+  const y = v => (H - padB) - Math.min(1, v / max) * (H - padB - 6);
+  const x = i => padL + i / Math.max(1, series.length - 1) * (W - padL);
+  const pts = series.map((p, i) => p[m] === null ? null : `${x(i).toFixed(1)},${y(p[m]).toFixed(1)}`).filter(Boolean).join(' ');
+  const tickLabels = { '1 h': ['-60 min', '-30 min', 'maintenant'], '24 h': ['-24 h', '-12 h', 'maintenant'], '7 j': ['-7 j', '-3 j', "aujourd'hui"], '30 j': ['-30 j', '-15 j', "aujourd'hui"] }[ui.period];
+  const thr = (v, label) => `<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-dasharray="4 4"/><text class="axis" x="${padL - 6}" y="${y(v) + 3}" text-anchor="end">${m === 'loss' ? v + ' %' : v + ' ms'}</text><text class="axis" x="${W}" y="${y(v) - 4}" text-anchor="end">${label}</text>`;
+  const eventX = x(Math.floor(series.length * .62));
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${METRICS[m].name} sur ${ui.period}, avec les seuils Instable et Dégradée">
+      ${thr(a, 'Instable')}${thr(b, 'Dégradée')}
+      <line x1="${padL}" x2="${W}" y1="${H - padB}" y2="${H - padB}" stroke="var(--line)"/>
+      <line x1="${eventX}" x2="${eventX}" y1="6" y2="${H - padB}" stroke="var(--muted)" stroke-dasharray="2 3"/>
+      <text class="axis" x="${eventX + 4}" y="14">Changement de réseau</text>
+      <polyline points="${pts}" fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linejoin="round"/>
+      ${tickLabels.map((t, i) => `<text class="axis" x="${padL + i * (W - padL) / 2}" y="${H - 4}" text-anchor="${['start', 'middle', 'end'][i]}">${t}</text>`).join('')}
+    </svg>
+    <div class="ribbon" style="margin-left:${padL / W * 100}%" aria-hidden="true">${series.map(p => `<span style="background:var(--${p.verdict === 'measuring' ? 'line' : p.verdict})"></span>`).join('')}</div>
+    <div class="legend"><span>Bande : verdict à chaque instant</span>${['solid', 'unstable', 'degraded'].map(s => `<span>${shape(s, 10)}${STATE_WORD[s]}</span>`).join('')}</div></div>`;
+}
+
+function networksTable(st) {
+  if (st.firstRun) return `<p class="empty">Chaque réseau utilisé apparaîtra ici, avec le temps passé en Solide.</p>`;
+  const best = HISTORY.reduce((x, y) => y.solid > x.solid ? y : x);
+  return `<table><thead><tr><th>Réseau</th><th>Temps par état</th><th class="r">Latence p90</th><th class="r">Perte</th></tr></thead><tbody>
+    ${HISTORY.map(h => `<tr><td>${NETWORKS[h.id].name}${h.id === st.network.id ? '<span class="tag">actuel</span>' : ''}<div class="muted" style="font-size:var(--t-xs)">${NETWORKS[h.id].kind}${h === best ? ' · <span class="best">Le plus fiable pour la visio</span>' : ''}</div></td>
+      <td><div class="row" style="display:flex;align-items:center;gap:10px"><div class="stack" role="img" aria-label="${h.solid} % Solide, ${h.unstable} % Instable, ${h.degraded} % Dégradée">
+        <span style="width:${h.solid}%;background:var(--solid)"></span><span style="width:${h.unstable}%;background:var(--unstable)"></span><span style="width:${h.degraded}%;background:var(--degraded)"></span></div>
+        <span class="num" style="font-size:var(--t-sm)">${h.solid} % Solide</span></div></td>
+      <td class="r num">${h.p90} ms</td><td class="r num">${String(h.loss.toFixed(1)).replace('.', ',')} %</td></tr>`).join('')}
+    </tbody></table>`;
+}
+
+function details(st) {
+  const w = st.wifi;
+  const speed = st.mode === 'local'
+    ? `<dl><dt>Pic observé</dt><dd class="num">${st.peak ? st.peak + ' Mbit/s, il y a 12 min' : 'Pas encore de trafic'}</dd><dt>Ligne</dt><dd class="num">${st.network.line}</dd></dl>
+       <p class="muted" style="margin-top:var(--s2);font-size:var(--t-xs)">Mode local : aucun test actif, aucune donnée consommée. Les tests se lancent depuis les réglages.</p>`
+    : `<table><thead><tr><th>Quand</th><th>Test</th><th class="r">Descendant</th><th class="r">Montant</th><th class="r">Réactivité</th></tr></thead><tbody>
+       ${TESTS.map(t => `<tr><td>${t.when}</td><td>${t.profile}</td><td class="r num">${t.down} Mbit/s</td><td class="r num">${t.up} Mbit/s</td><td class="r num">${t.react} ms</td></tr>`).join('')}</tbody></table>
+       ${ui.testFailed ? '<p style="margin-top:var(--s2)">Test indisponible : le serveur de test ne répond pas. Réessayer dans quelques minutes.</p>' : ''}
+       <div class="test-actions">${testButtons()}</div><p class="muted" style="margin-top:var(--s2);font-size:var(--t-xs)">Ce mois : 3,4 Go sur 15 Go.</p>`;
+  return `<details><summary>Détails techniques</summary><div class="details-grid">
+    <div><h3>Connexion</h3><dl><dt>Type</dt><dd>${st.network.kind}</dd><dt>Réseau</dt><dd>${st.network.label}</dd><dt>Accès</dt><dd>${st.network.access}</dd><dt>VPN</dt><dd>${st.network.vpn}</dd><dt>Limitée</dt><dd>${st.network.metered}</dd></dl></div>
+    <div><h3>Wi-Fi</h3>${w ? `<dl><dt>Signal</dt><dd class="num">${w.rssi} dBm</dd><dt>Bruit</dt><dd class="num">${w.noise} dBm</dd><dt>Débit du lien</dt><dd class="num">${w.phy} Mbit/s</dd><dt>Bande</dt><dd>${w.band}, canal ${w.channel}</dd></dl>` : '<p class="muted">Pas de Wi-Fi sur cette connexion.</p>'}</div>
+    <div><h3>Débit</h3>${speed}</div></div></details>`;
+}
+
+function renderDashboard(st) {
+  const metrics = Object.keys(METRICS).map(m => `<div class="metric">
+      <span class="name">${METRICS[m].name}</span><span class="val num">${fmt(m, st.internet[m])}</span><span class="how">${METRICS[m].how}</span>
+      ${range(m, st.internet[m])}${st.near.includes(m) ? '<span class="near">Proche du seuil Instable</span>' : ''}</div>`).join('');
+  const segBtns = (key, opts) => opts.map(([v, l]) => `<button data-${key}="${v}" aria-pressed="${ui[key] === v}">${l}</button>`).join('');
+  $('dashboard').innerHTML = `
+    <section class="answer" aria-label="État actuel">
+      <div class="answer-head">${shape(st.verdict, 24)}<h2>${STATE_WORD[st.verdict]}</h2><span class="net muted">${st.network.label}<br>${st.network.kind}</span></div>
+      <p class="cause">${st.cause}</p>
+      ${path(st, false)}
+      <div class="metrics">${metrics}</div>
+    </section>
+    <section aria-label="Évolution">
+      <div class="sec-head"><h2>Évolution</h2><div class="controls">
+        <div class="seg-ctl" role="group" aria-label="Métrique">${segBtns('metric', [['latency', 'Latence'], ['jitter', 'Gigue'], ['loss', 'Perte']])}</div>
+        <div class="seg-ctl" role="group" aria-label="Période">${segBtns('period', [['1 h', '1 h'], ['24 h', '24 h'], ['7 j', '7 j'], ['30 j', '30 j']])}</div></div></div>
+      ${chart(st)}
+    </section>
+    <section aria-label="Tes réseaux"><div class="sec-head"><h2>Tes réseaux</h2><span class="muted">30 derniers jours</span></div>${networksTable(st)}</section>
+    <section>${details(st)}</section>
+    <p class="foot">${st.mode === 'local' ? 'Mode local : seuls de petits pings quittent cet ordinateur.' : 'Mode fournisseur : tests de débit via Cloudflare, rien n\'est publié.'}</p>`;
+}
+
+function snapshot(st) { return { verdict: st.verdict, latency: st.internet.latency, jitter: st.internet.jitter, loss: st.internet.loss }; }
+function focusKey() {
+  const a = document.activeElement;
+  if (!a || a === document.body) return null;
+  if (a.tagName === 'SUMMARY') return 'summary';
+  const d = Object.entries(a.dataset || {})[0];
+  return d ? `[data-${d[0]}="${d[1]}"]` : (a.id ? '#' + a.id : null);
+}
+function render() {
+  const key = focusKey();
+  const st = readState();
+  series.push(snapshot(st)); if (series.length > 120) series.shift();
+  const openDetails = document.querySelector('#dashboard details')?.open;
+  renderTray(st); renderPopover(st); renderDashboard(st);
+  if (openDetails) document.querySelector('#dashboard details').open = true;
+  // Re-rendering replaces nodes every second; put keyboard focus back where it was.
+  if (key) document.querySelector(key === 'summary' ? '#dashboard summary' : key)?.focus();
+  $('clock').textContent = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+function reset() { series = []; for (let i = 0; i < 90; i++) series.push(snapshot(readState())); render(); }
+
+['scenario', 'mode', 'permission'].forEach(id => $(id).addEventListener('change', reset));
+$('theme').addEventListener('change', e => { e.target.value ? document.documentElement.dataset.theme = e.target.value : delete document.documentElement.dataset.theme; });
+$('tray').addEventListener('click', () => { ui.popover = !ui.popover; render(); });
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-metric],[data-period],[data-test]');
+  if (!b) return;
+  if (b.dataset.metric) ui.metric = b.dataset.metric;
+  if (b.dataset.period) ui.period = b.dataset.period;
+  if (b.dataset.test && !ui.testing) {
+    ui.testing = b.dataset.test; ui.testFailed = false;
+    setTimeout(() => { ui.testing = null; ui.testFailed = Math.random() < .25; render(); }, b.dataset.test === 'quick' ? 3000 : 6000);
+  }
+  render();
+});
+let timer;
+function schedule() { clearInterval(timer); timer = setInterval(render, 1000); }
+reset(); schedule();
+</script>
+</body>
+</html>
