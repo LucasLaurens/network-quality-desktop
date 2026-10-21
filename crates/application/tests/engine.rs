@@ -8,7 +8,7 @@ use application::test_support::{
     InMemoryVerdictPresenter, InMemoryWifi, MANUAL_CLOCK_EPOCH, ManualClock,
 };
 use application::{
-    CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, MeasurementEngine, VerdictView,
+    CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, EventKind, MeasurementEngine, VerdictView,
 };
 use domain::{
     ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, Grade, LocalProblem,
@@ -1156,4 +1156,338 @@ async fn answers_with_the_last_hour_and_the_current_network() {
         live.network.map(|network| network.kind),
         Some(ConnectionKind::WiFi)
     );
+}
+
+// Sleep and wake
+
+#[tokio::test]
+async fn writes_the_minute_in_progress_before_allowing_sleep() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 51)));
+    harness.set_latency(FAST);
+    harness.run_seconds(5).await;
+    let (answer, answered) = std::sync::mpsc::sync_channel(1);
+
+    // Act
+    harness.engine.handle(EngineMessage::Sleep(answer)).await;
+
+    // Assert
+    assert!(answered.recv().is_ok());
+    assert_eq!(harness.history.list_saved_minutes().len(), 1);
+    assert_eq!(
+        harness.history.list_events().last().map(|event| event.kind),
+        Some(EventKind::Sleep)
+    );
+}
+
+#[tokio::test]
+async fn measures_nothing_between_sleep_and_wake() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    let (answer, _answered) = std::sync::mpsc::sync_channel(1);
+    harness.engine.handle(EngineMessage::Sleep(answer)).await;
+    let presented = harness.presenter.count_views();
+
+    // Act
+    harness.run_seconds(3).await;
+
+    // Assert
+    assert_eq!(harness.presenter.count_views(), presented);
+}
+
+#[tokio::test]
+async fn measures_again_from_scratch_on_wake() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 52)));
+    harness.warm_up_with_latency(FAST).await;
+    let (answer, _answered) = std::sync::mpsc::sync_channel(1);
+    harness.engine.handle(EngineMessage::Sleep(answer)).await;
+    harness.clock.advance(Duration::from_secs(3600));
+
+    // Act
+    harness.engine.handle(EngineMessage::Wake).await;
+    harness.run_seconds(1).await;
+
+    // Assert
+    let view = harness.read_last_view();
+    assert_eq!(view.verdict, Verdict::Measuring);
+    assert!(matches!(
+        view.diagnosis,
+        Diagnosis::Measuring {
+            collected: 1,
+            cause: MeasuringCause::Wake,
+            ..
+        }
+    ));
+    assert_eq!(
+        harness.history.list_events().last().map(|event| event.kind),
+        Some(EventKind::Wake)
+    );
+}
+
+#[tokio::test]
+async fn wakes_once_when_the_system_says_so() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    let (answer, _answered) = std::sync::mpsc::sync_channel(1);
+    harness.engine.handle(EngineMessage::Sleep(answer)).await;
+    harness.clock.advance(Duration::from_secs(3600));
+
+    // Act
+    harness.engine.handle(EngineMessage::Wake).await;
+    harness.run_seconds(2).await;
+
+    // Assert
+    let wakes = harness
+        .history
+        .list_events()
+        .iter()
+        .filter(|event| event.kind == EventKind::Wake)
+        .count();
+    assert_eq!(wakes, 1);
+}
+
+#[tokio::test]
+async fn ignores_a_wake_notice_that_comes_after_the_gap_was_noticed() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness.clock.advance(Duration::from_secs(600));
+    harness.run_seconds(3).await;
+
+    // Act
+    harness.engine.handle(EngineMessage::Wake).await;
+    harness.run_seconds(1).await;
+
+    // Assert
+    let wakes = harness
+        .history
+        .list_events()
+        .iter()
+        .filter(|event| event.kind == EventKind::Wake)
+        .count();
+    assert_eq!(wakes, 1);
+    assert!(matches!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::Measuring { collected: 4, .. }
+    ));
+}
+
+#[tokio::test]
+async fn ends_an_outage_at_its_last_second_when_the_gap_reveals_a_sleep() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 54)));
+    harness.set_every_target(ProbeOutcome::Unreachable);
+    harness.run_seconds(8).await;
+    let last_offline_second = MANUAL_CLOCK_EPOCH + 8;
+    harness.clock.advance(Duration::from_secs(600));
+
+    // Act
+    harness.set_latency(FAST);
+    harness.run_seconds(1).await;
+
+    // Assert
+    let ended: Vec<i64> = harness
+        .history
+        .list_events()
+        .iter()
+        .filter(|event| event.kind == EventKind::OfflineEnded)
+        .map(|event| event.utc)
+        .collect();
+    assert_eq!(ended, vec![last_offline_second]);
+}
+
+#[tokio::test]
+async fn wakes_when_the_clock_was_set_back_during_the_sleep() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.clock.advance(Duration::from_secs(120));
+    harness.warm_up_with_latency(FAST).await;
+    let (answer, _answered) = std::sync::mpsc::sync_channel(1);
+    harness.engine.handle(EngineMessage::Sleep(answer)).await;
+    let presented = harness.presenter.count_views();
+
+    // Act
+    harness.clock.set_back(Duration::from_secs(60));
+    harness.engine.handle(EngineMessage::Tick).await;
+
+    // Assert
+    assert!(harness.presenter.count_views() > presented);
+}
+
+#[tokio::test]
+async fn treats_a_long_gap_between_two_ticks_as_a_wake() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+
+    // Act
+    // The system slept without telling: the wall clock jumped between two ticks.
+    harness.clock.advance(Duration::from_secs(600));
+    harness.engine.handle(EngineMessage::Tick).await;
+
+    // Assert
+    assert!(matches!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::Measuring {
+            cause: MeasuringCause::Wake,
+            ..
+        }
+    ));
+    assert_eq!(
+        harness.history.list_events().last().map(|event| event.kind),
+        Some(EventKind::Wake)
+    );
+}
+
+#[tokio::test]
+async fn wakes_up_by_itself_when_the_wake_notice_never_comes() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    let (answer, _answered) = std::sync::mpsc::sync_channel(1);
+    harness.engine.handle(EngineMessage::Sleep(answer)).await;
+    harness.clock.advance(Duration::from_secs(600));
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(harness.read_presented_verdict(), Verdict::Measuring);
+}
+
+#[tokio::test]
+async fn keeps_an_outage_from_running_on_through_sleep() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 53)));
+    harness.set_every_target(ProbeOutcome::Unreachable);
+    harness.run_seconds(8).await;
+    let (answer, _answered) = std::sync::mpsc::sync_channel(1);
+
+    // Act
+    harness.engine.handle(EngineMessage::Sleep(answer)).await;
+
+    // Assert
+    let kinds: Vec<EventKind> = harness
+        .history
+        .list_events()
+        .iter()
+        .map(|event| event.kind)
+        .collect();
+    assert_eq!(
+        kinds[kinds.len() - 2..],
+        [EventKind::OfflineEnded, EventKind::Sleep]
+    );
+}
+
+/// A network whose next probe lasts as long as a sleep: the wall clock jumps while it waits.
+#[derive(Clone)]
+struct DozingNetwork {
+    network: InMemoryNetwork,
+    clock: ManualClock,
+    doze: std::sync::Arc<std::sync::Mutex<Option<Duration>>>,
+}
+
+impl DozingNetwork {
+    fn doze_during_next_probe(&self, duration: Duration) {
+        *self.doze.lock().expect("a doze") = Some(duration);
+    }
+}
+
+impl application::LatencyProbe for DozingNetwork {
+    fn send_probe(&self, target: Target) -> impl std::future::Future<Output = ProbeOutcome> + Send {
+        if let Some(duration) = self.doze.lock().expect("a doze").take() {
+            self.clock.advance(duration);
+        }
+        self.network.send_probe(target)
+    }
+}
+
+#[tokio::test]
+async fn discards_the_probes_that_waited_through_a_sleep() {
+    // Arrange
+    let clock = ManualClock::default();
+    let network = InMemoryNetwork::default();
+    let presenter = InMemoryVerdictPresenter::default();
+    let dozing = DozingNetwork {
+        network: network.clone(),
+        clock: clock.clone(),
+        doze: std::sync::Arc::default(),
+    };
+    let mut engine = MeasurementEngine::new(
+        EnginePorts {
+            probe: dozing.clone(),
+            clock: clock.clone(),
+            presenter: presenter.clone(),
+            context_reader: InMemoryConnection::default(),
+            gateway_probe: InMemoryGateway::default(),
+            wifi_reader: InMemoryWifi::default(),
+            history_recorder: InMemoryHistoryRecorder::default(),
+        },
+        vec![Target::parse(FIRST_TARGET)],
+    );
+    network.set_outcome(Target::parse(FIRST_TARGET), ProbeOutcome::Answered(FAST));
+    for _ in 0..WARM_UP {
+        clock.advance(Duration::from_secs(1));
+        engine.handle(EngineMessage::Tick).await;
+    }
+    network.set_outcome(Target::parse(FIRST_TARGET), ProbeOutcome::Unreachable);
+    dozing.doze_during_next_probe(Duration::from_secs(600));
+
+    // Act
+    clock.advance(Duration::from_secs(1));
+    engine.handle(EngineMessage::Tick).await;
+
+    // Assert
+    let view = presenter.read_last().expect("a view");
+    assert!(matches!(
+        view.diagnosis,
+        Diagnosis::Measuring {
+            collected: 0,
+            cause: MeasuringCause::Wake,
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn handles_a_sleep_notice_before_the_ticks_already_waiting() {
+    // Arrange
+    let harness = create_harness();
+    let presenter = harness.presenter.clone();
+    let (ticks, inbox) = tokio::sync::mpsc::channel(4);
+    let (notices, urgent) = tokio::sync::mpsc::channel(1);
+    for _ in 0..3 {
+        ticks
+            .send(EngineMessage::Tick)
+            .await
+            .expect("room for a tick");
+    }
+    let (answer, answered) = std::sync::mpsc::sync_channel(1);
+    notices
+        .send(EngineMessage::Sleep(answer))
+        .await
+        .expect("room for the notice");
+    drop((ticks, notices));
+
+    // Act
+    harness.engine.run(inbox, urgent).await;
+
+    // Assert
+    assert!(answered.recv().is_ok());
+    assert_eq!(presenter.count_views(), 0);
 }

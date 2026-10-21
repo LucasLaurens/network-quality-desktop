@@ -342,6 +342,10 @@ const fn select_cause_keys(
             cause: MeasuringCause::NewNetwork,
             ..
         } => ("cause-new-network", None),
+        Diagnosis::Measuring {
+            cause: MeasuringCause::Wake,
+            ..
+        } => ("cause-wake", None),
         Diagnosis::NoNetwork => ("cause-no-network", Some("action-no-network")),
         Diagnosis::GatewayWithoutInternet if matches!(kind, ConnectionKind::PhoneHotspot) => (
             "cause-phone-without-internet",
@@ -680,6 +684,34 @@ mod tests {
         // Assert
         assert_eq!(display.cause, "Nouveau réseau, premières mesures en cours.");
         assert_eq!(display.detail.as_deref(), Some("2 sur 10"));
+    }
+
+    #[test]
+    fn says_the_computer_is_back_from_sleep() {
+        // Arrange
+        let view = VerdictView {
+            verdict: Verdict::Measuring,
+            diagnosis: Diagnosis::Measuring {
+                collected: 0,
+                needed: 10,
+                cause: MeasuringCause::Wake,
+            },
+            latency: None,
+            jitter: None,
+            loss: None,
+            context: None,
+            local: LocalSegment::Unmeasurable(Unmeasurable::NoGateway),
+            wifi: None,
+        };
+
+        // Act
+        let display = ConnectionDisplay::from_view(&view, &TextCatalog::load());
+
+        // Assert
+        assert_eq!(
+            display.cause,
+            "Retour de veille, premières mesures en cours."
+        );
     }
 
     #[test]
