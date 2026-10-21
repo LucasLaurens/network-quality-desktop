@@ -139,6 +139,24 @@ onMounted(async () => {
       </div>
     </div>
 
+    <div class="group">
+      <h3>Notifications</h3>
+      <div class="rows">
+        <div class="setting">
+          <label for="setting-notify">Prévenir quand la connexion se dégrade</label>
+          <input
+            id="setting-notify"
+            v-model="form.notifiesOnDegradation"
+            type="checkbox"
+            role="switch"
+            aria-describedby="setting-notify-hint"
+            @change="saveChange"
+          />
+          <span id="setting-notify-hint" class="hint">Seulement si la dégradation dure plus de 10 secondes.</span>
+        </div>
+      </div>
+    </div>
+
     <p v-if="refusal" class="refused" role="alert" data-refused>{{ refusal }}</p>
     <p class="saved" role="status" data-saved>{{ saved }}</p>
   </section>

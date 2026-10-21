@@ -162,6 +162,11 @@ pub trait TrayHost {
     fn is_tray_available(&self) -> bool;
 }
 
+/// Shows a system notification: called only for a durable degradation the user wants to hear of.
+pub trait Notifier {
+    fn notify_degradation(&self, view: &VerdictView);
+}
+
 /// Receives every verdict computed by the engine (menu-bar dot, later the popover).
 pub trait VerdictPresenter {
     fn present(&self, view: &VerdictView);

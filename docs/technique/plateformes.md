@@ -55,6 +55,12 @@ Points laissés ouverts par la recherche (#19), tranchés :
 - Apparence : `AppHandle::set_theme` applique Clair ou Sombre à toutes les fenêtres (Système : `None`). Le webview suit le thème de sa fenêtre, donc les media queries `prefers-color-scheme` des tokens CSS aussi : pas de second jeu de couleurs. Non vérifié dans l'app réelle : à contrôler à la main sur les trois systèmes (barre de titre et page).
 - Ouverture de session : `tauri-plugin-autostart` 2.7.0, appelé depuis Rust seulement (aucune permission front) : LaunchAgent sous macOS, clé `Run` du registre sous Windows, fichier `.desktop` dans `~/.config/autostart` sous Linux. Le réglage est appliqué au lancement, avant toute fenêtre, et à chaque enregistrement : le réglage de l'app fait foi sur l'état du système. Une version de développement (`debug_assertions`) ne s'inscrit jamais.
 
+## Notifications
+
+- `tauri-plugin-notification` 2.7.0, appelé depuis Rust seulement (aucune permission front). Le texte vient du catalogue, comme le popover.
+- macOS : le système demande l'autorisation à la première notification de l'app empaquetée ; un binaire de développement lancé hors d'un `.app` peut n'en afficher aucune (non vérifié). Windows : notification « toast » au nom de l'app installée. Linux : serveur de notifications D-Bus du bureau.
+- Non vérifié dans l'app réelle sur les trois systèmes : à contrôler à la main (provoquer une dégradation, par exemple en saturant le lien).
+
 ## Tâche de fond et App Nap
 
 - macOS : `keep_measuring_in_background` déclare au lancement une activité `NSActivityUserInitiatedAllowingIdleSystemSleep` (`NSProcessInfo`), pour toute la vie de l'app : App Nap ne peut plus espacer les ticks quand aucune fenêtre n'est visible, et le Mac peut toujours se mettre en veille quand il est inactif.

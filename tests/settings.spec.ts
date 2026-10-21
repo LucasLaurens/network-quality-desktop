@@ -45,8 +45,40 @@ describe('SettingsView', () => {
     await flushPromises()
 
     // Assert
-    expect(client.savedForms).toEqual([{ launchAtLogin: false, appearance: 'system', ownServer: null }])
+    expect(client.savedForms).toEqual([
+      { launchAtLogin: false, appearance: 'system', ownServer: null, notifiesOnDegradation: true },
+    ])
     expect(wrapper.get('[data-saved]').text()).toBe(client.readConfirmation())
+  })
+
+  it('turns the degradation notifications off', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountSettings(client)
+
+    // Act
+    await wrapper.get('#setting-notify').setValue(false)
+    await flushPromises()
+
+    // Assert
+    expect(client.savedForms.at(-1)?.notifiesOnDegradation).toBe(false)
+  })
+
+  it('shows the notifications as turned off once saved so', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    await client.saveSettings({
+      launchAtLogin: true,
+      appearance: 'system',
+      ownServer: null,
+      notifiesOnDegradation: false,
+    })
+
+    // Act
+    const wrapper = await mountSettings(client)
+
+    // Assert
+    expect((wrapper.get('#setting-notify').element as HTMLInputElement).checked).toBe(false)
   })
 
   it('saves the appearance picked', async () => {
@@ -90,7 +122,9 @@ describe('SettingsView', () => {
     await flushPromises()
 
     // Assert
-    expect(client.savedForms).toEqual([{ launchAtLogin: true, appearance: 'system', ownServer: address }])
+    expect(client.savedForms).toEqual([
+      { launchAtLogin: true, appearance: 'system', ownServer: address, notifiesOnDegradation: true },
+    ])
   })
 
   it('saves the look with the last accepted server while an address is half typed', async () => {
@@ -105,7 +139,9 @@ describe('SettingsView', () => {
     await flushPromises()
 
     // Assert
-    expect(client.savedForms).toEqual([{ launchAtLogin: true, appearance: 'dark', ownServer: null }])
+    expect(client.savedForms).toEqual([
+      { launchAtLogin: true, appearance: 'dark', ownServer: null, notifiesOnDegradation: true },
+    ])
     expect(wrapper.find('[data-refused]').exists()).toBe(false)
   })
 

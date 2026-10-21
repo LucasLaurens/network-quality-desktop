@@ -2,7 +2,8 @@ use std::time::Duration;
 
 use crate::{Grade, Timestamp, Verdict};
 
-const DEGRADE_AFTER: Duration = Duration::from_secs(10);
+/// How long a worse grade must last before it shows: the single home of « plus de 10 s ».
+pub const DEGRADE_AFTER: Duration = Duration::from_secs(10);
 const IMPROVE_AFTER: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

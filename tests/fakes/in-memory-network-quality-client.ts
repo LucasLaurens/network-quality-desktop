@@ -161,7 +161,12 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private evolution = createEvolutionDisplay()
   readonly evolutionRequests: PeriodChoice[] = []
   readonly savedForms: SettingsForm[] = []
-  private settings: SettingsForm = { launchAtLogin: true, appearance: 'system', ownServer: null }
+  private settings: SettingsForm = {
+    launchAtLogin: true,
+    appearance: 'system',
+    ownServer: null,
+    notifiesOnDegradation: true,
+  }
   /** Empty while saves are accepted. */
   private settingsRefusal = ''
   private readonly confirmation = faker.lorem.sentence()

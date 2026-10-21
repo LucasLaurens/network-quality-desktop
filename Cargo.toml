@@ -29,6 +29,7 @@ tauri = "~2.12.4"
 tauri-build = "~2.7.3"
 tauri-plugin-positioner = { version = "=2.4.0", features = ["tray-icon"] }
 tauri-plugin-autostart = "=2.7.0"
+tauri-plugin-notification = "=2.7.0"
 tauri-plugin-opener = "=2.5.5"
 tauri-plugin-single-instance = "=2.5.4"
 netdev = "=0.46.3"

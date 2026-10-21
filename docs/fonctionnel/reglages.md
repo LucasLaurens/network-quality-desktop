@@ -25,4 +25,10 @@ Le serveur personnalisé s'écrit en adresse IP (IPv4 ou IPv6, par exemple `192.
 
 Limite : un serveur du réseau local sur une connexion sans accès à Internet (pas de route par défaut) est mesuré, mais l'état reste « Aucun réseau connecté » : l'app reconnaît la connexion par sa route vers Internet.
 
-Les réglages des notifications et des tests de débit s'ajouteront à cette page avec leurs fonctions.
+## Notifications
+
+| Réglage                                | Par défaut | Effet                                                                                                                                                                  |
+| -------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prévenir quand la connexion se dégrade | activé     | Une notification du système quand l'état empire durablement (voir [États et verdict](etats-et-verdict.md#notifications)). Désactivé, l'état change sans rien annoncer. |
+
+Le réglage des tests de débit s'ajoutera à cette page avec les tests.
