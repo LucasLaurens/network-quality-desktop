@@ -19,9 +19,18 @@ dbus.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
 dispatch2.workspace = true
+objc2.workspace = true
+objc2-core-wlan.workspace = true
+objc2-core-location.workspace = true
+objc2-foundation.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { workspace = true, features = ["Foundation", "Networking_Connectivity"] }
+windows = { workspace = true, features = [
+    "Foundation",
+    "Networking_Connectivity",
+    "Win32_Foundation",
+    "Win32_NetworkManagement_WiFi",
+] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["net", "macros", "rt"] }

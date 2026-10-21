@@ -14,12 +14,12 @@ Sous le constat, le popover dessine le chemin **Ce Mac → Box → Internet** (�
 
 L'état vient de la mesure de bout en bout (vers Internet). L'app mesure aussi le lien avec la box par un ping, chaque seconde, et s'en sert seulement pour dire où est le problème :
 
-| Lien avec la box                                                               | Bout en bout | Constat                                                                              |
-| ------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------ |
-| mauvais (plus de 30 ms, ou plus de 1 % de pertes avec au moins 2 pings perdus) | mauvais      | le Wi-Fi, le câble ou le lien avec le téléphone est en cause                         |
-| bon                                                                            | mauvais      | l'opérateur est en cause (le réseau mobile pour un partage de connexion ou un modem) |
-| mauvais                                                                        | bon          | rien : l'état reste Solide                                                           |
-| non mesurable                                                                  | mauvais      | la cause exacte ne peut pas être déterminée                                          |
+| Lien avec la box                                                               | Bout en bout | Constat                                                                                                               |
+| ------------------------------------------------------------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------- |
+| mauvais (plus de 30 ms, ou plus de 1 % de pertes avec au moins 2 pings perdus) | mauvais      | le Wi-Fi, le câble ou le lien avec le téléphone est en cause ; en Wi-Fi, un signal sous −70 dBm est nommé comme cause |
+| bon                                                                            | mauvais      | l'opérateur est en cause (le réseau mobile pour un partage de connexion ou un modem)                                  |
+| mauvais                                                                        | bon          | rien : l'état reste Solide                                                                                            |
+| non mesurable                                                                  | mauvais      | la cause exacte ne peut pas être déterminée                                                                           |
 
 Le lien avec la box n'est pas mesurable quand le système refuse le ping (Linux sans réglage), quand la box n'a répondu à aucun ping pendant une minute, quand aucune box n'est visible ou sous VPN (les mesures passent par le tunnel), et pendant ses dix premières secondes. L'app ne devine pas.
 
@@ -29,6 +29,7 @@ Le lien avec la box n'est pas mesurable quand le système refuse le ping (Linux 
 | ------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------- |
 | Tout va bien                                                  | Bonne connexion pour la visio.                                    | aucune                                                  |
 | Une mesure approche de son seuil                              | Bonne connexion, proche de la limite.                             | aucune                                                  |
+| Wi-Fi au signal faible (sous −70 dBm)                         | Le Wi-Fi est en cause : signal faible.                            | Se rapprocher de la box ou passer en 5 GHz.             |
 | Wi-Fi lent jusqu'à la box                                     | Le Wi-Fi est en cause : la box répond lentement.                  | Se rapprocher de la box ou passer en 5 GHz.             |
 | Pertes avant la box en Wi-Fi                                  | Le Wi-Fi est en cause : des paquets se perdent avant la box.      | Changer de canal Wi-Fi ou redémarrer la box.            |
 | Lien avec le téléphone                                        | Le lien avec le téléphone est en cause.                           | Se rapprocher du téléphone.                             |
@@ -47,7 +48,7 @@ Le lien avec la box n'est pas mesurable quand le système refuse le ping (Linux 
 
 Écarts volontaires avec la décision sur le ton :
 
-- « Wi-Fi, signal faible » attend la lecture du signal (ticket Wi-Fi) ; d'ici là, un Wi-Fi lent jusqu'à la box donne « la box répond lentement ».
+- « Le Wi-Fi est en cause : la box répond lentement. » couvre un Wi-Fi lent dont le signal n'est pas faible.
 - « Redémarrer la box ou vérifier le réseau de l'opérateur. » au lieu de « … l'état du réseau de l'opérateur. », qui dépassait 60 caractères.
 - Les causes « Lien avec le téléphone », « Câble ou autre lien local », « Téléphone sans Internet » et « Rien ne répond » complètent le catalogue, avec les variantes de « Opérateur » (câble, autre lien) et de « Réseau mobile » (modem intégré), pour les connexions qu'il ne couvrait pas.
 - Le « lien d'aide » de Linux est une action qui nomme le réglage (`net.ipv4.ping_group_range`) : le dépôt n'est pas public.

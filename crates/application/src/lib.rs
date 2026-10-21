@@ -13,6 +13,6 @@ pub use engine::{
 };
 pub use ports::{
     Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, NetworkChangeWatcher, TrayHost,
-    VerdictPresenter,
+    VerdictPresenter, WifiReader,
 };
 pub use targets::list_default_targets;

@@ -39,6 +39,10 @@ onUnmounted(() => {
   stopListening?.()
 })
 
+const revealNetworkName = async (): Promise<void> => {
+  await client.revealNetworkName()
+}
+
 const openDashboard = async (): Promise<void> => {
   await client.openDashboard()
 }
@@ -52,6 +56,18 @@ const openDashboard = async (): Promise<void> => {
       <p v-if="display.network" class="where" data-network>
         <span>{{ display.network.label }}</span>
         <span class="connection">{{ display.network.connection }}</span>
+        <span v-if="display.network.wifiDetails" class="connection num" data-wifi-details>
+          {{ display.network.wifiDetails }}
+        </span>
+        <button
+          v-if="display.network.revealLabel"
+          type="button"
+          class="reveal"
+          data-reveal-name
+          @click="revealNetworkName"
+        >
+          {{ display.network.revealLabel }}
+        </button>
       </p>
     </header>
     <p class="cause" aria-live="polite">{{ display.cause }}</p>
@@ -97,6 +113,18 @@ const openDashboard = async (): Promise<void> => {
 
 .where .connection {
   font-size: var(--t-xs);
+}
+
+.reveal {
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-xs);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 h1 {

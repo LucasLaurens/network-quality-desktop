@@ -36,4 +36,8 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
   quitApp(): Promise<void> {
     return commands.quitApp()
   }
+
+  revealNetworkName(): Promise<void> {
+    return commands.revealNetworkName()
+  }
 }

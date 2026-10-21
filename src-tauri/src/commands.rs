@@ -5,6 +5,8 @@ use specta::Type;
 use tauri::{AppHandle, Manager, State};
 
 use crate::display::ConnectionDisplay;
+use infrastructure::{LocationRequest, request_location_permission};
+
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
 use crate::shell_presenter::DisplayStore;
 use crate::windows::{POPOVER_WINDOW, report_failure, show_dashboard};
@@ -63,6 +65,15 @@ pub fn close_popover(app: AppHandle) {
     }
 }
 
+/// Where the location permission is given once the system stopped asking.
+const LOCATION_SETTINGS_URL: Option<&str> = if cfg!(target_os = "macos") {
+    Some("x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices")
+} else if cfg!(target_os = "windows") {
+    Some("ms-settings:privacy-location")
+} else {
+    None
+};
+
 /// The note shown in window mode; `None` when the tray works.
 #[tauri::command]
 #[specta::specta]
@@ -93,6 +104,27 @@ pub fn open_tray_extension_page() {
 )]
 pub fn quit_app(app: AppHandle) {
     app.exit(0);
+}
+
+/// Asks for the location permission that reveals the Wi-Fi name, or opens the system settings
+/// where it can be given once the question was answered.
+#[tauri::command]
+#[specta::specta]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn reveal_network_name(app: AppHandle) {
+    // CoreLocation answers through the main run loop.
+    let asked = app.run_on_main_thread(|| {
+        if request_location_permission() == LocationRequest::NeedsSettings
+            && let Some(url) = LOCATION_SETTINGS_URL
+            && let Err(error) = tauri_plugin_opener::open_url(url, None::<&str>)
+        {
+            eprintln!("Opening the location settings failed: {error}");
+        }
+    });
+    report_failure("Asking for the location permission", asked);
 }
 
 #[cfg(test)]

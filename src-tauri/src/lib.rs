@@ -3,6 +3,7 @@
 
 pub mod commands;
 mod display;
+mod network_display;
 mod path_display;
 mod shell_mode;
 mod shell_presenter;
@@ -20,7 +21,7 @@ use display::ConnectionDisplay;
 use domain::Verdict;
 use infrastructure::{
     FallbackLatencyProbe, IcmpEchoSender, IcmpGatewayProbe, InterfaceChangeWatcher,
-    NetdevContextReader, SystemClock, SystemTrayHost, TcpConnectionOpener,
+    NetdevContextReader, SystemClock, SystemTrayHost, SystemWifiReader, TcpConnectionOpener,
 };
 use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
@@ -55,7 +56,8 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::close_popover,
             commands::read_window_mode_texts,
             commands::open_tray_extension_page,
-            commands::quit_app
+            commands::quit_app,
+            commands::reveal_network_name
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -139,6 +141,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
             presenter: ShellPresenter::new(app.clone(), tray, menu, catalog, store),
             context_reader: NetdevContextReader::new(route_reference),
             gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
+            wifi_reader: SystemWifiReader,
         },
         targets,
     );
