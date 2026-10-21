@@ -1,6 +1,7 @@
 //! Pure measurement rules: verdict, thresholds, hysteresis. No I/O, no OS access.
 #![forbid(unsafe_code)]
 
+mod diagnosis;
 mod grade;
 mod hysteresis;
 mod latency_window;
@@ -11,6 +12,7 @@ mod target;
 mod timestamp;
 mod verdict;
 
+pub use diagnosis::{Diagnosis, Metric};
 pub use grade::{Grade, GradeBounds, Scalable, Thresholds};
 pub use hysteresis::Hysteresis;
 pub use latency_window::{LatencyWindow, compute_median};

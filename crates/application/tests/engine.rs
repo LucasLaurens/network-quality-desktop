@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use application::test_support::{InMemoryNetwork, InMemoryVerdictPresenter, ManualClock};
 use application::{EngineMessage, MeasurementEngine, VerdictView};
-use domain::{Grade, ProbeOutcome, Target, Verdict};
+use domain::{Diagnosis, Grade, Metric, ProbeOutcome, Target, Verdict};
 
 // Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
 const FIRST_TARGET: &str = "192.0.2.1";
@@ -437,5 +437,122 @@ async fn does_not_grade_loss_before_30_seconds_of_probes() {
     assert_eq!(
         harness.read_last_view().loss.map(|loss| loss.grade),
         Some(Grade::Unstable)
+    );
+}
+
+// Diagnosis
+
+#[tokio::test]
+async fn diagnoses_a_healthy_connection() {
+    // Arrange
+    let mut harness = create_harness();
+
+    // Act
+    harness.warm_up_with_latency(FAST).await;
+
+    // Assert
+    assert_eq!(harness.read_last_view().diagnosis, Diagnosis::Healthy);
+}
+
+#[tokio::test]
+async fn diagnoses_a_metric_close_to_its_next_threshold() {
+    // Arrange
+    let mut harness = create_harness();
+
+    // Act
+    harness.warm_up_with_latency(NEAR_LIMIT).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::NearThreshold(Metric::Latency)
+    );
+}
+
+#[tokio::test]
+async fn reports_warm_up_progress_while_measuring() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.set_latency(FAST);
+
+    // Act
+    harness.run_seconds(6).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::Measuring {
+            collected: 6,
+            needed: WARM_UP
+        }
+    );
+}
+
+#[tokio::test]
+async fn diagnoses_no_reachable_server_while_offline() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_every_target(ProbeOutcome::Unreachable);
+
+    // Act
+    harness.run_seconds(5).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::NoServerReachable
+    );
+}
+
+#[tokio::test]
+async fn names_the_worst_metric_when_out_of_threshold() {
+    // Arrange
+    let mut harness = create_harness();
+
+    // Act
+    harness.warm_up_with_latency(SLOW).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::OutOfThreshold(Metric::Latency)
+    );
+}
+
+#[tokio::test]
+async fn diagnoses_a_recovery_while_the_state_waits_to_improve() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(VERY_SLOW).await;
+    harness.run_seconds(10).await;
+    harness.set_latency(FAST);
+
+    // Act
+    harness.run_seconds(20).await;
+
+    // Assert
+    let view = harness.read_last_view();
+    assert_eq!(view.verdict, Verdict::Graded(Grade::Degraded));
+    assert_eq!(view.diagnosis, Diagnosis::Recovering);
+}
+
+#[tokio::test]
+async fn gives_each_reading_the_bounds_it_was_graded_against() {
+    // Arrange
+    let mut harness = create_harness();
+
+    // Act
+    harness.warm_up_with_latency(SLOW).await;
+
+    // Assert
+    let latency = harness.read_last_view().latency.expect("a latency reading");
+    assert_eq!(
+        latency.bounds,
+        domain::Thresholds::for_video_calls().latency
+    );
+    assert_eq!(
+        latency.bounds.find_reference_threshold(latency.value),
+        Duration::from_millis(100)
     );
 }

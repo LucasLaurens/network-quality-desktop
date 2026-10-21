@@ -19,6 +19,7 @@ pedantic = { level = "deny", priority = -1 }
 domain = { path = "crates/domain" }
 application = { path = "crates/application" }
 infrastructure = { path = "crates/infrastructure" }
+fluent-bundle = "0.16"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 ping-async = "=1.0.2"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -26,5 +27,7 @@ specta = "=2.0.0-rc.25"
 specta-typescript = "=0.0.12"
 tauri = "~2.12.4"
 tauri-build = "~2.7.3"
+tauri-plugin-positioner = { version = "=2.4.0", features = ["tray-icon"] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+unic-langid = { version = "0.9", features = ["macros"] }
 tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }

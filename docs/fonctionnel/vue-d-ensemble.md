@@ -6,4 +6,4 @@ Une pastille dans la barre des menus donne l'état de la connexion Internet, mes
 
 ## Ce que l'app fait aujourd'hui
 
-Une pastille dans la barre des menus suit la latence vers Internet, mesurée chaque seconde par un petit ping vers deux serveurs publics (voir [États et verdict](etats-et-verdict.md)). La fenêtre s'ouvre et affiche la version de l'app.
+Une pastille dans la barre des menus suit la latence, la gigue et la perte vers Internet, mesurées chaque seconde par un petit ping vers deux serveurs publics (voir [États et verdict](etats-et-verdict.md)). Un clic sur la pastille ouvre le popover : l'état, sa cause en une phrase (voir [Diagnostic](diagnostic.md)) et les trois mesures. Le tableau de bord s'ouvre depuis le popover ; il n'affiche encore que la version de l'app.

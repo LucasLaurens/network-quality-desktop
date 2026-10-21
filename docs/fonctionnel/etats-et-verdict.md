@@ -10,7 +10,7 @@ La pastille de la barre des menus montre l'état de la connexion. Chaque état a
 | Hors ligne      | anneau barré gris     | aucun serveur ne répond, ni au ping ni en TCP, pendant 5 secondes                |
 | Mesure en cours | anneau pointillé bleu | au démarrage et au retour de connexion, tant que 10 mesures n'ont pas été reçues |
 
-Survoler la pastille affiche le nom de l'état (sauf sous Linux).
+Survoler la pastille affiche le nom de l'état (sauf sous Linux). Un clic sur la pastille (macOS et Windows) ouvre le **popover** : l'état, le [diagnostic](diagnostic.md), et les trois mesures avec leur méthode et une jauge qui situe la valeur entre les zones Solide, Instable et Dégradée. Le popover se ferme dès qu'on clique ailleurs, sur un nouveau clic sur la pastille ou avec Échap ; son bouton « Ouvrir le tableau de bord » ouvre la fenêtre principale.
 
 ## Les trois mesures
 
@@ -20,7 +20,7 @@ Survoler la pastille affiche le nom de l'état (sauf sous Linux).
 | Gigue   | variation de la latence d'une seconde à l'autre (15 dernières secondes) | moins de 30 ms  | 30 à 50 ms   | plus de 50 ms  |
 | Perte   | part des pings sans réponse (dernière minute, deux serveurs)            | moins de 1 %    | 1 à 5 %      | plus de 5 %    |
 
-L'état affiché est celui de la **pire** des trois. Une mesure à moins de 20 % du seuil suivant est signalée « proche du seuil » (affichage dans le popover, à venir).
+L'état affiché est celui de la **pire** des trois. Une mesure à moins de 20 % du seuil suivant est signalée « Proche du seuil » dans le popover.
 
 ## Stabilité
 
