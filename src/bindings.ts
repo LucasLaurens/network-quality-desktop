@@ -46,6 +46,8 @@ export type ConnectionDisplay = {
 	detail: string | null,
 	metrics: MetricDisplay[],
 	openDashboardLabel: string,
+	/**  `None` without a default route. */
+	network: NetworkDisplay | null,
 };
 
 /**  Sent to every window whenever what the popover shows changes. */
@@ -72,6 +74,12 @@ export type MetricDisplay = {
 	gauge: Gauge | null,
 	/**  Shown under a metric close to its next threshold. */
 	hint: string | null,
+};
+
+/**  The network in words: what to call it, and how the computer reaches it. */
+export type NetworkDisplay = {
+	label: string,
+	connection: string,
 };
 
 /**

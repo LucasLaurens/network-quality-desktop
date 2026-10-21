@@ -38,6 +38,31 @@ describe('ConnectionPopover', () => {
     expect(wrapper.get('[data-state]').attributes('data-state')).toBe('offline')
   })
 
+  it('names the network and how it is reached', async () => {
+    // Arrange
+    const network = { label: faker.company.name(), connection: faker.lorem.words(2) }
+    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ network }))
+
+    // Act
+    const wrapper = await mountPopover(client)
+
+    // Assert
+    const where = wrapper.get('[data-network]')
+    expect(where.text()).toContain(network.label)
+    expect(where.text()).toContain(network.connection)
+  })
+
+  it('names no network without a default route', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ network: null }))
+
+    // Act
+    const wrapper = await mountPopover(client)
+
+    // Assert
+    expect(wrapper.find('[data-network]').exists()).toBe(false)
+  })
+
   it('shows each metric with its value, its method and its gauge marker', async () => {
     // Arrange
     const label = faker.lorem.sentence()

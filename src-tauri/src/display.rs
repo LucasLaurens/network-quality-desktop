@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use application::{MetricReading, VerdictView};
-use domain::{Diagnosis, Grade, LossRate, Metric, Verdict};
+use domain::{ConnectionContext, ConnectionKind, Diagnosis, Grade, LossRate, Metric, Verdict};
 use fluent_bundle::FluentArgs;
 use serde::Serialize;
 use specta::Type;
@@ -81,6 +81,39 @@ pub struct MetricDisplay {
     pub hint: Option<String>,
 }
 
+/// The network in words: what to call it, and how the computer reaches it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkDisplay {
+    pub label: String,
+    pub connection: String,
+}
+
+impl NetworkDisplay {
+    /// The Wi-Fi name will replace the generic label once it can be read. O(1).
+    #[must_use]
+    pub fn from_context(context: &ConnectionContext, catalog: &TextCatalog) -> Self {
+        let (label_key, connection_key) = match (context.kind, context.is_vpn) {
+            (ConnectionKind::Ethernet, _) => ("network-ethernet", "connection-ethernet"),
+            (ConnectionKind::WiFi, _) => ("network-wifi", "connection-wifi"),
+            (ConnectionKind::Cellular, _) => ("network-cellular", "connection-cellular"),
+            (ConnectionKind::PhoneHotspot, _) => ("network-hotspot", "connection-hotspot"),
+            (ConnectionKind::Other, true) => ("network-vpn", "connection-vpn"),
+            (ConnectionKind::Other, false) => ("network-other", "connection-other"),
+        };
+        let mut connection = catalog.render(connection_key, None);
+        if context.is_vpn && context.kind != ConnectionKind::Other {
+            let mut args = FluentArgs::new();
+            args.set("connection", connection);
+            connection = catalog.render("connection-through-vpn", Some(&args));
+        }
+        Self {
+            label: catalog.render(label_key, None),
+            connection,
+        }
+    }
+}
+
 /// Everything the popover shows, already worded and laid out: the front end adds no rule.
 #[derive(Debug, Clone, PartialEq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -92,6 +125,8 @@ pub struct ConnectionDisplay {
     pub detail: Option<String>,
     pub metrics: Vec<MetricDisplay>,
     pub open_dashboard_label: String,
+    /// `None` without a default route.
+    pub network: Option<NetworkDisplay>,
 }
 
 impl ConnectionDisplay {
@@ -107,6 +142,7 @@ impl ConnectionDisplay {
             latency: None,
             jitter: None,
             loss: None,
+            context: None,
         };
         Self::from_view(&view, catalog)
     }
@@ -145,6 +181,9 @@ impl ConnectionDisplay {
                 compose_metric(Metric::Loss, view.loss.as_ref(), LOSS_GAUGE_MAX, catalog),
             ],
             open_dashboard_label: catalog.render("action-open-dashboard", None),
+            network: view
+                .context
+                .map(|context| NetworkDisplay::from_context(&context, catalog)),
         }
     }
 }
@@ -304,6 +343,7 @@ mod tests {
             latency: Some(create_reading(latency, thresholds.latency)),
             jitter: Some(create_reading(Duration::from_millis(4), thresholds.jitter)),
             loss: Some(create_reading(LossRate::from_percent(2.5), thresholds.loss)),
+            context: None,
         }
     }
 
@@ -378,6 +418,7 @@ mod tests {
             latency: None,
             jitter: None,
             loss: None,
+            context: None,
         };
 
         // Act
@@ -468,6 +509,7 @@ mod tests {
             latency: None,
             jitter: None,
             loss: None,
+            context: None,
         };
 
         // Act
@@ -475,6 +517,63 @@ mod tests {
 
         // Assert
         assert_eq!(display.detail, None);
+    }
+
+    fn create_context(kind: ConnectionKind, is_vpn: bool) -> ConnectionContext {
+        ConnectionContext {
+            kind,
+            is_vpn,
+            gateway: None,
+        }
+    }
+
+    #[test]
+    fn names_the_network_and_how_it_is_reached() {
+        // Arrange
+        let catalog = TextCatalog::load();
+
+        // Act
+        let wifi =
+            NetworkDisplay::from_context(&create_context(ConnectionKind::WiFi, false), &catalog);
+        let hotspot = NetworkDisplay::from_context(
+            &create_context(ConnectionKind::PhoneHotspot, false),
+            &catalog,
+        );
+
+        // Assert
+        assert_eq!(
+            (wifi.label.as_str(), wifi.connection.as_str()),
+            ("Réseau Wi-Fi", "Wi-Fi")
+        );
+        assert_eq!(hotspot.label, "Partage de connexion");
+    }
+
+    #[test]
+    fn says_when_the_measure_goes_through_a_vpn() {
+        // Arrange
+        let catalog = TextCatalog::load();
+
+        // Act
+        let over_ethernet =
+            NetworkDisplay::from_context(&create_context(ConnectionKind::Ethernet, true), &catalog);
+        let hidden =
+            NetworkDisplay::from_context(&create_context(ConnectionKind::Other, true), &catalog);
+
+        // Assert
+        assert_eq!(over_ethernet.connection, "Ethernet, via un VPN");
+        assert_eq!(
+            (hidden.label.as_str(), hidden.connection.as_str()),
+            ("Réseau via un VPN", "VPN")
+        );
+    }
+
+    #[test]
+    fn shows_no_network_without_a_default_route() {
+        // Act
+        let display = ConnectionDisplay::create_initial(&TextCatalog::load());
+
+        // Assert
+        assert_eq!(display.network, None);
     }
 
     #[test]

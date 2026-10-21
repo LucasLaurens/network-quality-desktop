@@ -5,9 +5,9 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use domain::{ProbeOutcome, Target, Timestamp};
+use domain::{ConnectionContext, ProbeOutcome, Target, Timestamp};
 
-use crate::{Clock, LatencyProbe, VerdictPresenter, VerdictView};
+use crate::{Clock, ConnectionContextReader, LatencyProbe, VerdictPresenter, VerdictView};
 
 /// A simulated network: each target gives the outcome set for it; an unknown target is unreachable.
 #[derive(Debug, Clone, Default)]
@@ -34,6 +34,24 @@ impl LatencyProbe for InMemoryNetwork {
             .copied()
             .unwrap_or(ProbeOutcome::Unreachable);
         std::future::ready(outcome)
+    }
+}
+
+/// A connection the test switches at will; no default route until told otherwise.
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryConnection {
+    context: Arc<Mutex<Option<ConnectionContext>>>,
+}
+
+impl InMemoryConnection {
+    pub fn set_context(&self, context: Option<ConnectionContext>) {
+        *self.context.lock().unwrap_or_else(PoisonError::into_inner) = context;
+    }
+}
+
+impl ConnectionContextReader for InMemoryConnection {
+    fn read_context(&self) -> impl Future<Output = Option<ConnectionContext>> + Send {
+        std::future::ready(*self.context.lock().unwrap_or_else(PoisonError::into_inner))
     }
 }
 

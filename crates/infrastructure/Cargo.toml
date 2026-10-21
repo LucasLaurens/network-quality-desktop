@@ -9,7 +9,8 @@ publish.workspace = true
 application.workspace = true
 domain.workspace = true
 ping-async.workspace = true
-tokio = { workspace = true, features = ["net"] }
+netdev.workspace = true
+tokio = { workspace = true, features = ["net", "rt"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus.workspace = true
