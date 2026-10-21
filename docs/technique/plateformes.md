@@ -14,3 +14,4 @@ La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le gr
 
 - L'icône est dessinée en Rust (`src-tauri/src/tray_icon.rs`), une forme par état (cinq, Hors ligne compris), avec les couleurs claires des tokens. Elle a été vérifiée lisible sur barre claire et sombre ; le gris de Hors ligne y est plus discret ; elle n'est pas redessinée quand le thème change.
 - Elle porte un menu minimal (« Quitter ») : sous Linux, certains environnements masquent une icône sans menu, et c'est le seul moyen d'interagir avec elle. Le clic gauche n'ouvre pas ce menu, il est réservé au popover.
+- Le popover est ancré à l'icône par le plugin positioner : centré sous l'icône sous macOS, au-dessus sous Windows (barre des tâches en bas). Sous Linux, Tauri ne transmet pas le clic sur l'icône : le popover y sera ouvert depuis le menu (ticket « Menu natif »).
