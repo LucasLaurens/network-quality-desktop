@@ -48,6 +48,9 @@ const openDashboard = async (): Promise<void> => {
     <header class="head">
       <StateShape :state="display.state" />
       <h1 id="state-label">{{ display.stateLabel }}</h1>
+      <span v-if="display.network" class="where" data-network :title="display.network.connection">
+        {{ display.network.label }}
+      </span>
     </header>
     <p class="cause" aria-live="polite">{{ display.cause }}</p>
     <p v-if="display.action" class="action">{{ display.action }}</p>
@@ -79,6 +82,13 @@ const openDashboard = async (): Promise<void> => {
   display: flex;
   align-items: center;
   gap: var(--s2);
+}
+
+.where {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--t-sm);
+  text-align: right;
 }
 
 h1 {

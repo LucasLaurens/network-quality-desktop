@@ -27,6 +27,7 @@ export function createConnectionDisplay(overrides: Partial<ConnectionDisplay> = 
     detail: null,
     metrics: [createMetricDisplay(), createMetricDisplay(), createMetricDisplay()],
     openDashboardLabel: faker.lorem.words(3),
+    network: { label: faker.company.name(), connection: faker.lorem.words(2) },
     ...overrides,
   }
 }

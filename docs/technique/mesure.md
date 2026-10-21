@@ -17,16 +17,27 @@
 - La fenêtre compte des `Tick` : si le système retarde l'horloge (veille, App Nap), « 15 s » devient « 15 ticks ».
 - À chaque `Tick` : sondes en parallèle, enregistrement dans les fenêtres de latence et de perte, détection Hors ligne, puis calcul des trois `MetricReading` (valeur, niveau, proche du seuil) et du verdict, envoyés dans un `VerdictView` au `VerdictPresenter`.
 - L'horloge passe par le port `Clock` (`SystemClock` en production, horloge manuelle en test).
+- Le contexte de connexion est lu par le port `ConnectionContextReader` au premier `Tick` puis toutes les 10 secondes (`CONTEXT_REFRESH_SECONDS`) : une lecture coûte quelques millisecondes d'appels système (environ 7 ms mesurées sur macOS). Il est gardé pendant une coupure et porté par chaque `VerdictView`.
+
+## Contexte de connexion
+
+- Seule l'interface de la route par défaut est mesurée. Sous VPN, la mesure passe par le VPN.
+- `NetdevContextReader` (crate `infrastructure`) lit les interfaces avec `netdev` sur un fil bloquant (`spawn_blocking`), puis les décrit au domaine (`InterfaceSnapshot` : support, noms, adresse IPv4 et préfixe, passerelle). Le classement est pur, dans `domain` (`ConnectionContext::classify`).
+- Support : Wi-Fi, Ethernet, modem cellulaire intégré (`Wwan`), tunnel (type `Tunnel`, drapeaux point à point, ou noms `utun`, `tun`, `wg`, `ppp`, `ipsec`), autre.
+- VPN : quand l'interface par défaut est un tunnel, le type affiché est celui de la première autre interface active qui a une passerelle ; sans elle, « VPN » seul.
+- Partage de connexion : au moins **deux** indices parmi passerelle connue des téléphones (`172.20.10.1`, `192.168.43.1`, `192.168.42.1`, `192.168.42.129`), réseau iPhone `172.20.10.0/28`, nom d'interface de téléphone (« iPhone », « Android », « RNDIS »), adresse MAC de passerelle aléatoire (bit « administrée localement »). Jamais l'adresse IP seule. La connexion limitée s'y ajoutera avec son ticket.
+- Identité d'un réseau (`NetworkIdentity`) : MAC de la passerelle + type de connexion. Sans MAC résolue, le réseau n'est pas reconnaissable (`identify` rend `None`).
 
 ## Complexité
 
-| Opération                        | Temps                     | Espace                            |
-| -------------------------------- | ------------------------- | --------------------------------- |
-| Ajout d'une seconde à la fenêtre | O(1)                      | O(1), fenêtre bornée à 15 entrées |
-| p90 de la fenêtre                | O(n log n), n ≤ 15        | O(n)                              |
-| Médiane des cibles               | O(k log k), k = 2         | O(k)                              |
-| Gigue de la fenêtre              | O(n), n ≤ 15              | O(n)                              |
-| Fenêtre de perte (ajout, taux)   | O(1), totaux tenus à jour | O(1), 60 entrées au plus          |
-| Détection Hors ligne             | O(1)                      | O(1)                              |
-| Hystérésis                       | O(1)                      | O(1)                              |
-| Dessin de l'icône                | O(s²), s = 44 px          | O(s²)                             |
+| Opération                        | Temps                          | Espace                            |
+| -------------------------------- | ------------------------------ | --------------------------------- |
+| Ajout d'une seconde à la fenêtre | O(1)                           | O(1), fenêtre bornée à 15 entrées |
+| p90 de la fenêtre                | O(n log n), n ≤ 15             | O(n)                              |
+| Médiane des cibles               | O(k log k), k = 2              | O(k)                              |
+| Gigue de la fenêtre              | O(n), n ≤ 15                   | O(n)                              |
+| Fenêtre de perte (ajout, taux)   | O(1), totaux tenus à jour      | O(1), 60 entrées au plus          |
+| Détection Hors ligne             | O(1)                           | O(1)                              |
+| Classement du contexte           | O(i·n), i interfaces de n noms | O(i)                              |
+| Hystérésis                       | O(1)                           | O(1)                              |
+| Dessin de l'icône                | O(s²), s = 44 px               | O(s²)                             |

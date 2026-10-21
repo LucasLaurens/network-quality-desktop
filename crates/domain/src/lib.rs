@@ -1,6 +1,8 @@
-//! Pure measurement rules: verdict, thresholds, hysteresis. No I/O, no OS access.
+//! Pure measurement rules: verdict, thresholds, hysteresis, connection context. No I/O, no OS
+//! access.
 #![forbid(unsafe_code)]
 
+mod connection;
 mod diagnosis;
 mod grade;
 mod hysteresis;
@@ -12,6 +14,10 @@ mod target;
 mod timestamp;
 mod verdict;
 
+pub use connection::{
+    ConnectionContext, ConnectionKind, Gateway, InterfaceSnapshot, MacAddress, Medium,
+    NetworkIdentity,
+};
 pub use diagnosis::{Diagnosis, Metric};
 pub use grade::{Grade, GradeBounds, Scalable, Thresholds};
 pub use hysteresis::Hysteresis;

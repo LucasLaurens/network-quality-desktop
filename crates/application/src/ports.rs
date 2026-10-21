@@ -1,12 +1,17 @@
 use std::future::Future;
 
-use domain::{ProbeOutcome, Target, Timestamp};
+use domain::{ConnectionContext, ProbeOutcome, Target, Timestamp};
 
 use crate::VerdictView;
 
 /// Sends one probe to a target and says whether it answered, was lost, or is unreachable.
 pub trait LatencyProbe {
     fn send_probe(&self, target: Target) -> impl Future<Output = ProbeOutcome> + Send;
+}
+
+/// Describes the connection of the default route; `None` when there is none.
+pub trait ConnectionContextReader {
+    fn read_context(&self) -> impl Future<Output = Option<ConnectionContext>> + Send;
 }
 
 /// Monotonic time source, replaced by a manual clock in tests.

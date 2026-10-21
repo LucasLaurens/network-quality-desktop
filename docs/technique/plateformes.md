@@ -10,6 +10,11 @@ Tauri a besoin des Common Controls v6, déclarés dans un manifeste Windows (`sr
 
 La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le groupe de l'utilisateur (c'est le cas par défaut sur les distributions récentes basées sur systemd). Sinon, l'app mesure par connexion TCP sur le port 443 : la latence reste juste, et la perte compte les connexions qui échouent, ce qui est moins fin qu'une perte de paquets ICMP.
 
+## Contexte de connexion
+
+- `netdev` donne sur les trois systèmes le type d'interface, l'interface par défaut, sa passerelle et l'adresse MAC de celle-ci (zéros quand elle n'est pas résolue).
+- macOS : la table ARP est filtrée par la protection « Réseau local ». Un binaire lancé depuis un terminal ou un test peut ne voir aucune adresse MAC alors que `arp` en voit une dans le terminal ; le réseau est alors « non reconnu ». L'app déclare `NSLocalNetworkUsageDescription` (`src-tauri/Info.plist`, fusionné dans le bundle) pour que macOS demande l'autorisation. À vérifier sur l'app empaquetée.
+
 ## Icône de barre système
 
 - L'icône est dessinée en Rust (`src-tauri/src/tray_icon.rs`), une forme par état (cinq, Hors ligne compris), avec les couleurs claires des tokens. Elle a été vérifiée lisible sur barre claire et sombre ; le gris de Hors ligne y est plus discret ; elle n'est pas redessinée quand le thème change.

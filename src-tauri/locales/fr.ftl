@@ -21,6 +21,21 @@ cause-no-server = Aucun serveur ne répond.
 action-check-connection = Vérifier le Wi-Fi ou le câble.
 action-open-dashboard = Ouvrir le tableau de bord
 
+## Network and connection
+
+network-ethernet = Réseau Ethernet
+network-wifi = Réseau Wi-Fi
+network-cellular = Réseau mobile
+network-hotspot = Partage de connexion
+network-other = Réseau non reconnu
+connection-ethernet = Ethernet
+connection-wifi = Wi-Fi
+connection-cellular = Modem cellulaire
+connection-hotspot = Partage de connexion d'un téléphone
+connection-other = Connexion non reconnue
+connection-vpn = VPN
+connection-through-vpn = { $connection }, via un VPN
+
 ## Menu
 
 menu-quit = Quitter

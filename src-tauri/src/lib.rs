@@ -16,7 +16,8 @@ use application::{EngineMessage, MeasurementEngine, list_default_targets};
 use display::ConnectionDisplay;
 use domain::Verdict;
 use infrastructure::{
-    FallbackLatencyProbe, IcmpEchoSender, SystemClock, SystemTrayHost, TcpConnectionOpener,
+    FallbackLatencyProbe, IcmpEchoSender, NetdevContextReader, SystemClock, SystemTrayHost,
+    TcpConnectionOpener,
 };
 use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
@@ -127,6 +128,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener),
         SystemClock::start(),
         ShellPresenter::new(app.clone(), tray, menu, catalog, store),
+        NetdevContextReader,
         list_default_targets(),
     );
     tauri::async_runtime::spawn(engine.run(inbox));
