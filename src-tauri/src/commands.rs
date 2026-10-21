@@ -18,8 +18,11 @@ use crate::settings_effects::apply_settings;
 use crate::settings_form::{SettingsForm, format_save_confirmation};
 use crate::settings_store::SettingsStore;
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
+use crate::shell_presenter::ConnectionStore;
 use crate::shell_presenter::DisplayStore;
 use crate::text_catalog::TextCatalog;
+use crate::throughput_display::{ProfileChoice, ThroughputPanel, ThroughputRow};
+use crate::throughput_lab::{LabRefusal, ThroughputLab};
 use crate::windows::{POPOVER_WINDOW, report_failure, show_dashboard};
 
 /// Identity of the running build, shown in the window footer.
@@ -247,6 +250,74 @@ pub async fn save_settings(
         SystemClock::start().read_utc_seconds(),
         i64::from(utc_offset_seconds),
         store.read_durability(),
+        &catalog,
+    ))
+}
+
+/// The tests shown at most, newest first.
+const THROUGHPUT_ROWS: usize = 20;
+
+/// The dashboard's throughput section: whether tests are allowed, the warning where data counts,
+/// and the last tests.
+///
+/// # Errors
+///
+/// The history could not be read.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_throughput_panel(
+    utc_offset_seconds: i32,
+    settings: State<'_, SettingsStore>,
+    history: State<'_, DashboardHistory>,
+    connection: State<'_, ConnectionStore>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<ThroughputPanel, String> {
+    let now = SystemClock::start().read_utc_seconds();
+    let mut records = history
+        .read(|reader| reader.list_throughput_tests(0, now + 1))
+        .map_err(|error| error.0)?;
+    records.truncate(THROUGHPUT_ROWS);
+    Ok(ThroughputPanel::compose(
+        settings.read().allows_throughput_tests,
+        connection.read().as_ref(),
+        &records,
+        i64::from(utc_offset_seconds),
+        &catalog,
+    ))
+}
+
+/// Runs the test the user clicked, then hands its result to the engine: the history keeps it,
+/// and a slow one holds the verdict down.
+///
+/// # Errors
+///
+/// The sentence shown under the buttons: tests not allowed, one already running, or a server
+/// that did not answer.
+#[tauri::command]
+#[specta::specta]
+pub async fn run_throughput_test(
+    profile: ProfileChoice,
+    utc_offset_seconds: i32,
+    settings: State<'_, SettingsStore>,
+    lab: State<'_, ThroughputLab>,
+    inbox: State<'_, EngineInbox>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<ThroughputRow, String> {
+    if !settings.read().allows_throughput_tests {
+        return Err(catalog.render("throughput-disabled", None));
+    }
+    let result = lab.run(profile.into()).await.map_err(|refusal| {
+        let key = match refusal {
+            LabRefusal::Busy => "throughput-busy",
+            LabRefusal::Unavailable => "throughput-unreachable",
+        };
+        catalog.render(key, None)
+    })?;
+    inbox.send_throughput(result).await;
+    Ok(ThroughputRow::compose(
+        SystemClock::start().read_utc_seconds(),
+        &result,
+        i64::from(utc_offset_seconds),
         &catalog,
     ))
 }

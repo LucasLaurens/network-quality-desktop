@@ -5,7 +5,7 @@ use std::sync::mpsc::SyncSender;
 use std::time::{Duration, Instant};
 
 use application::{EngineMessage, LiveHistory, PowerEvent};
-use domain::Settings;
+use domain::{Settings, ThroughputResult};
 use tokio::sync::{mpsc, oneshot};
 
 /// How long quitting waits for the last minute to be written.
@@ -45,6 +45,14 @@ impl EngineInbox {
         let _ = self
             .regular
             .send(EngineMessage::SettingsChanged(settings))
+            .await;
+    }
+
+    /// Hands a finished throughput test to the engine; nothing to do when it is gone.
+    pub async fn send_throughput(&self, result: ThroughputResult) {
+        let _ = self
+            .regular
+            .send(EngineMessage::ThroughputCompleted(result))
             .await;
     }
 
@@ -129,7 +137,8 @@ mod tests {
                     EngineMessage::Tick
                     | EngineMessage::NetworkChanged
                     | EngineMessage::ReadLiveHistory(_)
-                    | EngineMessage::SettingsChanged(_) => received.push("other"),
+                    | EngineMessage::SettingsChanged(_)
+                    | EngineMessage::ThroughputCompleted(_) => received.push("other"),
                 }
             }
             received

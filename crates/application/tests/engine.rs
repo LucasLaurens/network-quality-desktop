@@ -11,9 +11,10 @@ use application::{
     CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, EventKind, MeasurementEngine, VerdictView,
 };
 use domain::{
-    Appearance, ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, Grade,
+    Appearance, Bitrate, ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, Grade,
     LocalProblem, LocalSegment, MacAddress, MeasurementServers, MeasuringCause, Medium, Metering,
-    Metric, ProbeOutcome, Settings, Target, Unmeasurable, Verdict, WifiBand, WifiLink,
+    Metric, ProbeOutcome, Settings, Target, TestProfile, ThroughputResult, Unmeasurable, Verdict,
+    WifiBand, WifiLink,
 };
 
 // Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
@@ -1701,4 +1702,127 @@ async fn notifies_a_cut_that_lasts() {
         .map(|view| view.verdict)
         .collect();
     assert_eq!(verdicts, vec![Verdict::Offline]);
+}
+
+// Throughput tests
+
+fn create_throughput(download_bits: u64) -> ThroughputResult {
+    ThroughputResult {
+        profile: TestProfile::Quick,
+        download: Some(Bitrate::from_bits_per_second(download_bits)),
+        upload: Some(Bitrate::from_bits_per_second(10_000_000)),
+        loaded_latency: Some(Duration::from_millis(90)),
+        bytes: 4_200_000,
+        duration: Duration::from_secs(3),
+    }
+}
+
+/// Solid, then a test too slow for a call.
+async fn create_harness_after_a_slow_test() -> Harness {
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 61)));
+    harness.warm_up_with_latency(FAST).await;
+    harness
+        .engine
+        .handle(EngineMessage::ThroughputCompleted(create_throughput(
+            400_000,
+        )))
+        .await;
+    harness
+}
+
+#[tokio::test]
+async fn caps_the_verdict_after_a_slow_test() {
+    // Arrange
+    let mut harness = create_harness_after_a_slow_test().await;
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    let view = harness.read_last_view();
+    assert_eq!(view.verdict, Verdict::Graded(Grade::Degraded));
+    assert_eq!(view.diagnosis, Diagnosis::LowThroughput);
+}
+
+#[tokio::test]
+async fn lifts_the_cap_ten_minutes_later() {
+    // Arrange
+    let mut harness = create_harness_after_a_slow_test().await;
+
+    // Act
+    harness.run_seconds(601).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Solid)
+    );
+}
+
+#[tokio::test]
+async fn lifts_the_cap_on_another_network() {
+    // Arrange
+    let mut harness = create_harness_after_a_slow_test().await;
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::Ethernet, 62)));
+    harness.engine.handle(EngineMessage::NetworkChanged).await;
+
+    // Act
+    harness.run_seconds(WARM_UP + 1).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Solid)
+    );
+}
+
+#[tokio::test]
+async fn never_caps_after_a_test_fast_enough() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness
+        .engine
+        .handle(EngineMessage::ThroughputCompleted(create_throughput(
+            90_000_000,
+        )))
+        .await;
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Solid)
+    );
+}
+
+#[tokio::test]
+async fn keeps_every_test_in_the_history_under_its_network() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 63)));
+    harness.run_seconds(2).await;
+
+    // Act
+    harness
+        .engine
+        .handle(EngineMessage::ThroughputCompleted(create_throughput(
+            90_000_000,
+        )))
+        .await;
+
+    // Assert
+    let kept = harness.history.list_throughput_tests();
+    assert_eq!(kept.len(), 1);
+    assert_eq!(kept[0].result, create_throughput(90_000_000));
+    assert_eq!(kept[0].network.kind, ConnectionKind::WiFi);
 }

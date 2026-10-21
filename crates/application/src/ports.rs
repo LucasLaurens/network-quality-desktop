@@ -3,15 +3,28 @@ use std::future::Future;
 use std::net::Ipv4Addr;
 
 use domain::{
-    Aggregate, ConnectionContext, GatewayEcho, Granularity, ProbeOutcome, Settings, Target,
-    Timestamp, WifiLink,
+    Aggregate, ConnectionContext, Direction, GatewayEcho, Granularity, ProbeOutcome, Settings,
+    Target, Timestamp, Transfer, WifiLink,
 };
 
-use crate::{HistoryCommand, HistoryEvent, NetworkKey, RepositoryError, VerdictView};
+use crate::{
+    HistoryCommand, HistoryEvent, NetworkKey, RepositoryError, ThroughputFailure, ThroughputRecord,
+    VerdictView,
+};
 
 /// Sends one probe to a target and says whether it answered, was lost, or is unreachable.
 pub trait LatencyProbe {
     fn send_probe(&self, target: Target) -> impl Future<Output = ProbeOutcome> + Send;
+}
+
+/// Moves `bytes` one way to the test server and times it, measuring round trips meanwhile: the
+/// latency under load.
+pub trait ThroughputProbe {
+    fn transfer(
+        &self,
+        direction: Direction,
+        bytes: u64,
+    ) -> impl Future<Output = Result<Transfer, ThroughputFailure>> + Send;
 }
 
 /// Pings the gateway over ICMP only: a TCP fallback would say nothing reliable about the link.
@@ -115,6 +128,11 @@ pub trait MeasurementRepository {
     ///
     /// The storage failed; nothing was written.
     fn record_event(&mut self, event: &HistoryEvent) -> Result<(), RepositoryError>;
+
+    /// # Errors
+    ///
+    /// The storage failed; nothing was written.
+    fn record_throughput_test(&mut self, record: &ThroughputRecord) -> Result<(), RepositoryError>;
 }
 
 /// Reads the history for the dashboard, apart from the writer.
@@ -138,6 +156,17 @@ pub trait HistoryReader {
     ///
     /// The storage failed.
     fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError>;
+
+    /// The throughput tests in `[from, to)`, newest first.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn list_throughput_tests(
+        &self,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<ThroughputRecord>, RepositoryError>;
 }
 
 /// Where the settings are kept: one row, defaults until the first save.

@@ -59,6 +59,25 @@ export const commands = {
 	 *  storage failure.
 	 */
 	saveSettings: (form: SettingsForm, utcOffsetSeconds: number) => typedError<string, string>(__TAURI_INVOKE("save_settings", { form, utcOffsetSeconds })),
+	/**
+	 *  The dashboard's throughput section: whether tests are allowed, the warning where data counts,
+	 *  and the last tests.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The history could not be read.
+	 */
+	readThroughputPanel: (utcOffsetSeconds: number) => typedError<ThroughputPanel, string>(__TAURI_INVOKE("read_throughput_panel", { utcOffsetSeconds })),
+	/**
+	 *  Runs the test the user clicked, then hands its result to the engine: the history keeps it,
+	 *  and a slow one holds the verdict down.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The sentence shown under the buttons: tests not allowed, one already running, or a server
+	 *  that did not answer.
+	 */
+	runThroughputTest: (profile: ProfileChoice, utcOffsetSeconds: number) => typedError<ThroughputRow, string>(__TAURI_INVOKE("run_throughput_test", { profile, utcOffsetSeconds })),
 };
 
 /** Events */
@@ -189,6 +208,8 @@ export type PathDisplay = {
 /**  The period picked above the chart. */
 export type PeriodChoice = "hour" | "day" | "week" | "month";
 
+export type ProfileChoice = "quick" | "full";
+
 export type SegmentDisplay = {
 	/**  The link and its latency, e.g. "Wi-Fi, 4 ms". */
 	label: string,
@@ -217,6 +238,7 @@ export type SettingsForm = {
 	/**  The address typed for the user's own server; `None` for the public servers. */
 	ownServer: string | null,
 	notifiesOnDegradation: boolean,
+	allowsThroughputTests: boolean,
 };
 
 export type StateLabelDisplay = {
@@ -230,6 +252,25 @@ export type StateShares = {
 	unstable: number | null,
 	degraded: number | null,
 	offline: number | null,
+};
+
+export type ThroughputPanel = {
+	/**  The setting « Autoriser les tests de débit ». */
+	isAllowed: boolean,
+	/**  Asked before a quick test where data counts; `None` elsewhere. */
+	quickWarning: string | null,
+	fullWarning: string | null,
+	/**  Newest first. */
+	tests: ThroughputRow[],
+};
+
+export type ThroughputRow = {
+	when: string,
+	profile: string,
+	download: string,
+	upload: string,
+	loadedLatency: string,
+	data: string,
 };
 
 /**

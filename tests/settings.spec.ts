@@ -46,7 +46,13 @@ describe('SettingsView', () => {
 
     // Assert
     expect(client.savedForms).toEqual([
-      { launchAtLogin: false, appearance: 'system', ownServer: null, notifiesOnDegradation: true },
+      {
+        launchAtLogin: false,
+        appearance: 'system',
+        ownServer: null,
+        notifiesOnDegradation: true,
+        allowsThroughputTests: false,
+      },
     ])
     expect(wrapper.get('[data-saved]').text()).toBe(client.readConfirmation())
   })
@@ -72,6 +78,7 @@ describe('SettingsView', () => {
       appearance: 'system',
       ownServer: null,
       notifiesOnDegradation: false,
+      allowsThroughputTests: false,
     })
 
     // Act
@@ -79,6 +86,19 @@ describe('SettingsView', () => {
 
     // Assert
     expect((wrapper.get('#setting-notify').element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('allows the throughput tests once switched on', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountSettings(client)
+
+    // Act
+    await wrapper.get('#setting-throughput').setValue(true)
+    await flushPromises()
+
+    // Assert
+    expect(client.savedForms.at(-1)?.allowsThroughputTests).toBe(true)
   })
 
   it('saves the appearance picked', async () => {
@@ -123,7 +143,13 @@ describe('SettingsView', () => {
 
     // Assert
     expect(client.savedForms).toEqual([
-      { launchAtLogin: true, appearance: 'system', ownServer: address, notifiesOnDegradation: true },
+      {
+        launchAtLogin: true,
+        appearance: 'system',
+        ownServer: address,
+        notifiesOnDegradation: true,
+        allowsThroughputTests: false,
+      },
     ])
   })
 
@@ -140,7 +166,13 @@ describe('SettingsView', () => {
 
     // Assert
     expect(client.savedForms).toEqual([
-      { launchAtLogin: true, appearance: 'dark', ownServer: null, notifiesOnDegradation: true },
+      {
+        launchAtLogin: true,
+        appearance: 'dark',
+        ownServer: null,
+        notifiesOnDegradation: true,
+        allowsThroughputTests: false,
+      },
     ])
     expect(wrapper.find('[data-refused]').exists()).toBe(false)
   })

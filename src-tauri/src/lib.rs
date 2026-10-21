@@ -17,6 +17,8 @@ mod shell_mode;
 mod shell_notifier;
 mod shell_presenter;
 mod text_catalog;
+mod throughput_display;
+mod throughput_lab;
 mod tray_icon;
 mod tray_menu;
 mod windows;
@@ -37,7 +39,8 @@ use infrastructure::{
 };
 use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
-    ConnectionDisplayChanged, DisplayStore, ShellPresenter, create_icon_image, describe_verdict,
+    ConnectionDisplayChanged, ConnectionStore, DisplayStore, ShellPresenter, create_icon_image,
+    describe_verdict,
 };
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, RunEvent};
@@ -74,7 +77,9 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_dashboard_summary,
             commands::read_evolution,
             commands::read_settings,
-            commands::save_settings
+            commands::save_settings,
+            commands::read_throughput_panel,
+            commands::run_throughput_test
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -175,6 +180,9 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         .first()
         .expect("the default targets are listed")
         .address();
+    let connection_store = ConnectionStore::default();
+    app.manage(connection_store.clone());
+    app.manage(throughput_lab::ThroughputLab::create());
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
     let (urgent_sender, urgent) = mpsc::channel(engine_inbox::URGENT_CAPACITY);
     let engine_inbox = EngineInbox {
@@ -186,7 +194,14 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         EnginePorts {
             probe: create_latency_probe(),
             clock: SystemClock::start(),
-            presenter: ShellPresenter::new(app.clone(), tray, menu, catalog, store),
+            presenter: ShellPresenter::new(
+                app.clone(),
+                tray,
+                menu,
+                catalog,
+                store,
+                connection_store,
+            ),
             context_reader: NetdevContextReader::new(route_reference),
             gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
             wifi_reader: SystemWifiReader,

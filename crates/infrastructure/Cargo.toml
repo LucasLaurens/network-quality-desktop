@@ -11,6 +11,8 @@ domain.workspace = true
 ping-async.workspace = true
 netdev.workspace = true
 netwatcher.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
 rusqlite.workspace = true
 rusqlite_migration.workspace = true
 tokio = { workspace = true, features = ["net", "rt"] }

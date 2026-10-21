@@ -121,6 +121,29 @@ const firstRun: DashboardSummaryDisplay = {
 }
 
 const client = new InMemoryNetworkQualityClient(undefined, connectionScenarios.degraded, windowModeTexts)
+client.setThroughputPanel({
+  isAllowed: scenario !== 'first',
+  quickWarning: null,
+  fullWarning: `Connexion limitée${NBSP}: ce test consomme jusqu'à 155,4${NBSP}Mo.`,
+  tests: [
+    {
+      when: `21/10, 18${NBSP}h${NBSP}02`,
+      profile: 'Complet',
+      download: `451${NBSP}Mbit/s`,
+      upload: `322${NBSP}Mbit/s`,
+      loadedLatency: `46${NBSP}ms`,
+      data: `138,2${NBSP}Mo`,
+    },
+    {
+      when: `20/10, 09${NBSP}h${NBSP}41`,
+      profile: 'Rapide',
+      download: `12,5${NBSP}Mbit/s`,
+      upload: `1,9${NBSP}Mbit/s`,
+      loadedLatency: `335${NBSP}ms`,
+      data: `2,7${NBSP}Mo`,
+    },
+  ],
+})
 if (scenario === 'first') {
   client.setDashboardSummary(firstRun)
   client.setEvolution({ ...evolution, states: [], isEmpty: true })

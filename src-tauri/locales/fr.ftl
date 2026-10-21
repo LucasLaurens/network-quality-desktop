@@ -41,6 +41,8 @@ cause-new-network = Nouveau réseau, premières mesures en cours.
 cause-wake = Retour de veille, premières mesures en cours.
 cause-new-servers = Nouveaux serveurs de mesure, premières mesures en cours.
 cause-no-server = Aucun serveur ne répond.
+cause-low-throughput = Le dernier test de débit est trop lent pour la visio.
+action-low-throughput = Relancer un test dans quelques minutes.
 cause-no-network = Aucun réseau connecté.
 action-no-network = Se connecter à un Wi-Fi ou brancher un câble.
 cause-box-without-internet = La box répond, mais Internet ne répond plus.
@@ -118,6 +120,7 @@ history-not-saved = L'historique ne peut pas être enregistré sur ce disque : 
 ## Dashboard
 
 time-of-day = { $hours } h { $minutes }
+date-time = { $day }/{ $month }, { $time }
 date-hour = { $day }/{ $month }, { $hours } h
 duration-seconds = { $value } s
 duration-minutes = { $value } min
@@ -153,6 +156,15 @@ settings-saved-session = Enregistré à { $time }, pour cette session seulement.
 settings-not-saved = Le réglage n'a pas pu être enregistré.
 server-invalid = Adresse IP invalide.
 server-unreachable = Ce serveur ne répond pas au ping.
+
+## Throughput tests
+
+throughput-quick = Rapide
+throughput-full = Complet
+throughput-warning = Connexion limitée : ce test consomme jusqu'à { $data }.
+throughput-disabled = Les tests de débit sont désactivés dans les réglages.
+throughput-busy = Un test est déjà en cours.
+throughput-unreachable = Test indisponible : le serveur de test ne répond pas. Réessayer dans quelques minutes.
 
 ## Window mode, when the desktop shows no tray icon
 
@@ -190,4 +202,5 @@ gauge-label = Solide sous { $unstable }, Dégradée au-delà de { $degraded }
 unit-milliseconds = { $value } ms
 unit-percent = { $value } %
 unit-dbm = −{ $value } dBm
+unit-megabytes = { $value } Mo
 unit-megabits = { $value } Mbit/s

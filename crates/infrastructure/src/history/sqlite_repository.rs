@@ -3,11 +3,11 @@ use std::time::Duration;
 
 use application::{
     EventKind, HistoryEvent, HistoryReader, MeasurementRepository, NetworkKey, RepositoryError,
-    SettingsRepository,
+    SettingsRepository, ThroughputRecord,
 };
 use domain::{
-    Aggregate, Appearance, ConnectionKind, Granularity, LatencyHistogram, MacAddress,
-    MeasurementServers, Settings, StateSeconds, Target,
+    Aggregate, Appearance, Bitrate, ConnectionKind, Granularity, LatencyHistogram, MacAddress,
+    MeasurementServers, Settings, StateSeconds, Target, TestProfile, ThroughputResult,
 };
 use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension, Row, Transaction, params};
 use rusqlite_migration::{M, Migrations};
@@ -249,6 +249,31 @@ impl MeasurementRepository for SqliteMeasurementRepository {
         })
     }
 
+    /// Rates kept in kbit/s, round trips and durations in milliseconds. O(log n).
+    fn record_throughput_test(&mut self, record: &ThroughputRecord) -> Result<(), RepositoryError> {
+        let result = record.result;
+        self.write(|transaction| {
+            let network_id = find_or_create_network(transaction, &record.network)?;
+            transaction.execute(
+                "INSERT INTO throughput_tests (ts, network_id, profile, down_kbps, up_kbps, \
+                 loaded_latency_ms, bytes, duration_ms, status) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    record.utc,
+                    network_id,
+                    to_profile_text(result.profile),
+                    result.download.map(to_kilobits),
+                    result.upload.map(to_kilobits),
+                    result.loaded_latency.map(to_millis),
+                    to_column(result.bytes),
+                    to_millis(result.duration),
+                    STATUS_DONE
+                ],
+            )?;
+            Ok(())
+        })
+    }
+
     fn record_event(&mut self, event: &HistoryEvent) -> Result<(), RepositoryError> {
         self.write(|transaction| {
             let network_id = find_or_create_network(transaction, &event.network)?;
@@ -290,6 +315,40 @@ impl HistoryReader for SqliteMeasurementRepository {
     }
 
     /// O(log n + k) through the time index.
+    /// Newest first. O(t log t) for the t tests kept: a test is a click, so there are few.
+    fn list_throughput_tests(
+        &self,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<ThroughputRecord>, RepositoryError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT n.gateway_mac, n.connection_kind, n.label, t.ts, t.profile, t.down_kbps, \
+                 t.up_kbps, t.loaded_latency_ms, t.bytes, t.duration_ms FROM throughput_tests t \
+                 JOIN networks n ON n.id = t.network_id WHERE t.ts >= ?1 AND t.ts < ?2 \
+                 AND t.status = ?3 ORDER BY t.ts DESC, t.rowid DESC",
+            )
+            .map_err(to_error)?;
+        let rows = statement
+            .query_map(params![from, to, STATUS_DONE], |row| {
+                Ok(ThroughputRecord {
+                    network: read_network(row, 0)?,
+                    utc: row.get(3)?,
+                    result: ThroughputResult {
+                        profile: from_profile_text(&row.get::<_, String>(4)?),
+                        download: row.get::<_, Option<i64>>(5)?.map(from_kilobits),
+                        upload: row.get::<_, Option<i64>>(6)?.map(from_kilobits),
+                        loaded_latency: row.get::<_, Option<i64>>(7)?.map(from_millis),
+                        bytes: from_column(row.get(8)?),
+                        duration: from_millis(row.get(9)?),
+                    },
+                })
+            })
+            .map_err(to_error)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(to_error)
+    }
+
     fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
         let mut statement = self
             .connection
@@ -317,7 +376,7 @@ impl SettingsRepository for SqliteMeasurementRepository {
     fn read_settings(&self) -> Result<Settings, RepositoryError> {
         self.connection
             .query_row(
-                "SELECT autostart, theme, ping_target, notify FROM settings WHERE id = 1",
+                "SELECT autostart, theme, ping_target, notify, tests_allowed FROM settings WHERE id = 1",
                 [],
                 |row| {
                     let ping_target: Option<String> = row.get(2)?;
@@ -330,6 +389,7 @@ impl SettingsRepository for SqliteMeasurementRepository {
                             .and_then(Target::try_parse)
                             .map_or(MeasurementServers::Default, MeasurementServers::Custom),
                         notifies_on_degradation: row.get(3)?,
+                        allows_throughput_tests: row.get(4)?,
                     })
                 },
             )
@@ -344,13 +404,14 @@ impl SettingsRepository for SqliteMeasurementRepository {
             .map(|target| target.address().to_string());
         self.write(|transaction| {
             transaction.execute(
-                "UPDATE settings SET autostart = ?1, theme = ?2, ping_target = ?3, notify = ?4 \
-                 WHERE id = 1",
+                "UPDATE settings SET autostart = ?1, theme = ?2, ping_target = ?3, notify = ?4, \
+                 tests_allowed = ?5 WHERE id = 1",
                 params![
                     settings.launch_at_login,
                     to_theme_text(settings.appearance),
                     ping_target,
-                    settings.notifies_on_degradation
+                    settings.notifies_on_degradation,
+                    settings.allows_throughput_tests
                 ],
             )?;
             Ok(())
@@ -377,6 +438,52 @@ fn from_theme_text(text: &str) -> Appearance {
         THEME_DARK => Appearance::Dark,
         _ => Appearance::System,
     }
+}
+
+/// Only finished tests are kept; the column leaves room for others.
+const STATUS_DONE: &str = "done";
+const PROFILE_QUICK: &str = "quick";
+const PROFILE_FULL: &str = "full";
+const BITS_PER_KILOBIT: u64 = 1000;
+
+const fn to_profile_text(profile: TestProfile) -> &'static str {
+    match profile {
+        TestProfile::Quick => PROFILE_QUICK,
+        TestProfile::Full => PROFILE_FULL,
+    }
+}
+
+fn from_profile_text(text: &str) -> TestProfile {
+    match text {
+        PROFILE_FULL => TestProfile::Full,
+        _ => TestProfile::Quick,
+    }
+}
+
+/// SQLite integers are signed: every count stored here is far below `i64::MAX`.
+fn to_column(value: u64) -> i64 {
+    i64::try_from(value).unwrap_or(i64::MAX)
+}
+
+/// A negative value can only come from a damaged row: it reads as zero.
+fn from_column(value: i64) -> u64 {
+    u64::try_from(value).unwrap_or(0)
+}
+
+fn to_kilobits(rate: Bitrate) -> i64 {
+    to_column(rate.to_bits_per_second() / BITS_PER_KILOBIT)
+}
+
+fn from_kilobits(kilobits: i64) -> Bitrate {
+    Bitrate::from_bits_per_second(from_column(kilobits) * BITS_PER_KILOBIT)
+}
+
+fn to_millis(duration: Duration) -> i64 {
+    i64::try_from(duration.as_millis()).unwrap_or(i64::MAX)
+}
+
+fn from_millis(millis: i64) -> Duration {
+    Duration::from_millis(from_column(millis))
 }
 
 /// Keeps a name learnt later; a network without a readable name keeps the one it had. O(log n)

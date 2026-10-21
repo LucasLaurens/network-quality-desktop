@@ -106,7 +106,7 @@ onMounted(async () => {
         </button>
       </nav>
     </header>
-    <DashboardView v-if="page === 'dashboard'" />
+    <DashboardView v-if="page === 'dashboard'" @open-settings="page = 'settings'" />
     <SettingsView v-else />
     <footer class="foot">
       <span>Version {{ version }}</span>

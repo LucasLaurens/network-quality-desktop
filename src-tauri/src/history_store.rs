@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 
-use application::{HistoryEvent, HistoryReader, NetworkKey, RepositoryError};
+use application::{HistoryEvent, HistoryReader, NetworkKey, RepositoryError, ThroughputRecord};
 use domain::{Aggregate, Granularity};
 use fluent_bundle::FluentArgs;
 use infrastructure::{SqliteHistoryRecorder, SqliteMeasurementRepository, SystemClock};
@@ -61,6 +61,14 @@ impl HistoryReader for EmptyHistory {
     }
 
     fn list_events(&self, _from: i64, _to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
+        Ok(Vec::new())
+    }
+
+    fn list_throughput_tests(
+        &self,
+        _from: i64,
+        _to: i64,
+    ) -> Result<Vec<ThroughputRecord>, RepositoryError> {
         Ok(Vec::new())
     }
 }

@@ -30,6 +30,10 @@ Le code est en anglais, l'interface et la documentation en français. Chaque con
 | Événement              | `HistoryEvent`       | Changement de réseau, début ou fin de coupure, mise en veille, réveil                      |
 | Veille, réveil         | `PowerEvent`         | Avis du système avant la mise en veille et après le réveil                                 |
 | Trou de mesure         | `WAKE_GAP_SECONDS`   | Plus de 10 s d'heure murale entre deux ticks ou pendant un tick : traité comme un réveil   |
+| Profil de test         | `TestProfile`        | Test rapide ou complet                                                                     |
+| Transfert              | `Transfer`           | Un envoi ou un téléchargement chronométré, avec ses allers-retours en charge               |
+| Latence en charge      | `loaded_latency`     | Aller-retour mesuré pendant un test de débit, affiché sans compter dans l'état             |
+| Plafond de débit       | `throughput_cap`     | Le niveau d'un test lent, qui tient l'état 10 min ou jusqu'au changement de réseau         |
 | Dégradation durable    | `DegradationWatch`   | Un état affiché pire que le précédent connu, confirmé : le seul cas notifié                |
 | Réglages               | `Settings`           | Ouverture de session, apparence, serveurs de mesure                                        |
 | Apparence              | `Appearance`         | Système, Clair ou Sombre                                                                   |

@@ -5,8 +5,8 @@ use std::time::Duration;
 use domain::{
     ConnectionContext, ConnectionKind, DegradationWatch, Diagnosis, Fault, GatewayWindow, Grade,
     GradeBounds, Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause,
-    Metric, OfflineDetector, ProbeOutcome, Scalable, Settings, Target, Thresholds, Unmeasurable,
-    Verdict, WifiLink, compute_median,
+    Metric, OfflineDetector, ProbeOutcome, Scalable, Settings, THROUGHPUT_CAP_DURATION, Target,
+    Thresholds, ThroughputResult, Timestamp, Unmeasurable, Verdict, WifiLink, compute_median,
 };
 use futures_util::future::{join, join_all, join3};
 use tokio::sync::{mpsc, oneshot};
@@ -61,6 +61,8 @@ pub enum EngineMessage {
     Wake,
     /// The user saved the settings: other servers mean measuring again from scratch.
     SettingsChanged(Settings),
+    /// A throughput test the user started has ended: kept, and a slow one holds the verdict down.
+    ThroughputCompleted(ThroughputResult),
 }
 
 /// One metric as shown to the user: its value, its grade and whether it is close to getting worse.
@@ -133,6 +135,8 @@ pub struct MeasurementEngine<P, C, V, R, G, W, H, N> {
     samples_since_restart: u32,
     measuring_cause: MeasuringCause,
     wakefulness: Wakefulness,
+    /// The grade a slow throughput test holds the verdict at, and since when.
+    throughput_cap: Option<(Grade, Timestamp)>,
 }
 
 /// The ports the engine talks to, gathered so the constructor stays readable.
@@ -201,6 +205,7 @@ where
             wakefulness: Wakefulness::Awake {
                 last_tick_utc: None,
             },
+            throughput_cap: None,
         }
     }
 
@@ -222,6 +227,15 @@ where
                 self.wakefulness = Wakefulness::Asleep { since: utc };
             }
             EngineMessage::SettingsChanged(settings) => self.apply_settings(settings),
+            EngineMessage::ThroughputCompleted(result) => {
+                let utc = self.clock.read_utc_seconds();
+                self.history
+                    .record_throughput(utc, result, &self.history_recorder);
+                self.throughput_cap = result
+                    .compute_grade()
+                    .filter(|grade| *grade > Grade::Solid)
+                    .map(|grade| (grade, self.clock.read_now()));
+            }
             // Already awake: the gap between two ticks came first, and was handled then.
             EngineMessage::Wake => {
                 if matches!(self.wakefulness, Wakefulness::Asleep { .. }) {
@@ -337,6 +351,8 @@ where
                     current.complete_with(&previous)
                 }
                 Some(_) => {
+                    // The test measured the line left behind.
+                    self.throughput_cap = None;
                     self.restart_for(MeasuringCause::NewNetwork);
                     current
                 }
@@ -500,7 +516,10 @@ where
             local,
             wifi_in_use,
         );
+        let capped = self.find_throughput_cap(verdict);
+        let verdict = capped.map_or(verdict, Verdict::Graded);
         let diagnosis = match verdict {
+            _ if capped.is_some() => Diagnosis::LowThroughput,
             Verdict::Offline => self.diagnose_offline(),
             Verdict::Measuring => self.compose_measuring_diagnosis(),
             Verdict::Graded(displayed) => diagnose_graded(displayed, &grades, fault),
@@ -514,6 +533,20 @@ where
             context: self.context,
             local,
             wifi: self.wifi.clone(),
+        }
+    }
+
+    /// The grade a recent slow test holds a measured verdict at, when it is worse; an expired cap
+    /// is dropped. O(1).
+    fn find_throughput_cap(&mut self, verdict: Verdict) -> Option<Grade> {
+        let (grade, since) = self.throughput_cap?;
+        if self.clock.read_now().compute_elapsed_since(since) >= THROUGHPUT_CAP_DURATION {
+            self.throughput_cap = None;
+            return None;
+        }
+        match verdict {
+            Verdict::Graded(shown) if grade > shown => Some(grade),
+            Verdict::Graded(_) | Verdict::Measuring | Verdict::Offline => None,
         }
     }
 

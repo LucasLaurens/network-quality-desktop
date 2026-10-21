@@ -5,7 +5,10 @@ import type {
   DashboardSummaryDisplay,
   EvolutionDisplay,
   PeriodChoice,
+  ProfileChoice,
   SettingsForm,
+  ThroughputPanel,
+  ThroughputRow,
   WindowModeTexts,
 } from '../bindings'
 
@@ -32,6 +35,9 @@ export interface NetworkQualityClient {
   readSettings(): Promise<SettingsForm>
   /** Resolves to the confirmation to show; rejects with the sentence explaining the refusal. */
   saveSettings(form: SettingsForm, utcOffsetSeconds: number): Promise<string>
+  readThroughputPanel(utcOffsetSeconds: number): Promise<ThroughputPanel>
+  /** Resolves to the new test's row; rejects with the sentence explaining why it did not run. */
+  runThroughputTest(profile: ProfileChoice, utcOffsetSeconds: number): Promise<ThroughputRow>
 }
 
 export const NETWORK_QUALITY_CLIENT_KEY: InjectionKey<NetworkQualityClient> = Symbol('NetworkQualityClient')
