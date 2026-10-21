@@ -26,6 +26,11 @@ impl MacAddress {
         (octets != [0; 6]).then_some(Self(octets))
     }
 
+    #[must_use]
+    pub const fn to_octets(self) -> [u8; 6] {
+        self.0
+    }
+
     /// Phones and some mesh systems use random addresses; routers keep their maker's.
     #[must_use]
     pub const fn is_locally_administered(self) -> bool {

@@ -5,6 +5,7 @@
 mod connection;
 mod diagnosis;
 mod grade;
+mod history;
 mod hysteresis;
 mod latency_window;
 mod loss;
@@ -22,6 +23,10 @@ pub use connection::{
 };
 pub use diagnosis::{Diagnosis, MeasuringCause, Metric};
 pub use grade::{Grade, GradeBounds, Scalable, Thresholds};
+pub use history::{
+    Aggregate, CountedState, Granularity, LATENCY_BUCKETS, LatencyHistogram, MinuteAccumulator,
+    RING_SECONDS, SecondPoint, SecondRing, SecondSample, StateSeconds,
+};
 pub use hysteresis::Hysteresis;
 pub use latency_window::{LatencyWindow, compute_median};
 pub use loss::{LossRate, LossWindow};

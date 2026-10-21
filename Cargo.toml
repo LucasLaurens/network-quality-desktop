@@ -31,6 +31,8 @@ tauri-plugin-positioner = { version = "=2.4.0", features = ["tray-icon"] }
 tauri-plugin-opener = "=2.5.5"
 netdev = "=0.46.3"
 netwatcher = "=0.8.0"
+rusqlite = { version = "=0.40.2", features = ["bundled"] }
+rusqlite_migration = "=2.6.0"
 # Already in the tree through Tauri: reused for the native network APIs.
 block2 = "=0.6.2"
 dispatch2 = "=0.3.1"

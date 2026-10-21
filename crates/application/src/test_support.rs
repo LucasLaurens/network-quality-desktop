@@ -7,12 +7,19 @@ use std::time::Duration;
 
 use std::net::Ipv4Addr;
 
-use domain::{ConnectionContext, GatewayEcho, ProbeOutcome, Target, Timestamp, WifiLink};
+use domain::{
+    Aggregate, ConnectionContext, GatewayEcho, Granularity, ProbeOutcome, Target, Timestamp,
+    WifiLink,
+};
 
 use crate::{
-    Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, VerdictPresenter, VerdictView,
-    WifiReader,
+    Clock, ConnectionContextReader, GatewayProbe, HistoryCommand, HistoryEvent, HistoryRecorder,
+    LatencyProbe, MeasurementRepository, NetworkKey, RepositoryError, VerdictPresenter,
+    VerdictView, WifiReader,
 };
+
+/// The manual clock's wall-clock start: an arbitrary UTC second, on an hour boundary.
+pub const MANUAL_CLOCK_EPOCH: i64 = 1_700_002_800;
 
 /// A simulated network: each target gives the outcome set for it; an unknown target is unreachable.
 #[derive(Debug, Clone, Default)]
@@ -124,6 +131,225 @@ impl ManualClock {
 impl Clock for ManualClock {
     fn read_now(&self) -> Timestamp {
         Timestamp::from_elapsed(*self.now.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    fn read_utc_seconds(&self) -> i64 {
+        let elapsed = self
+            .now
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_secs();
+        MANUAL_CLOCK_EPOCH + i64::try_from(elapsed).unwrap_or(i64::MAX)
+    }
+}
+
+/// Keeps every history command, in order; answers flushes at once.
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryHistoryRecorder {
+    commands: Arc<Mutex<Vec<HistoryCommand>>>,
+}
+
+impl InMemoryHistoryRecorder {
+    #[must_use]
+    pub fn list_saved_minutes(&self) -> Vec<(NetworkKey, i64, Aggregate)> {
+        self.commands
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter_map(|command| match command {
+                HistoryCommand::SaveMinute {
+                    network,
+                    start,
+                    aggregate,
+                } => Some((network.clone(), *start, *aggregate)),
+                HistoryCommand::RecordEvent(_) | HistoryCommand::Flush(_) => None,
+            })
+            .collect()
+    }
+
+    #[must_use]
+    pub fn list_events(&self) -> Vec<HistoryEvent> {
+        self.commands
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter_map(|command| match command {
+                HistoryCommand::RecordEvent(event) => Some(event.clone()),
+                HistoryCommand::SaveMinute { .. } | HistoryCommand::Flush(_) => None,
+            })
+            .collect()
+    }
+}
+
+impl HistoryRecorder for InMemoryHistoryRecorder {
+    fn record(&self, command: HistoryCommand) {
+        if let HistoryCommand::Flush(answer) = &command {
+            let _ = answer.send(());
+        }
+        self.commands
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(command);
+    }
+}
+
+/// Minutes, hours and events in plain vectors. Quadratic scans at worst: a test keeps few rows.
+#[derive(Debug, Default)]
+pub struct InMemoryMeasurementRepository {
+    rows: Vec<(NetworkKey, Granularity, i64, Aggregate)>,
+    events: Vec<HistoryEvent>,
+}
+
+impl InMemoryMeasurementRepository {
+    fn find_row(
+        &mut self,
+        network: &NetworkKey,
+        granularity: Granularity,
+        start: i64,
+    ) -> Option<&mut (NetworkKey, Granularity, i64, Aggregate)> {
+        self.rows
+            .iter_mut()
+            .find(|(key, row_granularity, row_start, _)| {
+                is_same_identity(key, network)
+                    && *row_granularity == granularity
+                    && *row_start == start
+            })
+    }
+
+    fn remember_name(&mut self, network: &NetworkKey) {
+        if network.name.is_none() {
+            return;
+        }
+        for (key, ..) in self
+            .rows
+            .iter_mut()
+            .filter(|(key, ..)| is_same_identity(key, network))
+        {
+            key.name.clone_from(&network.name);
+        }
+        for event in self
+            .events
+            .iter_mut()
+            .filter(|event| is_same_identity(&event.network, network))
+        {
+            event.network.name.clone_from(&network.name);
+        }
+    }
+}
+
+fn is_same_identity(first: &NetworkKey, second: &NetworkKey) -> bool {
+    first.gateway == second.gateway && first.kind == second.kind
+}
+
+impl MeasurementRepository for InMemoryMeasurementRepository {
+    fn add_minute(
+        &mut self,
+        network: &NetworkKey,
+        start: i64,
+        aggregate: &Aggregate,
+    ) -> Result<(), RepositoryError> {
+        if let Some((.., kept)) = self.find_row(network, Granularity::Minute, start) {
+            kept.merge(aggregate);
+        } else {
+            self.rows
+                .push((network.clone(), Granularity::Minute, start, *aggregate));
+        }
+        self.remember_name(network);
+        Ok(())
+    }
+
+    fn save_hour(
+        &mut self,
+        network: &NetworkKey,
+        start: i64,
+        aggregate: &Aggregate,
+    ) -> Result<(), RepositoryError> {
+        if let Some((.., kept)) = self.find_row(network, Granularity::Hour, start) {
+            *kept = *aggregate;
+        } else {
+            self.rows
+                .push((network.clone(), Granularity::Hour, start, *aggregate));
+        }
+        self.remember_name(network);
+        Ok(())
+    }
+
+    fn list_aggregates(
+        &self,
+        network: &NetworkKey,
+        granularity: Granularity,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(i64, Aggregate)>, RepositoryError> {
+        let mut rows: Vec<(i64, Aggregate)> = self
+            .rows
+            .iter()
+            .filter(|(key, row_granularity, start, _)| {
+                is_same_identity(key, network)
+                    && *row_granularity == granularity
+                    && (from..to).contains(start)
+            })
+            .map(|(_, _, start, aggregate)| (*start, *aggregate))
+            .collect();
+        rows.sort_by_key(|(start, _)| *start);
+        Ok(rows)
+    }
+
+    fn list_unmerged_hours(&self, before: i64) -> Result<Vec<(NetworkKey, i64)>, RepositoryError> {
+        let mut hours: Vec<(NetworkKey, i64)> = Vec::new();
+        for (key, granularity, start, _) in &self.rows {
+            let hour = Granularity::Hour.find_start(*start);
+            let is_merged = self
+                .rows
+                .iter()
+                .any(|(other, other_granularity, other_start, _)| {
+                    is_same_identity(other, key)
+                        && *other_granularity == Granularity::Hour
+                        && *other_start == hour
+                });
+            let is_listed = hours
+                .iter()
+                .any(|(listed, listed_hour)| is_same_identity(listed, key) && *listed_hour == hour);
+            if *granularity == Granularity::Minute && *start < before && !is_merged && !is_listed {
+                hours.push((key.clone(), hour));
+            }
+        }
+        hours.sort_by_key(|(_, hour)| *hour);
+        Ok(hours)
+    }
+
+    fn purge_minutes_before(&mut self, utc: i64) -> Result<(), RepositoryError> {
+        let kept_hours: Vec<(NetworkKey, i64)> = self
+            .rows
+            .iter()
+            .filter(|(_, granularity, ..)| *granularity == Granularity::Hour)
+            .map(|(key, _, start, _)| (key.clone(), *start))
+            .collect();
+        self.rows.retain(|(key, granularity, start, _)| {
+            let is_hour_kept = kept_hours.iter().any(|(hour_key, hour)| {
+                is_same_identity(hour_key, key) && *hour == Granularity::Hour.find_start(*start)
+            });
+            *granularity != Granularity::Minute || *start >= utc || !is_hour_kept
+        });
+        Ok(())
+    }
+
+    fn record_event(&mut self, event: &HistoryEvent) -> Result<(), RepositoryError> {
+        self.events.push(event.clone());
+        self.remember_name(&event.network);
+        Ok(())
+    }
+
+    /// Oldest first, each with the network's current name, as the database answers.
+    fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
+        let mut events: Vec<HistoryEvent> = self
+            .events
+            .iter()
+            .filter(|event| (from..to).contains(&event.utc))
+            .cloned()
+            .collect();
+        events.sort_by_key(|event| event.utc);
+        Ok(events)
     }
 }
 

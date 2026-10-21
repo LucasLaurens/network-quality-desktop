@@ -3,6 +3,7 @@
 
 pub mod commands;
 mod display;
+mod history_store;
 mod network_display;
 mod path_display;
 mod shell_mode;
@@ -12,10 +13,11 @@ mod tray_icon;
 mod tray_menu;
 mod windows;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use application::{
-    EngineMessage, EnginePorts, MeasurementEngine, NetworkChangeWatcher, list_default_targets,
+    Clock, EngineMessage, EnginePorts, MeasurementEngine, NetworkChangeWatcher,
+    list_default_targets,
 };
 use display::ConnectionDisplay;
 use domain::Verdict;
@@ -27,8 +29,8 @@ use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
     ConnectionDisplayChanged, DisplayStore, ShellPresenter, create_icon_image, describe_verdict,
 };
-use tauri::Manager;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Manager, RunEvent};
 use tauri_specta::{Builder, collect_commands, collect_events};
 use text_catalog::TextCatalog;
 use tokio::sync::mpsc;
@@ -41,6 +43,9 @@ use windows::{
 
 const TRAY_ID: &str = "connection-state";
 const TICK_EVERY: Duration = Duration::from_secs(1);
+/// How long quitting waits for the last minute to be written.
+const FLUSH_TIMEOUT: Duration = Duration::from_secs(2);
+const FLUSH_RETRY_EVERY: Duration = Duration::from_millis(20);
 /// A few pending ticks at most: if the engine falls behind, older ticks are not worth replaying.
 const ENGINE_INBOX_CAPACITY: usize = 4;
 
@@ -57,7 +62,8 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_window_mode_texts,
             commands::open_tray_extension_page,
             commands::quit_app,
-            commands::reveal_network_name
+            commands::reveal_network_name,
+            commands::read_history_notice
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -82,8 +88,44 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(apply_window_event)
-        .run(tauri::generate_context!())
-        .expect("the Tauri runtime failed to start");
+        .build(tauri::generate_context!())
+        .expect("the Tauri runtime failed to start")
+        .run(|app, event| {
+            if matches!(event, RunEvent::Exit) {
+                flush_history(app);
+            }
+        });
+}
+
+/// The measurement actor's inbox, for messages that come from outside its clock.
+struct EngineInbox(mpsc::Sender<EngineMessage>);
+
+/// Writes the minute in progress before the app quits; quitting never waits more than
+/// `FLUSH_TIMEOUT`, even with a full inbox or a writer that is gone.
+fn flush_history(app: &tauri::AppHandle) {
+    let Some(inbox) = app.try_state::<EngineInbox>() else {
+        return;
+    };
+    let deadline = Instant::now() + FLUSH_TIMEOUT;
+    let (answer, answered) = std::sync::mpsc::sync_channel(1);
+    let mut message = EngineMessage::Flush(answer);
+    loop {
+        match inbox.0.try_send(message) {
+            Ok(()) => break,
+            Err(mpsc::error::TrySendError::Full(returned)) if Instant::now() < deadline => {
+                message = returned;
+                std::thread::sleep(FLUSH_RETRY_EVERY);
+            }
+            Err(_) => {
+                eprintln!("The last minute could not reach the measurement engine");
+                return;
+            }
+        }
+    }
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if answered.recv_timeout(remaining).is_err() {
+        eprintln!("The history writer did not confirm the last minute in time");
+    }
 }
 
 /// Picks the tray or window mode, builds the dot and its menu, and starts the measurement actor
@@ -133,7 +175,11 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         .first()
         .expect("the default targets are listed")
         .address();
+    let (history_recorder, history_notice) =
+        history_store::open_history(app, &catalog, SystemClock::start().read_utc_seconds());
+    app.manage(history_notice);
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
+    app.manage(EngineInbox(sender.clone()));
     let engine = MeasurementEngine::new(
         EnginePorts {
             probe: FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener),
@@ -142,6 +188,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
             context_reader: NetdevContextReader::new(route_reference),
             gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
             wifi_reader: SystemWifiReader,
+            history_recorder,
         },
         targets,
     );

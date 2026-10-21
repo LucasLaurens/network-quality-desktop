@@ -111,4 +111,17 @@ describe('App', () => {
     // Assert
     expect(wrapper.text()).toContain(`Version ${version}`)
   })
+
+  it('says when the history had to be set aside', async () => {
+    // Arrange
+    const notice = faker.lorem.sentence()
+    const client = new InMemoryNetworkQualityClient()
+    client.setHistoryNotice(notice)
+
+    // Act
+    const wrapper = await mountApp(client)
+
+    // Assert
+    expect(wrapper.get('[data-history-notice]').text()).toBe(notice)
+  })
 })

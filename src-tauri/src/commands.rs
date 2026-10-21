@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::display::ConnectionDisplay;
 use infrastructure::{LocationRequest, request_location_permission};
 
+use crate::history_store::HistoryNotice;
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
 use crate::shell_presenter::DisplayStore;
 use crate::windows::{POPOVER_WINDOW, report_failure, show_dashboard};
@@ -125,6 +126,18 @@ pub fn reveal_network_name(app: AppHandle) {
         }
     });
     report_failure("Asking for the location permission", asked);
+}
+
+/// Why the history is not what it was, if something happened to it at launch.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn read_history_notice(notice: State<'_, HistoryNotice>) -> Option<String> {
+    notice.0.clone()
 }
 
 #[cfg(test)]
