@@ -1,4 +1,13 @@
-import { commands, events, type AppInfo, type ConnectionDisplay, type WindowModeTexts } from '../bindings'
+import {
+  commands,
+  events,
+  type AppInfo,
+  type ConnectionDisplay,
+  type DashboardSummaryDisplay,
+  type EvolutionDisplay,
+  type PeriodChoice,
+  type WindowModeTexts,
+} from '../bindings'
 import type { NetworkQualityClient } from './network-quality-client'
 
 /** Production adapter: talks to the Rust core through the generated Tauri bindings. */
@@ -44,4 +53,20 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
   readHistoryNotice(): Promise<string | null> {
     return commands.readHistoryNotice()
   }
+
+  async readDashboardSummary(utcOffsetSeconds: number): Promise<DashboardSummaryDisplay> {
+    return unwrap(await commands.readDashboardSummary(utcOffsetSeconds))
+  }
+
+  async readEvolution(period: PeriodChoice, utcOffsetSeconds: number): Promise<EvolutionDisplay> {
+    return unwrap(await commands.readEvolution(period, utcOffsetSeconds))
+  }
+}
+
+type CommandResult<T> = { status: 'ok'; data: T } | { status: 'error'; error: string }
+
+/** A command that failed in Rust rejects here, as any other failed call. */
+function unwrap<T>(result: CommandResult<T>): T {
+  if (result.status === 'error') throw new Error(result.error)
+  return result.data
 }

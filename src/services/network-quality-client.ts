@@ -1,5 +1,12 @@
 import type { InjectionKey } from 'vue'
-import type { AppInfo, ConnectionDisplay, WindowModeTexts } from '../bindings'
+import type {
+  AppInfo,
+  ConnectionDisplay,
+  DashboardSummaryDisplay,
+  EvolutionDisplay,
+  PeriodChoice,
+  WindowModeTexts,
+} from '../bindings'
 
 /** Port between the Vue front end and the Rust core. Components never call Tauri directly. */
 export interface NetworkQualityClient {
@@ -17,6 +24,10 @@ export interface NetworkQualityClient {
   revealNetworkName(): Promise<void>
   /** Why the history is not what it was, if something happened to it at launch. */
   readHistoryNotice(): Promise<string | null>
+  /** The day so far and the networks of the last 30 days; the offset is the local time zone's. */
+  readDashboardSummary(utcOffsetSeconds: number): Promise<DashboardSummaryDisplay>
+  /** The chart of a period, every metric included. */
+  readEvolution(period: PeriodChoice, utcOffsetSeconds: number): Promise<EvolutionDisplay>
 }
 
 export const NETWORK_QUALITY_CLIENT_KEY: InjectionKey<NetworkQualityClient> = Symbol('NetworkQualityClient')

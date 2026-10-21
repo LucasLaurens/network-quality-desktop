@@ -13,9 +13,9 @@ use domain::{
 };
 
 use crate::{
-    Clock, ConnectionContextReader, GatewayProbe, HistoryCommand, HistoryEvent, HistoryRecorder,
-    LatencyProbe, MeasurementRepository, NetworkKey, RepositoryError, VerdictPresenter,
-    VerdictView, WifiReader,
+    Clock, ConnectionContextReader, GatewayProbe, HistoryCommand, HistoryEvent, HistoryReader,
+    HistoryRecorder, LatencyProbe, MeasurementRepository, NetworkKey, RepositoryError,
+    VerdictPresenter, VerdictView, WifiReader,
 };
 
 /// The manual clock's wall-clock start: an arbitrary UTC second, on an hour boundary.
@@ -339,8 +339,28 @@ impl MeasurementRepository for InMemoryMeasurementRepository {
         self.remember_name(&event.network);
         Ok(())
     }
+}
 
-    /// Oldest first, each with the network's current name, as the database answers.
+/// Oldest first, each with the network's current name, as the database answers.
+impl HistoryReader for InMemoryMeasurementRepository {
+    fn list_all_aggregates(
+        &self,
+        granularity: Granularity,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(NetworkKey, i64, Aggregate)>, RepositoryError> {
+        let mut rows: Vec<(NetworkKey, i64, Aggregate)> = self
+            .rows
+            .iter()
+            .filter(|(_, row_granularity, start, _)| {
+                *row_granularity == granularity && (from..to).contains(start)
+            })
+            .map(|(key, _, start, aggregate)| (key.clone(), *start, *aggregate))
+            .collect();
+        rows.sort_by_key(|(_, start, _)| *start);
+        Ok(rows)
+    }
+
     fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
         let mut events: Vec<HistoryEvent> = self
             .events

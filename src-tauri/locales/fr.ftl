@@ -103,6 +103,37 @@ menu-quit = Quitter
 history-set-aside = L'historique était illisible : il a été mis de côté ({ $file }) et un nouvel historique commence.
 history-not-saved = L'historique ne peut pas être enregistré sur ce disque : il sera perdu à la fermeture.
 
+## Dashboard
+
+time-of-day = { $hours } h { $minutes }
+date-hour = { $day }/{ $month }, { $hours } h
+duration-seconds = { $value } s
+duration-minutes = { $value } min
+duration-hours = { $hours } h
+duration-hours-minutes = { $hours } h { $minutes } min
+duration-days = { $days } j
+duration-days-hours = { $days } j { $hours } h
+today-solid-share = Solide { $value } % du temps
+today-not-enough = Pas encore assez de mesures
+outages-none = Aucune
+outages-ongoing = En cours depuis { $duration }
+outages-one = 1, à { $time } ({ $duration })
+outages-one-unknown = 1, à { $time }
+outages-many = { $count }, la plus longue { $duration }
+outages-many-unknown = { $count }
+worst-none = Aucun, tout est resté Solide
+worst-moment = { $time }, { $metric } { $value }
+worst-outage = { $time }, coupure
+since-no-network = Aucun réseau
+since-beyond = Plus de 30 jours
+threshold-unstable = Instable { $value }
+threshold-degraded = Dégradée { $value }
+chart-network-change = Changement de réseau : { $network }
+chart-coverage = Mesuré { $value } % de la période
+share-solid = { $value } % Solide
+shares = { $solid } % Solide, { $unstable } % Instable, { $degraded } % Dégradée, { $offline } % Hors ligne
+value-unknown = –
+
 ## Window mode, when the desktop shows no tray icon
 
 tray-hint-message = Ce bureau n'affiche pas les icônes de la barre système : l'app reste ouverte dans une fenêtre. L'extension AppIndicator fait apparaître la pastille.
@@ -122,6 +153,12 @@ metric-loss = Perte
 method-latency = p90, 15 s
 method-jitter = 15 s
 method-loss = 60 s
+metric-latency-lower = latence
+metric-jitter-lower = gigue
+metric-loss-lower = perte
+definition-latency = Temps d'un aller-retour vers Internet.
+definition-jitter = Variation de la latence d'un paquet à l'autre.
+definition-loss = Paquets envoyés qui ne reviennent pas.
 
 ## Hints
 

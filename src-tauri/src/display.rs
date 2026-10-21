@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use application::{MetricReading, VerdictView};
 use domain::{
-    ConnectionKind, Diagnosis, Fault, Grade, LocalProblem, LocalSegment, LossRate, MeasuringCause,
-    Metric, Unmeasurable, Verdict, WifiBand,
+    ConnectionKind, CountedState, Diagnosis, Fault, Grade, LocalProblem, LocalSegment, LossRate,
+    MeasuringCause, Metric, Unmeasurable, Verdict, WifiBand,
 };
 use fluent_bundle::FluentArgs;
 use serde::Serialize;
@@ -50,6 +50,17 @@ impl From<Grade> for DisplayState {
     }
 }
 
+impl From<CountedState> for DisplayState {
+    fn from(state: CountedState) -> Self {
+        match state {
+            CountedState::Solid => Self::Solid,
+            CountedState::Unstable => Self::Unstable,
+            CountedState::Degraded => Self::Degraded,
+            CountedState::Offline => Self::Offline,
+        }
+    }
+}
+
 impl DisplayState {
     #[must_use]
     pub const fn to_catalogue_key(self) -> &'static str {
@@ -78,6 +89,8 @@ pub struct Gauge {
 #[serde(rename_all = "camelCase")]
 pub struct MetricDisplay {
     pub name: String,
+    /// What the metric means, in plain words.
+    pub definition: String,
     pub method: String,
     /// `None` while the metric cannot be computed yet.
     pub value: Option<String>,
@@ -215,6 +228,22 @@ const fn to_name_key(metric: Metric) -> &'static str {
     }
 }
 
+pub const fn to_lower_name_key(metric: Metric) -> &'static str {
+    match metric {
+        Metric::Latency => "metric-latency-lower",
+        Metric::Jitter => "metric-jitter-lower",
+        Metric::Loss => "metric-loss-lower",
+    }
+}
+
+const fn to_definition_key(metric: Metric) -> &'static str {
+    match metric {
+        Metric::Latency => "definition-latency",
+        Metric::Jitter => "definition-jitter",
+        Metric::Loss => "definition-loss",
+    }
+}
+
 const fn to_method_key(metric: Metric) -> &'static str {
     match metric {
         Metric::Latency => "method-latency",
@@ -232,6 +261,7 @@ fn compose_metric<T: Displayable>(
 ) -> MetricDisplay {
     MetricDisplay {
         name: catalog.render(to_name_key(metric), None),
+        definition: catalog.render(to_definition_key(metric), None),
         method: catalog.render(to_method_key(metric), None),
         value: reading.map(|reading| reading.value.format(catalog)),
         gauge: reading.map(|reading| compose_gauge(reading, gauge_max, catalog)),

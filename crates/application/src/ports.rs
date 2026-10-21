@@ -102,6 +102,22 @@ pub trait MeasurementRepository {
     ///
     /// The storage failed; nothing was written.
     fn record_event(&mut self, event: &HistoryEvent) -> Result<(), RepositoryError>;
+}
+
+/// Reads the history for the dashboard, apart from the writer.
+pub trait HistoryReader {
+    /// The rows of every network starting in `[from, to)`, oldest first, each with the
+    /// network's current name.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn list_all_aggregates(
+        &self,
+        granularity: Granularity,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(NetworkKey, i64, Aggregate)>, RepositoryError>;
 
     /// The events in `[from, to)`, oldest first.
     ///

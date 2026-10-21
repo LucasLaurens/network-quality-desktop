@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { inject, onMounted, onUnmounted, ref } from 'vue'
-import type { ConnectionDisplay } from '../bindings'
+import { inject, onMounted, onUnmounted } from 'vue'
+import { useConnectionDisplay } from '../composables/use-connection-display'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import ConnectionPath from './ConnectionPath.vue'
 import MetricGauge from './MetricGauge.vue'
@@ -9,34 +9,18 @@ import StateShape from './StateShape.vue'
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
 
-const display = ref<ConnectionDisplay | null>(null)
-let stopListening: (() => void) | null = null
-let unmounted = false
+const display = useConnectionDisplay(client)
 
 const closeOnEscape = (event: KeyboardEvent): void => {
   if (event.key === 'Escape') void client.closePopover()
 }
 
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener('keydown', closeOnEscape)
-  // Subscribe first, so no change emitted while the first read is in flight is lost.
-  const stop = await client.listenConnectionDisplay((next) => {
-    display.value = next
-  })
-  if (unmounted) {
-    stop()
-    return
-  }
-  stopListening = stop
-  // A display pushed while this read was in flight is newer: never overwrite it.
-  const initial = await client.readConnectionDisplay()
-  display.value ??= initial
 })
 
 onUnmounted(() => {
-  unmounted = true
   window.removeEventListener('keydown', closeOnEscape)
-  stopListening?.()
 })
 
 const revealNetworkName = async (): Promise<void> => {
