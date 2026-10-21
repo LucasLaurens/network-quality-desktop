@@ -489,7 +489,7 @@ async fn reports_warm_up_progress_while_measuring() {
 }
 
 #[tokio::test]
-async fn diagnoses_no_network_while_offline() {
+async fn diagnoses_no_reachable_server_while_offline() {
     // Arrange
     let mut harness = create_harness();
     harness.warm_up_with_latency(FAST).await;
@@ -499,7 +499,10 @@ async fn diagnoses_no_network_while_offline() {
     harness.run_seconds(5).await;
 
     // Assert
-    assert_eq!(harness.read_last_view().diagnosis, Diagnosis::NoNetwork);
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::NoServerReachable
+    );
 }
 
 #[tokio::test]
@@ -515,6 +518,23 @@ async fn names_the_worst_metric_when_out_of_threshold() {
         harness.read_last_view().diagnosis,
         Diagnosis::OutOfThreshold(Metric::Latency)
     );
+}
+
+#[tokio::test]
+async fn diagnoses_a_recovery_while_the_state_waits_to_improve() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(VERY_SLOW).await;
+    harness.run_seconds(10).await;
+    harness.set_latency(FAST);
+
+    // Act
+    harness.run_seconds(20).await;
+
+    // Assert
+    let view = harness.read_last_view();
+    assert_eq!(view.verdict, Verdict::Graded(Grade::Degraded));
+    assert_eq!(view.diagnosis, Diagnosis::Recovering);
 }
 
 #[tokio::test]

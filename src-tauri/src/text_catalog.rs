@@ -39,9 +39,12 @@ impl TextCatalog {
             .and_then(|message| message.value())
             .unwrap_or_else(|| panic!("`{key}` is missing from the catalogue"));
         let mut errors = Vec::new();
-        self.bundle
+        let text = self
+            .bundle
             .format_pattern(pattern, args, &mut errors)
-            .into_owned()
+            .into_owned();
+        debug_assert!(errors.is_empty(), "`{key}` failed to format: {errors:?}");
+        text
     }
 }
 
@@ -92,12 +95,12 @@ mod tests {
             assert!(!text.contains('\u{2014}'), "`{key}`: no em dash");
             assert!(!text.chars().any(is_emoji), "`{key}`: no emoji");
             assert!(
-                !text.contains(" %") && !text.contains(" :"),
+                !has_missing_no_break_space_before_sign(text),
                 "`{key}`: no-break space before % and :"
             );
             assert!(!has_decimal_point(text), "`{key}`: decimal comma");
             assert!(
-                !has_plain_space_before_unit(text),
+                !has_missing_no_break_space_before_unit(text),
                 "`{key}`: no-break space before units"
             );
         }
@@ -108,19 +111,37 @@ mod tests {
     }
 
     fn has_decimal_point(text: &str) -> bool {
-        text.as_bytes()
-            .windows(3)
-            .any(|w| w[0].is_ascii_digit() && w[1] == b'.' && w[2].is_ascii_digit())
+        text.as_bytes().windows(3).any(|triple| {
+            triple[0].is_ascii_digit() && triple[1] == b'.' && triple[2].is_ascii_digit()
+        })
     }
 
-    fn has_plain_space_before_unit(text: &str) -> bool {
+    fn has_missing_no_break_space_before_sign(text: &str) -> bool {
+        text.char_indices().any(|(index, character)| {
+            matches!(character, '%' | ':') && !text[..index].ends_with('\u{a0}')
+        })
+    }
+
+    /// A unit right after a number, glued to it ("60s") or after a plain space ("60 s").
+    fn has_missing_no_break_space_before_unit(text: &str) -> bool {
         ["ms", "s", "Mbit/s", "dBm", "GHz"].iter().any(|unit| {
-            text.match_indices(&format!(" {unit}")).any(|(index, _)| {
-                let before = text[..index].chars().last();
-                let after = text[index + 1 + unit.len()..].chars().next();
-                before.is_some_and(|c| c.is_ascii_digit() || c == '}')
-                    && after.is_none_or(|c| !c.is_alphanumeric())
+            text.match_indices(unit).any(|(index, _)| {
+                let is_whole_word = text[index + unit.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !c.is_alphanumeric());
+                let mut before = text[..index].chars().rev();
+                let follows_a_number = match before.next() {
+                    Some(' ') => before.next().is_some_and(is_number_end),
+                    Some(c) => is_number_end(c),
+                    None => false,
+                };
+                is_whole_word && follows_a_number
             })
         })
+    }
+
+    fn is_number_end(character: char) -> bool {
+        character.is_ascii_digit() || character == '}'
     }
 }

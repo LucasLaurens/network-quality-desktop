@@ -13,7 +13,7 @@ use crate::text_catalog::TextCatalog;
 /// Right end of each gauge: values beyond it pin the marker to the end.
 const LATENCY_GAUGE_MAX: Duration = Duration::from_millis(400);
 const JITTER_GAUGE_MAX: Duration = Duration::from_millis(70);
-const LOSS_GAUGE_MAX_PERCENT: f64 = 8.0;
+const LOSS_GAUGE_MAX: LossRate = LossRate::from_percent(8.0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -58,13 +58,15 @@ impl DisplayState {
     }
 }
 
-/// Positions on a gauge, as fractions of its length (0 = left end, 1 = right end).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Type)]
+/// Positions on a gauge, as fractions of its length (0 = left end, 1 = right end), and the
+/// thresholds in words for screen readers.
+#[derive(Debug, Clone, PartialEq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct Gauge {
     pub position: f64,
     pub unstable_from: f64,
     pub degraded_above: f64,
+    pub label: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Type)]
@@ -74,7 +76,6 @@ pub struct MetricDisplay {
     pub method: String,
     /// `None` while the metric cannot be computed yet.
     pub value: Option<String>,
-    pub state: Option<DisplayState>,
     pub gauge: Option<Gauge>,
     /// Shown under a metric close to its next threshold.
     pub hint: Option<String>,
@@ -90,6 +91,7 @@ pub struct ConnectionDisplay {
     pub action: Option<String>,
     pub detail: Option<String>,
     pub metrics: Vec<MetricDisplay>,
+    pub open_dashboard_label: String,
 }
 
 impl ConnectionDisplay {
@@ -117,8 +119,9 @@ impl ConnectionDisplay {
             Diagnosis::Healthy => ("cause-healthy", None),
             Diagnosis::NearThreshold(_) => ("cause-near-threshold", None),
             Diagnosis::OutOfThreshold(_) => ("cause-out-of-threshold", None),
+            Diagnosis::Recovering => ("cause-recovering", None),
             Diagnosis::Measuring { .. } => ("cause-measuring", None),
-            Diagnosis::NoNetwork => ("cause-no-network", Some("action-no-network")),
+            Diagnosis::NoServerReachable => ("cause-no-server", Some("action-check-connection")),
         };
         Self {
             state,
@@ -127,10 +130,21 @@ impl ConnectionDisplay {
             action: action_key.map(|key| catalog.render(key, None)),
             detail: compose_detail(view, catalog),
             metrics: vec![
-                compose_metric(Metric::Latency, view.latency.as_ref(), catalog),
-                compose_metric(Metric::Jitter, view.jitter.as_ref(), catalog),
-                compose_metric(Metric::Loss, view.loss.as_ref(), catalog),
+                compose_metric(
+                    Metric::Latency,
+                    view.latency.as_ref(),
+                    LATENCY_GAUGE_MAX,
+                    catalog,
+                ),
+                compose_metric(
+                    Metric::Jitter,
+                    view.jitter.as_ref(),
+                    JITTER_GAUGE_MAX,
+                    catalog,
+                ),
+                compose_metric(Metric::Loss, view.loss.as_ref(), LOSS_GAUGE_MAX, catalog),
             ],
+            open_dashboard_label: catalog.render("action-open-dashboard", None),
         }
     }
 }
@@ -138,7 +152,8 @@ impl ConnectionDisplay {
 /// A value that can be printed with its unit and placed on a gauge.
 trait Displayable: domain::Scalable {
     fn format(self, catalog: &TextCatalog) -> String;
-    fn compute_fraction(self, metric: Metric) -> f64;
+    /// Where the value sits between zero and `max`, capped at 1.
+    fn compute_fraction(self, max: Self) -> f64;
 }
 
 impl Displayable for Duration {
@@ -148,12 +163,7 @@ impl Displayable for Duration {
         catalog.render("unit-milliseconds", Some(&args))
     }
 
-    fn compute_fraction(self, metric: Metric) -> f64 {
-        let max = if metric == Metric::Jitter {
-            JITTER_GAUGE_MAX
-        } else {
-            LATENCY_GAUGE_MAX
-        };
+    fn compute_fraction(self, max: Self) -> f64 {
         self.div_duration_f64(max).min(1.0)
     }
 }
@@ -170,77 +180,100 @@ impl Displayable for LossRate {
         catalog.render("unit-percent", Some(&args))
     }
 
-    fn compute_fraction(self, _metric: Metric) -> f64 {
-        (self.to_percent() / LOSS_GAUGE_MAX_PERCENT).min(1.0)
+    fn compute_fraction(self, max: Self) -> f64 {
+        (self.to_percent() / max.to_percent()).min(1.0)
     }
 }
 
+const fn to_name_key(metric: Metric) -> &'static str {
+    match metric {
+        Metric::Latency => "metric-latency",
+        Metric::Jitter => "metric-jitter",
+        Metric::Loss => "metric-loss",
+    }
+}
+
+const fn to_method_key(metric: Metric) -> &'static str {
+    match metric {
+        Metric::Latency => "method-latency",
+        Metric::Jitter => "method-jitter",
+        Metric::Loss => "method-loss",
+    }
+}
+
+/// O(1).
 fn compose_metric<T: Displayable>(
     metric: Metric,
     reading: Option<&MetricReading<T>>,
+    gauge_max: T,
     catalog: &TextCatalog,
 ) -> MetricDisplay {
-    let (name_key, method_key) = match metric {
-        Metric::Latency => ("metric-latency", "method-latency"),
-        Metric::Jitter => ("metric-jitter", "method-jitter"),
-        Metric::Loss => ("metric-loss", "method-loss"),
-    };
     MetricDisplay {
-        name: catalog.render(name_key, None),
-        method: catalog.render(method_key, None),
+        name: catalog.render(to_name_key(metric), None),
+        method: catalog.render(to_method_key(metric), None),
         value: reading.map(|reading| reading.value.format(catalog)),
-        state: reading.map(|reading| reading.grade.into()),
-        gauge: reading.map(|reading| Gauge {
-            position: reading.value.compute_fraction(metric),
-            unstable_from: reading.bounds.read_unstable_from().compute_fraction(metric),
-            degraded_above: reading
-                .bounds
-                .read_degraded_above()
-                .compute_fraction(metric),
-        }),
+        gauge: reading.map(|reading| compose_gauge(reading, gauge_max, catalog)),
         hint: reading
             .filter(|reading| reading.is_near_next_threshold)
             .map(|_| catalog.render("hint-near-threshold", None)),
     }
 }
 
+/// O(1).
+fn compose_gauge<T: Displayable>(
+    reading: &MetricReading<T>,
+    gauge_max: T,
+    catalog: &TextCatalog,
+) -> Gauge {
+    let unstable_from = reading.bounds.read_unstable_from();
+    let degraded_above = reading.bounds.read_degraded_above();
+    let mut args = FluentArgs::new();
+    args.set("unstable", unstable_from.format(catalog));
+    args.set("degraded", degraded_above.format(catalog));
+    Gauge {
+        position: reading.value.compute_fraction(gauge_max),
+        unstable_from: unstable_from.compute_fraction(gauge_max),
+        degraded_above: degraded_above.compute_fraction(gauge_max),
+        label: catalog.render("gauge-label", Some(&args)),
+    }
+}
+
+/// O(1).
 fn compose_detail(view: &VerdictView, catalog: &TextCatalog) -> Option<String> {
     let mut args = FluentArgs::new();
     match view.diagnosis {
-        Diagnosis::Measuring { collected, needed } => {
+        // Past the warm-up, a metric can still lack samples: "10 sur 10" would only confuse.
+        Diagnosis::Measuring { collected, needed } if collected < needed => {
             args.set("collected", collected.to_string());
             args.set("needed", needed.to_string());
             Some(catalog.render("detail-measuring", Some(&args)))
         }
         Diagnosis::NearThreshold(metric) | Diagnosis::OutOfThreshold(metric) => {
-            let (name_key, value, threshold) = match metric {
-                Metric::Latency => {
-                    describe_reading("metric-latency", view.latency.as_ref(), catalog)?
-                }
-                Metric::Jitter => describe_reading("metric-jitter", view.jitter.as_ref(), catalog)?,
-                Metric::Loss => describe_reading("metric-loss", view.loss.as_ref(), catalog)?,
+            let (value, threshold) = match metric {
+                Metric::Latency => describe_reading(view.latency.as_ref(), catalog)?,
+                Metric::Jitter => describe_reading(view.jitter.as_ref(), catalog)?,
+                Metric::Loss => describe_reading(view.loss.as_ref(), catalog)?,
             };
-            args.set("metric", catalog.render(name_key, None));
+            args.set("metric", catalog.render(to_name_key(metric), None));
             args.set("value", value);
             args.set("threshold", threshold);
             Some(catalog.render("detail-metric", Some(&args)))
         }
-        Diagnosis::Healthy | Diagnosis::NoNetwork => None,
+        Diagnosis::Healthy
+        | Diagnosis::Recovering
+        | Diagnosis::Measuring { .. }
+        | Diagnosis::NoServerReachable => None,
     }
 }
 
+/// The formatted value and the threshold it is compared with.
 fn describe_reading<T: Displayable>(
-    name_key: &'static str,
     reading: Option<&MetricReading<T>>,
     catalog: &TextCatalog,
-) -> Option<(&'static str, String, String)> {
+) -> Option<(String, String)> {
     let reading = reading?;
     let threshold = reading.bounds.find_reference_threshold(reading.value);
-    Some((
-        name_key,
-        reading.value.format(catalog),
-        threshold.format(catalog),
-    ))
+    Some((reading.value.format(catalog), threshold.format(catalog)))
 }
 
 #[cfg(test)]
@@ -337,11 +370,11 @@ mod tests {
     }
 
     #[test]
-    fn suggests_an_action_when_there_is_no_network() {
+    fn suggests_a_check_when_no_server_answers() {
         // Arrange
         let view = VerdictView {
             verdict: Verdict::Offline,
-            diagnosis: Diagnosis::NoNetwork,
+            diagnosis: Diagnosis::NoServerReachable,
             latency: None,
             jitter: None,
             loss: None,
@@ -352,10 +385,10 @@ mod tests {
 
         // Assert
         assert_eq!(display.state_label, "Hors ligne");
-        assert_eq!(display.cause, "Aucun réseau connecté.");
+        assert_eq!(display.cause, "Aucun serveur ne répond.");
         assert_eq!(
             display.action.as_deref(),
-            Some("Se connecter à un Wi-Fi ou brancher un câble.")
+            Some("Vérifier le Wi-Fi ou le câble.")
         );
     }
 
@@ -378,10 +411,10 @@ mod tests {
             Some(Gauge {
                 position: 0.45,
                 unstable_from: 0.25,
-                degraded_above: 0.75
+                degraded_above: 0.75,
+                label: format!("Solide sous 100{NBSP}ms, Dégradée au-delà de 300{NBSP}ms"),
             })
         );
-        assert_eq!(latency.state, Some(DisplayState::Unstable));
     }
 
     #[test]
@@ -400,6 +433,48 @@ mod tests {
         assert_eq!(display.cause, "Bonne connexion, proche de la limite.");
         assert_eq!(display.metrics[0].hint.as_deref(), Some("Proche du seuil"));
         assert_eq!(display.metrics[1].hint, None);
+    }
+
+    #[test]
+    fn says_the_connection_is_recovering_without_figures() {
+        // Arrange
+        let view = create_view(
+            Verdict::Graded(Grade::Degraded),
+            Diagnosis::Recovering,
+            Duration::from_millis(20),
+        );
+
+        // Act
+        let display = ConnectionDisplay::from_view(&view, &TextCatalog::load());
+
+        // Assert
+        assert_eq!(display.state_label, "Dégradée");
+        assert_eq!(
+            display.cause,
+            "La connexion s'améliore, confirmation en cours."
+        );
+        assert_eq!(display.detail, None);
+    }
+
+    #[test]
+    fn hides_the_progress_once_the_warm_up_is_complete() {
+        // Arrange
+        let view = VerdictView {
+            verdict: Verdict::Measuring,
+            diagnosis: Diagnosis::Measuring {
+                collected: 10,
+                needed: 10,
+            },
+            latency: None,
+            jitter: None,
+            loss: None,
+        };
+
+        // Act
+        let display = ConnectionDisplay::from_view(&view, &TextCatalog::load());
+
+        // Assert
+        assert_eq!(display.detail, None);
     }
 
     #[test]

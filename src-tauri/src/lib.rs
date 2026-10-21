@@ -17,14 +17,14 @@ use infrastructure::{FallbackLatencyProbe, IcmpEchoSender, SystemClock, TcpConne
 use shell_presenter::{
     ConnectionDisplayChanged, DisplayStore, ShellPresenter, create_icon_image, describe_verdict,
 };
+use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Manager, WindowEvent};
 use tauri_specta::{Builder, collect_commands, collect_events};
 use text_catalog::TextCatalog;
 use tokio::sync::mpsc;
 use tokio::time::MissedTickBehavior;
-use windows::{POPOVER_WINDOW, toggle_popover};
+use windows::{PopoverDismissal, apply_window_event, toggle_popover};
 
 const TRAY_ID: &str = "connection-state";
 const QUIT_ID: &str = "quit";
@@ -40,7 +40,8 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             commands::read_app_info,
             commands::read_connection_display,
-            commands::open_dashboard
+            commands::open_dashboard,
+            commands::close_popover
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -58,12 +59,7 @@ pub fn run() {
             start_measurement(app.handle())?;
             Ok(())
         })
-        .on_window_event(|window, event| {
-            // A popover closes as soon as the user clicks elsewhere.
-            if window.label() == POPOVER_WINDOW && matches!(event, WindowEvent::Focused(false)) {
-                let _ = window.hide();
-            }
-        })
+        .on_window_event(apply_window_event)
         .run(tauri::generate_context!())
         .expect("the Tauri runtime failed to start");
 }
@@ -73,8 +69,15 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     let catalog = TextCatalog::load();
     let store = DisplayStore::new(ConnectionDisplay::create_initial(&catalog));
     app.manage(store.clone());
+    app.manage(PopoverDismissal::default());
     // Linux tray backends may hide an icon that has no menu; the full native menu comes later.
-    let quit = MenuItem::with_id(app, QUIT_ID, "Quitter", true, None::<&str>)?;
+    let quit = MenuItem::with_id(
+        app,
+        QUIT_ID,
+        catalog.render("menu-quit", None),
+        true,
+        None::<&str>,
+    )?;
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(create_icon_image(Verdict::Measuring))
         .icon_as_template(false)

@@ -8,6 +8,7 @@ export interface NetworkQualityClient {
   /** Calls `onChange` with every new display; resolves to the function that stops listening. */
   listenConnectionDisplay(onChange: (display: ConnectionDisplay) => void): Promise<() => void>
   openDashboard(): Promise<void>
+  closePopover(): Promise<void>
 }
 
 export const NETWORK_QUALITY_CLIENT_KEY: InjectionKey<NetworkQualityClient> = Symbol('NetworkQualityClient')

@@ -7,8 +7,12 @@ export function createMetricDisplay(overrides: Partial<MetricDisplay> = {}): Met
     name: faker.word.noun(),
     method: faker.word.words(2),
     value: `${String(faker.number.int({ min: 1, max: 400 }))} ms`,
-    state: 'solid',
-    gauge: { position: faker.number.float({ min: 0, max: 1 }), unstableFrom: 0.25, degradedAbove: 0.75 },
+    gauge: {
+      position: faker.number.float({ min: 0, max: 1 }),
+      unstableFrom: 0.25,
+      degradedAbove: 0.75,
+      label: faker.lorem.sentence(),
+    },
     hint: null,
     ...overrides,
   }
@@ -22,17 +26,24 @@ export function createConnectionDisplay(overrides: Partial<ConnectionDisplay> = 
     action: null,
     detail: null,
     metrics: [createMetricDisplay(), createMetricDisplay(), createMetricDisplay()],
+    openDashboardLabel: faker.lorem.words(3),
     ...overrides,
   }
 }
 
-/** Serves prepared data, lets the test push new displays, and records the dashboard openings. */
+/**
+ * Serves prepared data, lets the test push new displays, and records the dashboard openings.
+ * Reads can be held, to replay a read that answers after a newer display was pushed.
+ */
 export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   dashboardOpenings = 0
+  popoverClosings = 0
   private listeners: ((display: ConnectionDisplay) => void)[] = []
+  private isHoldingReads = false
+  private heldReads: (() => void)[] = []
 
   constructor(
-    private readonly appInfo: AppInfo = { name: 'app', version: faker.system.semver() },
+    private readonly appInfo: AppInfo = { name: faker.word.noun(), version: faker.system.semver() },
     private display: ConnectionDisplay = createConnectionDisplay(),
   ) {}
 
@@ -45,7 +56,25 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   }
 
   readConnectionDisplay(): Promise<ConnectionDisplay> {
-    return Promise.resolve(this.display)
+    const snapshot = this.display
+    if (!this.isHoldingReads) return Promise.resolve(snapshot)
+    return new Promise((resolve) => {
+      this.heldReads.push(() => {
+        resolve(snapshot)
+      })
+    })
+  }
+
+  holdReads(): void {
+    this.isHoldingReads = true
+  }
+
+  releaseReads(): void {
+    this.isHoldingReads = false
+    this.heldReads.forEach((release) => {
+      release()
+    })
+    this.heldReads = []
   }
 
   listenConnectionDisplay(onChange: (display: ConnectionDisplay) => void): Promise<() => void> {
@@ -57,6 +86,11 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   openDashboard(): Promise<void> {
     this.dashboardOpenings += 1
+    return Promise.resolve()
+  }
+
+  closePopover(): Promise<void> {
+    this.popoverClosings += 1
     return Promise.resolve()
   }
 

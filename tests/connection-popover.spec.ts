@@ -40,7 +40,8 @@ describe('ConnectionPopover', () => {
 
   it('shows each metric with its value, its method and its gauge marker', async () => {
     // Arrange
-    const metric = createMetricDisplay({ gauge: { position: 0.45, unstableFrom: 0.25, degradedAbove: 0.75 } })
+    const label = faker.lorem.sentence()
+    const metric = createMetricDisplay({ gauge: { position: 0.45, unstableFrom: 0.25, degradedAbove: 0.75, label } })
     const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ metrics: [metric] }))
 
     // Act
@@ -52,11 +53,13 @@ describe('ConnectionPopover', () => {
     expect(row.text()).toContain(metric.method)
     expect(row.text()).toContain(metric.value)
     expect(row.get('[data-marker]').attributes('style')).toContain('left: 45%')
+    expect(row.findAll('[data-zone]')).toHaveLength(3)
+    expect(row.get('[role="img"]').attributes('aria-label')).toBe(label)
   })
 
   it('shows a dash and no gauge marker for a metric not measured yet', async () => {
     // Arrange
-    const metric = createMetricDisplay({ value: null, state: null, gauge: null })
+    const metric = createMetricDisplay({ value: null, gauge: null })
     const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ metrics: [metric] }))
 
     // Act
@@ -65,6 +68,23 @@ describe('ConnectionPopover', () => {
     // Assert
     expect(wrapper.get('[data-metric]').text()).toContain('–')
     expect(wrapper.find('[data-marker]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-zone]')).toHaveLength(0)
+  })
+
+  it('keeps a display pushed while the first read was in flight', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay())
+    client.holdReads()
+    const wrapper = await mountPopover(client)
+    const fresh = createConnectionDisplay()
+
+    // Act
+    client.pushDisplay(fresh)
+    client.releaseReads()
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.get('h1').text()).toBe(fresh.stateLabel)
   })
 
   it('shows the hint of a metric close to its threshold', async () => {
@@ -99,14 +119,29 @@ describe('ConnectionPopover', () => {
 
   it('opens the dashboard from its main button', async () => {
     // Arrange
-    const client = new InMemoryNetworkQualityClient()
+    const display = createConnectionDisplay()
+    const client = new InMemoryNetworkQualityClient(undefined, display)
     const wrapper = await mountPopover(client)
+    const button = wrapper.get('button[data-primary]')
 
     // Act
-    await wrapper.get('button[data-primary]').trigger('click')
+    await button.trigger('click')
 
     // Assert
+    expect(button.text()).toBe(display.openDashboardLabel)
     expect(client.dashboardOpenings).toBe(1)
+  })
+
+  it('closes when Escape is pressed', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    await mountPopover(client)
+
+    // Act
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+
+    // Assert
+    expect(client.popoverClosings).toBe(1)
   })
 
   it('stops listening once closed', async () => {

@@ -150,7 +150,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
             self.restart();
             return VerdictView {
                 verdict: Verdict::Offline,
-                diagnosis: Diagnosis::NoNetwork,
+                diagnosis: Diagnosis::NoServerReachable,
                 latency: None,
                 jitter: None,
                 loss: None,
@@ -197,7 +197,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
             ),
         ];
         let diagnosis = match verdict {
-            Verdict::Offline => Diagnosis::NoNetwork,
+            Verdict::Offline => Diagnosis::NoServerReachable,
             Verdict::Measuring => Diagnosis::Measuring {
                 collected: self.samples_since_restart.min(WARM_UP_SAMPLES),
                 needed: WARM_UP_SAMPLES,
@@ -237,7 +237,8 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
 }
 
 /// Names the metric behind a graded verdict. While Solid, a metric close to (or already past) its
-/// threshold is reported, since the hysteresis may not show it yet. O(1): three metrics.
+/// threshold is reported, since the hysteresis may not show it yet; while a worse state is still
+/// shown with every metric back to Solid, the connection is recovering. O(1): three metrics.
 fn diagnose_graded(displayed: Grade, grades: &[(Metric, Option<(Grade, bool)>); 3]) -> Diagnosis {
     let worst = grades
         .iter()
@@ -253,7 +254,8 @@ fn diagnose_graded(displayed: Grade, grades: &[(Metric, Option<(Grade, bool)>); 
             .map_or(Diagnosis::Healthy, |(metric, _)| {
                 Diagnosis::NearThreshold(*metric)
             }),
-        (_, Some((_, _, metric))) => Diagnosis::OutOfThreshold(metric),
-        (_, None) => Diagnosis::Healthy,
+        (_, Some((grade, _, metric))) if grade > Grade::Solid => Diagnosis::OutOfThreshold(metric),
+        // Worse state still shown while every metric is back to Solid: the hysteresis is waiting.
+        _ => Diagnosis::Recovering,
     }
 }

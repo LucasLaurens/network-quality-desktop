@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::display::ConnectionDisplay;
 use crate::shell_presenter::DisplayStore;
-use crate::windows::{MAIN_WINDOW, POPOVER_WINDOW};
+use crate::windows::{MAIN_WINDOW, POPOVER_WINDOW, report_failure};
 
 /// Identity of the running build, shown in the window footer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -45,16 +45,26 @@ pub fn read_connection_display(store: State<'_, DisplayStore>) -> ConnectionDisp
     reason = "Tauri injects command arguments by value"
 )]
 pub fn open_dashboard(app: AppHandle) {
-    if let Some(popover) = app.get_webview_window(POPOVER_WINDOW) {
-        let _ = popover.hide();
-    }
+    close_popover(app.clone());
     match app.get_webview_window(MAIN_WINDOW) {
-        Some(main) => {
-            if let Err(error) = main.show().and_then(|()| main.set_focus()) {
-                eprintln!("Showing the dashboard failed: {error}");
-            }
-        }
+        Some(main) => report_failure(
+            "Showing the dashboard",
+            main.show().and_then(|()| main.set_focus()),
+        ),
         None => eprintln!("The dashboard window is missing"),
+    }
+}
+
+/// Closes the popover from the keyboard (Escape).
+#[tauri::command]
+#[specta::specta]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn close_popover(app: AppHandle) {
+    if let Some(popover) = app.get_webview_window(POPOVER_WINDOW) {
+        report_failure("Hiding the popover", popover.hide());
     }
 }
 

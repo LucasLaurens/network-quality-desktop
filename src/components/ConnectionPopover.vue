@@ -12,7 +12,12 @@ const display = ref<ConnectionDisplay | null>(null)
 let stopListening: (() => void) | null = null
 let unmounted = false
 
+const closeOnEscape = (event: KeyboardEvent): void => {
+  if (event.key === 'Escape') void client.closePopover()
+}
+
 onMounted(async () => {
+  window.addEventListener('keydown', closeOnEscape)
   // Subscribe first, so no change emitted while the first read is in flight is lost.
   const stop = await client.listenConnectionDisplay((next) => {
     display.value = next
@@ -22,11 +27,14 @@ onMounted(async () => {
     return
   }
   stopListening = stop
-  display.value ??= await client.readConnectionDisplay()
+  // A display pushed while this read was in flight is newer: never overwrite it.
+  const initial = await client.readConnectionDisplay()
+  display.value ??= initial
 })
 
 onUnmounted(() => {
   unmounted = true
+  window.removeEventListener('keydown', closeOnEscape)
   stopListening?.()
 })
 
@@ -56,7 +64,7 @@ const openDashboard = async (): Promise<void> => {
       </li>
     </ul>
 
-    <button type="button" class="primary" data-primary @click="openDashboard">Ouvrir le tableau de bord</button>
+    <button type="button" class="primary" data-primary @click="openDashboard">{{ display.openDashboardLabel }}</button>
   </main>
 </template>
 

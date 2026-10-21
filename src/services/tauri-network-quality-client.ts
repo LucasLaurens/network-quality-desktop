@@ -20,4 +20,8 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
   openDashboard(): Promise<void> {
     return commands.openDashboard()
   }
+
+  closePopover(): Promise<void> {
+    return commands.closePopover()
+  }
 }

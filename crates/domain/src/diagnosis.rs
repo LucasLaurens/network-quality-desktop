@@ -13,6 +13,12 @@ pub enum Diagnosis {
     Healthy,
     NearThreshold(Metric),
     OutOfThreshold(Metric),
-    Measuring { collected: u32, needed: u32 },
-    NoNetwork,
+    /// Every metric is back within its thresholds; the state waits before improving.
+    Recovering,
+    Measuring {
+        collected: u32,
+        needed: u32,
+    },
+    /// No target answered for 5 s; whether a network is connected at all is not known yet.
+    NoServerReachable,
 }

@@ -10,6 +10,8 @@ export const commands = {
 	readConnectionDisplay: () => __TAURI_INVOKE<ConnectionDisplay>("read_connection_display"),
 	/**  Brings the dashboard window forward and closes the popover. */
 	openDashboard: () => __TAURI_INVOKE<void>("open_dashboard"),
+	/**  Closes the popover from the keyboard (Escape). */
+	closePopover: () => __TAURI_INVOKE<void>("close_popover"),
 };
 
 /** Events */
@@ -32,6 +34,7 @@ export type ConnectionDisplay = {
 	action: string | null,
 	detail: string | null,
 	metrics: MetricDisplay[],
+	openDashboardLabel: string,
 };
 
 /**  Sent to every window whenever what the popover shows changes. */
@@ -39,11 +42,15 @@ export type ConnectionDisplayChanged = ConnectionDisplay;
 
 export type DisplayState = "solid" | "unstable" | "degraded" | "offline" | "measuring";
 
-/**  Positions on a gauge, as fractions of its length (0 = left end, 1 = right end). */
+/**
+ *  Positions on a gauge, as fractions of its length (0 = left end, 1 = right end), and the
+ *  thresholds in words for screen readers.
+ */
 export type Gauge = {
 	position: number | null,
 	unstableFrom: number | null,
 	degradedAbove: number | null,
+	label: string,
 };
 
 export type MetricDisplay = {
@@ -51,7 +58,6 @@ export type MetricDisplay = {
 	method: string,
 	/**  `None` while the metric cannot be computed yet. */
 	value: string | null,
-	state: DisplayState | null,
 	gauge: Gauge | null,
 	/**  Shown under a metric close to its next threshold. */
 	hint: string | null,

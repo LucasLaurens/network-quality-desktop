@@ -3,16 +3,27 @@ import type { Gauge } from '../bindings'
 
 const { gauge } = defineProps<{ gauge: Gauge | null }>()
 
+// Rust f64 is exported as `number | null`, since serde writes NaN as null.
 const toPercent = (fraction: number | null): string => `${String(Math.round((fraction ?? 0) * 1000) / 10)}%`
 </script>
 
-<!-- Neutral zones (Solide, Instable, Dégradée) and a marker for the value; positions come from the core. -->
+<!--
+  Neutral zones (Solide, Instable, Dégradée) and a marker for the value; positions come from the core.
+  An unmeasured metric shows an empty track.
+-->
 <template>
-  <div class="gauge" aria-hidden="true">
-    <span class="zone" :style="{ width: toPercent(gauge?.unstableFrom ?? 0.25) }" />
-    <span class="zone" :style="{ width: toPercent((gauge?.degradedAbove ?? 0.75) - (gauge?.unstableFrom ?? 0.25)) }" />
+  <div v-if="gauge" class="gauge" role="img" :aria-label="gauge.label">
+    <span class="zone" data-zone :style="{ width: toPercent(gauge.unstableFrom) }" />
+    <span
+      class="zone"
+      data-zone
+      :style="{ width: toPercent((gauge.degradedAbove ?? 0) - (gauge.unstableFrom ?? 0)) }"
+    />
+    <span class="zone rest" data-zone />
+    <i class="marker" data-marker :style="{ left: toPercent(gauge.position) }" />
+  </div>
+  <div v-else class="gauge" aria-hidden="true">
     <span class="zone rest" />
-    <i v-if="gauge" class="marker" data-marker :style="{ left: toPercent(gauge.position) }" />
   </div>
 </template>
 
