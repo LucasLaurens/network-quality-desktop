@@ -16,21 +16,31 @@ if (!client) throw new Error('NetworkQualityClient is not provided')
 
 const panel = ref<ThroughputPanel | null>(null)
 const running = ref<ProfileChoice | null>(null)
-/** The test waiting for the user's go-ahead, where data counts. */
-const asked = ref<ProfileChoice | null>(null)
+/** The test waiting for the user's go-ahead, where data counts, and what it may use. */
+const asked = ref<{ profile: ProfileChoice; warning: string } | null>(null)
 const refusal = ref('')
 
-const readWarning = (profile: ProfileChoice): string | null =>
-  profile === 'quick' ? (panel.value?.quickWarning ?? null) : (panel.value?.fullWarning ?? null)
+const loadPanel = async (): Promise<void> => {
+  try {
+    panel.value = await client.readThroughputPanel(readUtcOffsetSeconds())
+  } catch (error) {
+    console.error('Reading the throughput tests failed', error)
+  }
+}
 
-const run = async (profile: ProfileChoice): Promise<void> => {
-  if (!panel.value || running.value) return
+// The core decides whether to ask first: it reads the connection at the click.
+const run = async (profile: ProfileChoice, isConfirmed: boolean): Promise<void> => {
+  if (running.value) return
   asked.value = null
   refusal.value = ''
   running.value = profile
   try {
-    const row = await client.runThroughputTest(profile, readUtcOffsetSeconds())
-    panel.value.tests = [row, ...panel.value.tests]
+    const outcome = await client.runThroughputTest(profile, isConfirmed, readUtcOffsetSeconds())
+    if (outcome.kind === 'needsConfirmation') {
+      asked.value = { profile, warning: outcome.warning }
+      return
+    }
+    await loadPanel()
   } catch (error) {
     refusal.value = error instanceof Error ? error.message : String(error)
   } finally {
@@ -38,21 +48,7 @@ const run = async (profile: ProfileChoice): Promise<void> => {
   }
 }
 
-const choose = async (profile: ProfileChoice): Promise<void> => {
-  if (readWarning(profile) === null) {
-    await run(profile)
-    return
-  }
-  asked.value = profile
-}
-
-onMounted(async () => {
-  try {
-    panel.value = await client.readThroughputPanel(readUtcOffsetSeconds())
-  } catch (error) {
-    console.error('Reading the throughput tests failed', error)
-  }
-})
+onMounted(loadPanel)
 </script>
 
 <template>
@@ -71,15 +67,15 @@ onMounted(async () => {
           :disabled="running !== null"
           :aria-busy="running === profile.value"
           :data-run="profile.value"
-          @click="choose(profile.value)"
+          @click="run(profile.value, false)"
         >
           {{ running === profile.value ? 'Test en cours…' : profile.label }}
         </button>
       </div>
       <div v-if="asked" class="warning" role="alertdialog" aria-labelledby="throughput-warning" data-warning>
-        <p id="throughput-warning">{{ readWarning(asked) }}</p>
+        <p id="throughput-warning">{{ asked.warning }}</p>
         <div class="actions">
-          <button type="button" class="secondary" data-confirm @click="run(asked)">Lancer le test</button>
+          <button type="button" class="secondary" data-confirm @click="run(asked.profile, true)">Lancer le test</button>
           <button type="button" class="link" data-cancel @click="asked = null">Annuler</button>
         </div>
       </div>
@@ -108,10 +104,7 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
-      <p class="small">
-        Les tests ne partent que sur un clic, vers Cloudflare. Rapide&nbsp;: environ 5&nbsp;Mo. Complet&nbsp;: jusqu'à
-        160&nbsp;Mo. La latence en charge s'affiche sans compter dans l'état.
-      </p>
+      <p class="small" data-note>{{ panel.note }}</p>
     </template>
   </div>
 </template>

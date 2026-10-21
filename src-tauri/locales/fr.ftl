@@ -161,7 +161,9 @@ server-unreachable = Ce serveur ne répond pas au ping.
 
 throughput-quick = Rapide
 throughput-full = Complet
-throughput-warning = Connexion limitée : ce test consomme jusqu'à { $data }.
+throughput-warning-limited = Connexion limitée : ce test consomme jusqu'à { $data }.
+throughput-warning-hotspot = Partage de connexion : ce test consomme jusqu'à { $data }.
+throughput-note = Les tests ne partent que sur un clic, vers Cloudflare. Rapide : jusqu'à { $quick }. Complet : jusqu'à { $full }. La latence en charge s'affiche sans compter dans l'état.
 throughput-disabled = Les tests de débit sont désactivés dans les réglages.
 throughput-busy = Un test est déjà en cours.
 throughput-unreachable = Test indisponible : le serveur de test ne répond pas. Réessayer dans quelques minutes.

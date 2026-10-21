@@ -14,6 +14,7 @@ import type {
   SegmentDisplay,
   SeriesDisplay,
   SettingsForm,
+  ThroughputOutcome,
   ThroughputPanel,
   ThroughputRow,
   WindowModeTexts,
@@ -96,7 +97,7 @@ export function createThroughputRow(overrides: Partial<ThroughputRow> = {}): Thr
 }
 
 export function createThroughputPanel(overrides: Partial<ThroughputPanel> = {}): ThroughputPanel {
-  return { isAllowed: true, quickWarning: null, fullWarning: null, tests: [], ...overrides }
+  return { isAllowed: true, note: faker.lorem.sentence(), tests: [], ...overrides }
 }
 
 export function createOverviewDisplay(overrides: Partial<OverviewDisplay> = {}): OverviewDisplay {
@@ -185,6 +186,8 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private readonly nextThroughputRow = createThroughputRow()
   /** Empty while tests run. */
   private throughputRefusal = ''
+  /** Empty where data does not count. */
+  private throughputWarning = ''
   private isHoldingThroughput = false
   private releaseThroughputTest = (): void => undefined
   private settings: SettingsForm = {
@@ -355,18 +358,27 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     this.throughputPanel = panel
   }
 
-  runThroughputTest(profile: ProfileChoice): Promise<ThroughputRow> {
+  runThroughputTest(profile: ProfileChoice, isConfirmed: boolean): Promise<ThroughputOutcome> {
+    if (this.throughputWarning !== '' && !isConfirmed) {
+      return Promise.resolve({ kind: 'needsConfirmation', warning: this.throughputWarning })
+    }
     this.throughputRuns.push(profile)
-    const answer = (): Promise<ThroughputRow> =>
-      this.throughputRefusal === ''
-        ? Promise.resolve(this.nextThroughputRow)
-        : Promise.reject(new Error(this.throughputRefusal))
+    const answer = (): Promise<ThroughputOutcome> => {
+      if (this.throughputRefusal !== '') return Promise.reject(new Error(this.throughputRefusal))
+      this.throughputPanel = { ...this.throughputPanel, tests: [this.nextThroughputRow, ...this.throughputPanel.tests] }
+      return Promise.resolve({ kind: 'done', row: this.nextThroughputRow })
+    }
     if (!this.isHoldingThroughput) return answer()
     return new Promise((resolve, reject) => {
       this.releaseThroughputTest = () => {
         answer().then(resolve, reject)
       }
     })
+  }
+
+  /** Asked before every test, as on a connection where data counts. */
+  warnBeforeThroughputTests(warning: string): void {
+    this.throughputWarning = warning
   }
 
   /** Every test is refused with `refusal`. */

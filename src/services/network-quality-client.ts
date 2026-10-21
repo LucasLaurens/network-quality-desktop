@@ -7,8 +7,8 @@ import type {
   PeriodChoice,
   ProfileChoice,
   SettingsForm,
+  ThroughputOutcome,
   ThroughputPanel,
-  ThroughputRow,
   WindowModeTexts,
 } from '../bindings'
 
@@ -36,8 +36,11 @@ export interface NetworkQualityClient {
   /** Resolves to the confirmation to show; rejects with the sentence explaining the refusal. */
   saveSettings(form: SettingsForm, utcOffsetSeconds: number): Promise<string>
   readThroughputPanel(utcOffsetSeconds: number): Promise<ThroughputPanel>
-  /** Resolves to the new test's row; rejects with the sentence explaining why it did not run. */
-  runThroughputTest(profile: ProfileChoice, utcOffsetSeconds: number): Promise<ThroughputRow>
+  /**
+   * Runs the test, or asks first where data counts (`isConfirmed` false); rejects with the
+   * sentence explaining why it did not run.
+   */
+  runThroughputTest(profile: ProfileChoice, isConfirmed: boolean, utcOffsetSeconds: number): Promise<ThroughputOutcome>
 }
 
 export const NETWORK_QUALITY_CLIENT_KEY: InjectionKey<NetworkQualityClient> = Symbol('NetworkQualityClient')

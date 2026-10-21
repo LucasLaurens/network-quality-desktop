@@ -1,5 +1,6 @@
 //! Throughput transfers against Cloudflare's speed test endpoints (`__down`, `__up`), in plain
-//! HTTPS. While a transfer runs, empty requests every 250 ms time the round trip under load.
+//! HTTPS. While a transfer runs, empty requests every 250 ms time the round trip under load; HTTP/2
+//! carries them on the transfer's own connection, so no handshake weighs on them.
 
 use std::time::{Duration, Instant};
 
@@ -72,9 +73,13 @@ impl CloudflareThroughputProbe {
         Some(started.elapsed())
     }
 
-    /// Times the round trip every `ROUND_TRIP_EVERY` until it is dropped.
+    /// Times the round trip every `ROUND_TRIP_EVERY` until it is dropped; the first one once the
+    /// transfer has had time to fill the line.
     async fn sample_round_trips(&self, round_trips: &mut Vec<Duration>) {
-        let mut ticks = tokio::time::interval(ROUND_TRIP_EVERY);
+        let mut ticks = tokio::time::interval_at(
+            tokio::time::Instant::now() + ROUND_TRIP_EVERY,
+            ROUND_TRIP_EVERY,
+        );
         loop {
             ticks.tick().await;
             if let Some(round_trip) = self.measure_round_trip().await {

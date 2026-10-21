@@ -47,11 +47,18 @@ pub struct ThroughputRow {
 pub struct ThroughputPanel {
     /// The setting « Autoriser les tests de débit ».
     pub is_allowed: bool,
-    /// Asked before a quick test where data counts; `None` elsewhere.
-    pub quick_warning: Option<String>,
-    pub full_warning: Option<String>,
+    /// Under the buttons: when tests leave, and how much data each may use.
+    pub note: String,
     /// Newest first.
     pub tests: Vec<ThroughputRow>,
+}
+
+/// What a click on a test gives: its row, or the warning to accept first where data counts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ThroughputOutcome {
+    Done { row: ThroughputRow },
+    NeedsConfirmation { warning: String },
 }
 
 impl ThroughputPanel {
@@ -59,25 +66,51 @@ impl ThroughputPanel {
     #[must_use]
     pub fn compose(
         is_allowed: bool,
-        context: Option<&ConnectionContext>,
         records: &[ThroughputRecord],
         offset: i64,
         catalog: &TextCatalog,
     ) -> Self {
-        let counts_data = context.is_some_and(|context| {
-            context.is_limited() || context.kind == ConnectionKind::PhoneHotspot
-        });
-        let warn = |profile: TestProfile| counts_data.then(|| compose_warning(profile, catalog));
+        let mut args = FluentArgs::new();
+        args.set(
+            "quick",
+            format_megabytes(TestProfile::Quick.compute_max_bytes(), catalog),
+        );
+        args.set(
+            "full",
+            format_megabytes(TestProfile::Full.compute_max_bytes(), catalog),
+        );
         Self {
             is_allowed,
-            quick_warning: warn(TestProfile::Quick),
-            full_warning: warn(TestProfile::Full),
+            note: catalog.render("throughput-note", Some(&args)),
             tests: records
                 .iter()
                 .map(|record| ThroughputRow::compose(record.utc, &record.result, offset, catalog))
                 .collect(),
         }
     }
+}
+
+/// « Partage de connexion : ce test consomme jusqu'à 4,2 Mo. » where data counts, read when the
+/// user clicks; `None` elsewhere. O(s) for s steps.
+#[must_use]
+pub fn compose_warning(
+    context: Option<&ConnectionContext>,
+    profile: TestProfile,
+    catalog: &TextCatalog,
+) -> Option<String> {
+    let key = match context {
+        Some(context) if context.kind == ConnectionKind::PhoneHotspot => {
+            "throughput-warning-hotspot"
+        }
+        Some(context) if context.is_limited() => "throughput-warning-limited",
+        Some(_) | None => return None,
+    };
+    let mut args = FluentArgs::new();
+    args.set(
+        "data",
+        format_megabytes(profile.compute_max_bytes(), catalog),
+    );
+    Some(catalog.render(key, Some(&args)))
 }
 
 impl ThroughputRow {
@@ -111,16 +144,6 @@ const fn to_profile_key(profile: TestProfile) -> &'static str {
         TestProfile::Quick => "throughput-quick",
         TestProfile::Full => "throughput-full",
     }
-}
-
-/// « Connexion limitée : ce test consomme jusqu'à 5 Mo. » O(s) for s steps.
-fn compose_warning(profile: TestProfile, catalog: &TextCatalog) -> String {
-    let mut args = FluentArgs::new();
-    args.set(
-        "data",
-        format_megabytes(profile.compute_max_bytes(), catalog),
-    );
-    catalog.render("throughput-warning", Some(&args))
 }
 
 /// « 2,5 Mbit/s » below 10 Mbit/s, « 85 Mbit/s » above. O(1).
@@ -239,20 +262,33 @@ mod tests {
     fn warns_before_a_test_where_data_counts_only() {
         // Arrange
         let catalog = TextCatalog::load();
+        let hotspot = create_context(ConnectionKind::PhoneHotspot, Metering::Unknown);
         let limited = create_context(ConnectionKind::WiFi, Metering::Metered);
         let free = create_context(ConnectionKind::Ethernet, Metering::Unmetered);
 
         // Act
-        let warned = ThroughputPanel::compose(true, Some(&limited), &[], PARIS, &catalog);
-        let quiet = ThroughputPanel::compose(true, Some(&free), &[], PARIS, &catalog);
+        let on_hotspot = compose_warning(Some(&hotspot), TestProfile::Quick, &catalog);
+        let on_limited = compose_warning(Some(&limited), TestProfile::Full, &catalog);
+        let on_free = compose_warning(Some(&free), TestProfile::Full, &catalog);
 
         // Assert
-        assert!(
-            warned
-                .quick_warning
-                .is_some_and(|warning| warning.contains("Mo"))
-        );
-        assert!(warned.full_warning.is_some());
-        assert_eq!(quiet.quick_warning, None);
+        assert!(on_hotspot.is_some_and(|warning| warning.starts_with("Partage de connexion")));
+        assert!(on_limited.is_some_and(|warning| warning.starts_with("Connexion limitée")));
+        assert_eq!(on_free, None);
+    }
+
+    #[test]
+    fn says_how_much_data_each_test_may_use() {
+        // Arrange
+        let catalog = TextCatalog::load();
+
+        // Act
+        let panel = ThroughputPanel::compose(true, &[], PARIS, &catalog);
+
+        // Assert
+        assert!(panel.note.contains(&format_megabytes(
+            TestProfile::Quick.compute_max_bytes(),
+            &catalog
+        )));
     }
 }

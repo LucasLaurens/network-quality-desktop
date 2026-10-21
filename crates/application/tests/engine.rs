@@ -1726,9 +1726,9 @@ async fn create_harness_after_a_slow_test() -> Harness {
     harness.warm_up_with_latency(FAST).await;
     harness
         .engine
-        .handle(EngineMessage::ThroughputCompleted(create_throughput(
+        .handle(EngineMessage::ThroughputEnded(Some(create_throughput(
             400_000,
-        )))
+        ))))
         .await;
     harness
 }
@@ -1788,9 +1788,9 @@ async fn never_caps_after_a_test_fast_enough() {
     harness.warm_up_with_latency(FAST).await;
     harness
         .engine
-        .handle(EngineMessage::ThroughputCompleted(create_throughput(
+        .handle(EngineMessage::ThroughputEnded(Some(create_throughput(
             90_000_000,
-        )))
+        ))))
         .await;
 
     // Act
@@ -1815,9 +1815,9 @@ async fn keeps_every_test_in_the_history_under_its_network() {
     // Act
     harness
         .engine
-        .handle(EngineMessage::ThroughputCompleted(create_throughput(
+        .handle(EngineMessage::ThroughputEnded(Some(create_throughput(
             90_000_000,
-        )))
+        ))))
         .await;
 
     // Assert
@@ -1825,4 +1825,106 @@ async fn keeps_every_test_in_the_history_under_its_network() {
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0].result, create_throughput(90_000_000));
     assert_eq!(kept[0].network.kind, ConnectionKind::WiFi);
+}
+
+#[tokio::test]
+async fn keeps_the_loaded_line_out_of_the_verdict_during_a_test() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness
+        .engine
+        .handle(EngineMessage::ThroughputStarted)
+        .await;
+    let presented = harness.presenter.count_views();
+    // The test fills the line: the probes come back slow.
+    harness.set_latency(VERY_SLOW);
+
+    // Act
+    harness.run_seconds(15).await;
+
+    // Assert
+    assert_eq!(harness.presenter.count_views(), presented);
+    assert!(harness.notifier.list_notified().is_empty());
+}
+
+#[tokio::test]
+async fn measures_on_from_where_it_was_once_the_test_ends() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness
+        .engine
+        .handle(EngineMessage::ThroughputStarted)
+        .await;
+    harness.run_seconds(5).await;
+
+    // Act
+    harness
+        .engine
+        .handle(EngineMessage::ThroughputEnded(None))
+        .await;
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Solid)
+    );
+}
+
+#[tokio::test]
+async fn measures_again_by_itself_when_a_test_never_says_it_ended() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness
+        .engine
+        .handle(EngineMessage::ThroughputStarted)
+        .await;
+    let presented = harness.presenter.count_views();
+
+    // Act
+    harness.run_seconds(70).await;
+
+    // Assert
+    assert!(harness.presenter.count_views() > presented);
+}
+
+#[tokio::test]
+async fn announces_no_degradation_for_a_slow_test_already_on_screen() {
+    // Arrange
+    let mut harness = create_harness_after_a_slow_test().await;
+
+    // Act
+    harness.run_seconds(5).await;
+
+    // Assert
+    assert_eq!(harness.read_last_view().diagnosis, Diagnosis::LowThroughput);
+    assert!(harness.notifier.list_notified().is_empty());
+}
+
+#[tokio::test]
+async fn caps_nothing_after_a_test_that_ended_during_a_sleep() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    let (answer, _answered) = std::sync::mpsc::sync_channel(1);
+    harness.engine.handle(EngineMessage::Sleep(answer)).await;
+    harness
+        .engine
+        .handle(EngineMessage::ThroughputEnded(Some(create_throughput(
+            400_000,
+        ))))
+        .await;
+    harness.engine.handle(EngineMessage::Wake).await;
+
+    // Act
+    harness.run_seconds(WARM_UP + 1).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Solid)
+    );
 }

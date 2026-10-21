@@ -28,9 +28,9 @@ async fn stops_climbing_once_a_size_takes_long_enough() {
 }
 
 #[tokio::test]
-async fn starts_no_transfer_once_a_direction_spent_its_time() {
+async fn starts_no_transfer_that_would_run_past_the_direction_budget() {
     // Arrange
-    // At 9 Mbit/s, 10 MB takes 8.9 s: the second one starts within 15 s, a third would not.
+    // At 9 Mbit/s, 10 MB takes 8.9 s: the first ends at 14.6 s, a second would end at 23.5 s.
     let server = InMemoryThroughputServer::with_rates(9_000_000, 9_000_000);
 
     // Act
@@ -38,12 +38,37 @@ async fn starts_no_transfer_once_a_direction_spent_its_time() {
 
     // Assert
     assert!(result.is_ok());
-    let ten_megabytes = server
-        .list_transfers(Direction::Download)
-        .into_iter()
-        .filter(|bytes| *bytes == 10 * MEGABYTE)
+    let downloads = server.list_transfers(Direction::Download);
+    let ten_megabytes = downloads
+        .iter()
+        .filter(|bytes| **bytes == 10 * MEGABYTE)
         .count();
-    assert_eq!(ten_megabytes, 2);
+    assert_eq!(ten_megabytes, 1);
+    let spent: u64 = downloads
+        .iter()
+        .map(|bytes| bytes * 8 * 1000 / 9_000_000)
+        .sum();
+    assert!(spent <= 15_000, "{spent} ms spent downloading");
+}
+
+#[tokio::test]
+async fn times_at_least_one_large_transfer_on_a_slow_line() {
+    // Arrange
+    // At 1 Mbit/s the warm-up's 100 kB says little; 1 MB takes 8 s, past the quick budget.
+    let server = InMemoryThroughputServer::with_rates(1_000_000, 1_000_000);
+
+    // Act
+    let result = run_throughput_test(&server, TestProfile::Quick).await;
+
+    // Assert
+    assert_eq!(
+        result.expect("a result").download,
+        Some(Bitrate::from_bits_per_second(1_000_000))
+    );
+    assert_eq!(
+        server.list_transfers(Direction::Download),
+        vec![100_000, MEGABYTE]
+    );
 }
 
 #[tokio::test]

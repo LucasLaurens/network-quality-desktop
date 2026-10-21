@@ -139,6 +139,12 @@ pub struct Transfer {
 }
 
 impl Transfer {
+    /// Large enough for its rate to measure the line rather than the request. O(1).
+    #[must_use]
+    pub const fn is_large_enough_to_rate(&self) -> bool {
+        self.bytes >= RATE_MIN_BYTES
+    }
+
     /// `None` for a transfer too short to time. O(1).
     #[must_use]
     pub fn compute_rate(&self) -> Option<Bitrate> {
@@ -217,12 +223,10 @@ fn grade_rate(rate: Bitrate, solid_from: u64) -> Grade {
 
 /// Nearest rank, as for latency. O(n log n).
 fn compute_rate_p90(transfers: &[Transfer]) -> Option<Bitrate> {
-    let has_large = transfers
-        .iter()
-        .any(|transfer| transfer.bytes >= RATE_MIN_BYTES);
+    let has_large = transfers.iter().any(Transfer::is_large_enough_to_rate);
     let mut rates: Vec<Bitrate> = transfers
         .iter()
-        .filter(|transfer| !has_large || transfer.bytes >= RATE_MIN_BYTES)
+        .filter(|transfer| !has_large || transfer.is_large_enough_to_rate())
         .filter_map(Transfer::compute_rate)
         .collect();
     if rates.is_empty() {

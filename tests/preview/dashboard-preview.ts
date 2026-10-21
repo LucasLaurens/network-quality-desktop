@@ -123,8 +123,7 @@ const firstRun: DashboardSummaryDisplay = {
 const client = new InMemoryNetworkQualityClient(undefined, connectionScenarios.degraded, windowModeTexts)
 client.setThroughputPanel({
   isAllowed: scenario !== 'first',
-  quickWarning: null,
-  fullWarning: `Connexion limitée${NBSP}: ce test consomme jusqu'à 155,4${NBSP}Mo.`,
+  note: `Les tests ne partent que sur un clic, vers Cloudflare. Rapide${NBSP}: jusqu'à 4,2${NBSP}Mo. Complet${NBSP}: jusqu'à 155,8${NBSP}Mo. La latence en charge s'affiche sans compter dans l'état.`,
   tests: [
     {
       when: `21/10, 18${NBSP}h${NBSP}02`,
@@ -151,4 +150,5 @@ if (scenario === 'first') {
   client.setDashboardSummary(summary)
   client.setEvolution(evolution)
 }
+client.warnBeforeThroughputTests(`Connexion limitée${NBSP}: ce test consomme jusqu'à 155,8${NBSP}Mo.`)
 createApp(App).provide(NETWORK_QUALITY_CLIENT_KEY, client).mount('#app')

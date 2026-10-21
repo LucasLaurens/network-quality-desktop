@@ -73,7 +73,7 @@ describe('ThroughputSection', () => {
     // Arrange
     const warning = faker.lorem.sentence()
     const client = new InMemoryNetworkQualityClient()
-    client.setThroughputPanel(createThroughputPanel({ quickWarning: warning }))
+    client.warnBeforeThroughputTests(warning)
     const wrapper = await mountSection(client)
     await wrapper.get('[data-run="quick"]').trigger('click')
     const shown = wrapper.get('[data-warning]').text()
@@ -92,7 +92,7 @@ describe('ThroughputSection', () => {
   it('runs nothing when the warning is turned down', async () => {
     // Arrange
     const client = new InMemoryNetworkQualityClient()
-    client.setThroughputPanel(createThroughputPanel({ fullWarning: faker.lorem.sentence() }))
+    client.warnBeforeThroughputTests(faker.lorem.sentence())
     const wrapper = await mountSection(client)
     await wrapper.get('[data-run="full"]').trigger('click')
 

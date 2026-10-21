@@ -60,8 +60,8 @@ export const commands = {
 	 */
 	saveSettings: (form: SettingsForm, utcOffsetSeconds: number) => typedError<string, string>(__TAURI_INVOKE("save_settings", { form, utcOffsetSeconds })),
 	/**
-	 *  The dashboard's throughput section: whether tests are allowed, the warning where data counts,
-	 *  and the last tests.
+	 *  The dashboard's throughput section: whether tests are allowed, what they may use, and the
+	 *  last tests.
 	 * 
 	 *  # Errors
 	 * 
@@ -69,15 +69,16 @@ export const commands = {
 	 */
 	readThroughputPanel: (utcOffsetSeconds: number) => typedError<ThroughputPanel, string>(__TAURI_INVOKE("read_throughput_panel", { utcOffsetSeconds })),
 	/**
-	 *  Runs the test the user clicked, then hands its result to the engine: the history keeps it,
-	 *  and a slow one holds the verdict down.
+	 *  Runs the test the user clicked. Where data counts, the first click only returns the warning:
+	 *  the test runs once the user confirms, the connection read again at that moment. The engine
+	 *  stops measuring while the line is full, then keeps the result.
 	 * 
 	 *  # Errors
 	 * 
 	 *  The sentence shown under the buttons: tests not allowed, one already running, or a server
 	 *  that did not answer.
 	 */
-	runThroughputTest: (profile: ProfileChoice, utcOffsetSeconds: number) => typedError<ThroughputRow, string>(__TAURI_INVOKE("run_throughput_test", { profile, utcOffsetSeconds })),
+	runThroughputTest: (profile: ProfileChoice, isConfirmed: boolean, utcOffsetSeconds: number) => typedError<ThroughputOutcome, string>(__TAURI_INVOKE("run_throughput_test", { profile, isConfirmed, utcOffsetSeconds })),
 };
 
 /** Events */
@@ -254,12 +255,14 @@ export type StateShares = {
 	offline: number | null,
 };
 
+/**  What a click on a test gives: its row, or the warning to accept first where data counts. */
+export type ThroughputOutcome = { kind: "done"; row: ThroughputRow } | { kind: "needsConfirmation"; warning: string };
+
 export type ThroughputPanel = {
 	/**  The setting « Autoriser les tests de débit ». */
 	isAllowed: boolean,
-	/**  Asked before a quick test where data counts; `None` elsewhere. */
-	quickWarning: string | null,
-	fullWarning: string | null,
+	/**  Under the buttons: when tests leave, and how much data each may use. */
+	note: string,
 	/**  Newest first. */
 	tests: ThroughputRow[],
 };

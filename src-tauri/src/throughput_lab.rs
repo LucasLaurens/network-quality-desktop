@@ -33,22 +33,42 @@ impl ThroughputLab {
         }
     }
 
+    /// Takes the lab for one test: the caller tells the engine before the line fills.
+    ///
     /// # Errors
     ///
-    /// A test is already running, or this one could not reach its end.
-    pub async fn run(&self, profile: TestProfile) -> Result<ThroughputResult, LabRefusal> {
+    /// A test is already running, or no HTTP client could be built.
+    pub fn begin(&self) -> Result<RunningTest<'_>, LabRefusal> {
         let probe = self.probe.as_ref().ok_or(LabRefusal::Unavailable)?;
-        let _running = RunningTest::start(&self.is_running).ok_or(LabRefusal::Busy)?;
-        run_throughput_test(probe, profile)
+        let guard = RunningGuard::start(&self.is_running).ok_or(LabRefusal::Busy)?;
+        Ok(RunningTest {
+            probe,
+            _guard: guard,
+        })
+    }
+}
+
+/// The lab, held for one test until it is dropped.
+pub struct RunningTest<'a> {
+    probe: &'a CloudflareThroughputProbe,
+    _guard: RunningGuard<'a>,
+}
+
+impl RunningTest<'_> {
+    /// # Errors
+    ///
+    /// The test server did not answer, or broke off a transfer.
+    pub async fn run(&self, profile: TestProfile) -> Result<ThroughputResult, LabRefusal> {
+        run_throughput_test(self.probe, profile)
             .await
             .map_err(|ThroughputFailure::Unreachable| LabRefusal::Unavailable)
     }
 }
 
 /// Marks a test as running for as long as it lives, even when it ends early.
-struct RunningTest<'a>(&'a AtomicBool);
+struct RunningGuard<'a>(&'a AtomicBool);
 
-impl<'a> RunningTest<'a> {
+impl<'a> RunningGuard<'a> {
     fn start(is_running: &'a AtomicBool) -> Option<Self> {
         is_running
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -57,7 +77,7 @@ impl<'a> RunningTest<'a> {
     }
 }
 
-impl Drop for RunningTest<'_> {
+impl Drop for RunningGuard<'_> {
     fn drop(&mut self) {
         self.0.store(false, Ordering::Release);
     }
@@ -71,10 +91,10 @@ mod tests {
     fn lets_one_test_run_at_a_time() {
         // Arrange
         let is_running = AtomicBool::new(false);
-        let first = RunningTest::start(&is_running);
+        let first = RunningGuard::start(&is_running);
 
         // Act
-        let second = RunningTest::start(&is_running);
+        let second = RunningGuard::start(&is_running);
 
         // Assert
         assert!(first.is_some());
@@ -85,10 +105,10 @@ mod tests {
     fn frees_the_lab_once_a_test_ends() {
         // Arrange
         let is_running = AtomicBool::new(false);
-        drop(RunningTest::start(&is_running));
+        drop(RunningGuard::start(&is_running));
 
         // Act
-        let next = RunningTest::start(&is_running);
+        let next = RunningGuard::start(&is_running);
 
         // Assert
         assert!(next.is_some());

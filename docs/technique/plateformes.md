@@ -57,9 +57,10 @@ Points laissés ouverts par la recherche (#19), tranchés :
 
 ## Tests de débit
 
-- HTTP : reqwest 0.13.5, déjà tiré par Tauri, avec rustls (`rustls-no-provider`) et le fournisseur cryptographique `ring` installé au premier usage : aucune bibliothèque TLS du système ni `aws-lc`. Les certificats sont ceux du système (`rustls-platform-verifier`).
+- HTTP : reqwest 0.13.5, déjà tiré par Tauri, en HTTP/2 (les requêtes de latence en charge passent sur la connexion du transfert, sans nouvelle poignée de main), avec rustls (`rustls-no-provider`) et le fournisseur cryptographique `ring` installé au premier usage : aucune bibliothèque TLS du système ni `aws-lc`. Les certificats sont ceux du système (`rustls-platform-verifier`).
 - Points d'entrée : `GET https://speed.cloudflare.com/__down?bytes=N` et `POST https://speed.cloudflare.com/__up`, non documentés comme API stable par Cloudflare (recherche #4). Un test réel lancé à la demande : `cargo test -p infrastructure -- --ignored` (environ 5 Mo).
 - Mesuré sur ce Mac (test rapide, Wi-Fi) : 12,5 Mbit/s en réception, 1,9 Mbit/s en envoi, latence en charge 335 ms, 2,7 Mo en 4,8 s.
+- Limite : une requête attend au plus 30 s. Sur une ligne très lente (moins de 0,15 Mbit/s en envoi), un transfert de 0,5 Mo la dépasse et le test se conclut « serveur ne répond pas ». Observé une fois sur ce Mac pendant une baisse du lien (curl : 17 s pour 1 Mo).
 
 ## Notifications
 
