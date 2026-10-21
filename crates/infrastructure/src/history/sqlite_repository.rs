@@ -3,8 +3,12 @@ use std::time::Duration;
 
 use application::{
     EventKind, HistoryEvent, HistoryReader, MeasurementRepository, NetworkKey, RepositoryError,
+    SettingsRepository,
 };
-use domain::{Aggregate, ConnectionKind, Granularity, LatencyHistogram, MacAddress, StateSeconds};
+use domain::{
+    Aggregate, Appearance, ConnectionKind, Granularity, LatencyHistogram, MacAddress,
+    MeasurementServers, Settings, StateSeconds, Target,
+};
 use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension, Row, Transaction, params};
 use rusqlite_migration::{M, Migrations};
 
@@ -78,6 +82,18 @@ impl SqliteMeasurementRepository {
     pub fn open_read_only(path: &Path) -> Result<Self, RepositoryError> {
         let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(to_error)?;
+        connection.busy_timeout(BUSY_TIMEOUT).map_err(to_error)?;
+        Ok(Self { connection })
+    }
+
+    /// Another writing connection to a history the writer already opened, for the settings: a
+    /// rare write that waits for the writer at most `BUSY_TIMEOUT`.
+    ///
+    /// # Errors
+    ///
+    /// The file could not be opened.
+    pub fn open_alongside(path: &Path) -> Result<Self, RepositoryError> {
+        let connection = Connection::open(path).map_err(to_error)?;
         connection.busy_timeout(BUSY_TIMEOUT).map_err(to_error)?;
         Ok(Self { connection })
     }
@@ -296,6 +312,65 @@ impl HistoryReader for SqliteMeasurementRepository {
     }
 }
 
+impl SettingsRepository for SqliteMeasurementRepository {
+    /// The single typed row the first migration creates. O(1).
+    fn read_settings(&self) -> Result<Settings, RepositoryError> {
+        self.connection
+            .query_row(
+                "SELECT autostart, theme, ping_target FROM settings WHERE id = 1",
+                [],
+                |row| {
+                    let ping_target: Option<String> = row.get(2)?;
+                    Ok(Settings {
+                        launch_at_login: row.get(0)?,
+                        appearance: from_theme_text(&row.get::<_, String>(1)?),
+                        // A server that no longer reads as an address falls back to the public ones.
+                        servers: ping_target
+                            .as_deref()
+                            .and_then(Target::try_parse)
+                            .map_or(MeasurementServers::Default, MeasurementServers::Custom),
+                    })
+                },
+            )
+            .map_err(to_error)
+    }
+
+    /// O(1).
+    fn save_settings(&mut self, settings: &Settings) -> Result<(), RepositoryError> {
+        let ping_target = match settings.servers {
+            MeasurementServers::Default => None,
+            MeasurementServers::Custom(target) => Some(target.address().to_string()),
+        };
+        self.write(|transaction| {
+            transaction.execute(
+                "UPDATE settings SET autostart = ?1, theme = ?2, ping_target = ?3 WHERE id = 1",
+                params![
+                    settings.launch_at_login,
+                    to_theme_text(settings.appearance),
+                    ping_target
+                ],
+            )?;
+            Ok(())
+        })
+    }
+}
+
+const fn to_theme_text(appearance: Appearance) -> &'static str {
+    match appearance {
+        Appearance::System => "system",
+        Appearance::Light => "light",
+        Appearance::Dark => "dark",
+    }
+}
+
+fn from_theme_text(text: &str) -> Appearance {
+    match text {
+        "light" => Appearance::Light,
+        "dark" => Appearance::Dark,
+        _ => Appearance::System,
+    }
+}
+
 /// Keeps a name learnt later; a network without a readable name keeps the one it had. O(log n)
 /// on the unique indexes.
 fn find_or_create_network(
@@ -493,7 +568,7 @@ fn to_error(error: impl std::fmt::Display) -> RepositoryError {
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use application::repository_contract::check_contract;
+    use application::repository_contract::{check_contract, check_settings_contract};
 
     use super::*;
 
@@ -512,6 +587,14 @@ mod tests {
     fn honours_the_repository_contract() {
         // Act & Assert
         check_contract(|| SqliteMeasurementRepository::open_in_memory().expect("a history"));
+    }
+
+    #[test]
+    fn honours_the_settings_contract() {
+        // Act & Assert
+        check_settings_contract(|| {
+            SqliteMeasurementRepository::open_in_memory().expect("a history")
+        });
     }
 
     #[test]

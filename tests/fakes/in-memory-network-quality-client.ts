@@ -12,6 +12,7 @@ import type {
   PeriodChoice,
   SegmentDisplay,
   SeriesDisplay,
+  SettingsForm,
   WindowModeTexts,
 } from '../../src/bindings'
 import type { NetworkQualityClient } from '../../src/services/network-quality-client'
@@ -159,6 +160,10 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private dashboardSummary = createDashboardSummary()
   private evolution = createEvolutionDisplay()
   readonly evolutionRequests: PeriodChoice[] = []
+  readonly savedForms: SettingsForm[] = []
+  private settings: SettingsForm = { launchAtLogin: true, appearance: 'system', ownServer: null }
+  private settingsRefusal: string | null = null
+  private readonly confirmation = faker.lorem.sentence()
 
   constructor(
     private readonly appInfo: AppInfo = { name: faker.word.noun(), version: faker.system.semver() },
@@ -260,6 +265,30 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   setEvolution(evolution: EvolutionDisplay): void {
     this.evolution = evolution
+  }
+
+  readSettings(): Promise<SettingsForm> {
+    return Promise.resolve({ ...this.settings })
+  }
+
+  /** Every save is refused with `refusal` until `acceptSettings`. */
+  refuseSettings(refusal: string): void {
+    this.settingsRefusal = refusal
+  }
+
+  acceptSettings(): void {
+    this.settingsRefusal = null
+  }
+
+  saveSettings(form: SettingsForm): Promise<string> {
+    this.savedForms.push({ ...form })
+    if (this.settingsRefusal !== null) return Promise.reject(new Error(this.settingsRefusal))
+    this.settings = { ...form }
+    return Promise.resolve(this.confirmation)
+  }
+
+  readConfirmation(): string {
+    return this.confirmation
   }
 
   pushDisplay(display: ConnectionDisplay): void {

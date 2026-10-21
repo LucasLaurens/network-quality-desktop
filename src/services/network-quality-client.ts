@@ -5,6 +5,7 @@ import type {
   DashboardSummaryDisplay,
   EvolutionDisplay,
   PeriodChoice,
+  SettingsForm,
   WindowModeTexts,
 } from '../bindings'
 
@@ -28,6 +29,9 @@ export interface NetworkQualityClient {
   readDashboardSummary(utcOffsetSeconds: number): Promise<DashboardSummaryDisplay>
   /** The chart of a period, every metric included. */
   readEvolution(period: PeriodChoice, utcOffsetSeconds: number): Promise<EvolutionDisplay>
+  readSettings(): Promise<SettingsForm>
+  /** Resolves to the confirmation to show; rejects with the sentence explaining the refusal. */
+  saveSettings(form: SettingsForm, utcOffsetSeconds: number): Promise<string>
 }
 
 export const NETWORK_QUALITY_CLIENT_KEY: InjectionKey<NetworkQualityClient> = Symbol('NetworkQualityClient')

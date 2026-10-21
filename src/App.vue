@@ -2,6 +2,7 @@
 import { inject, onMounted, ref } from 'vue'
 import type { WindowModeTexts } from './bindings'
 import DashboardView from './components/DashboardView.vue'
+import SettingsView from './components/SettingsView.vue'
 import { NETWORK_QUALITY_CLIENT_KEY } from './services/network-quality-client'
 
 // Remembered in the webview's own storage: a convenience, losing it only shows the note again.
@@ -14,6 +15,11 @@ const version = ref('…')
 const historyNotice = ref<string | null>(null)
 const windowMode = ref<WindowModeTexts | null>(null)
 const isTrayHintVisible = ref(false)
+const PAGES = [
+  { value: 'dashboard', label: 'Tableau de bord' },
+  { value: 'settings', label: 'Réglages' },
+] as const
+const page = ref<(typeof PAGES)[number]['value']>('dashboard')
 
 const isTrayHintDismissed = (): boolean => {
   try {
@@ -85,8 +91,23 @@ onMounted(async () => {
       </div>
     </aside>
     <p v-if="historyNotice" class="hint" data-history-notice>{{ historyNotice }}</p>
-    <h1>Qualité de connexion</h1>
-    <DashboardView />
+    <header class="titlebar">
+      <h1>Qualité de connexion</h1>
+      <nav class="pages" aria-label="Pages">
+        <button
+          v-for="entry in PAGES"
+          :key="entry.value"
+          type="button"
+          :aria-current="page === entry.value ? 'page' : undefined"
+          :data-page="entry.value"
+          @click="page = entry.value"
+        >
+          {{ entry.label }}
+        </button>
+      </nav>
+    </header>
+    <DashboardView v-if="page === 'dashboard'" />
+    <SettingsView v-else />
     <footer class="foot">
       <span>Version {{ version }}</span>
       <button v-if="windowMode" type="button" class="link" data-quit @click="quitApp">
@@ -100,6 +121,40 @@ onMounted(async () => {
 .window {
   max-width: var(--content-max);
   padding: var(--s6);
+}
+
+.titlebar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s4);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pages {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--sunken);
+}
+
+.pages button {
+  min-height: 28px;
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: var(--radius-nested);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+
+.pages button[aria-current='page'] {
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--ink);
 }
 
 h1 {

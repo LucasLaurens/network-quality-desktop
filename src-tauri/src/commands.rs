@@ -4,8 +4,12 @@ use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Manager, State};
 
-use application::{Clock, list_network_summaries, read_day_overview};
-use infrastructure::{LocationRequest, SystemClock, request_location_permission};
+use application::{Clock, LatencyProbe, list_network_summaries, read_day_overview};
+use domain::{MeasurementServers, ProbeOutcome, Target};
+use infrastructure::{
+    FallbackLatencyProbe, IcmpEchoSender, LocationRequest, SystemClock, TcpConnectionOpener,
+    request_location_permission,
+};
 
 use crate::dashboard_display::{
     DashboardSummaryDisplay, EvolutionDisplay, PeriodChoice, compute_day_start,
@@ -13,6 +17,9 @@ use crate::dashboard_display::{
 use crate::display::ConnectionDisplay;
 use crate::engine_inbox::EngineInbox;
 use crate::history_store::{DashboardHistory, HistoryNotice};
+use crate::settings_effects::apply_settings;
+use crate::settings_form::{SettingsForm, confirm_saved};
+use crate::settings_store::SettingsStore;
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
 use crate::shell_presenter::DisplayStore;
 use crate::text_catalog::TextCatalog;
@@ -197,6 +204,64 @@ pub async fn read_evolution(
             EvolutionDisplay::compose(&evolution, period, i64::from(utc_offset_seconds), &catalog)
         })
         .map_err(|error| error.0)
+}
+
+/// The settings as last saved, for the Réglages page.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn read_settings(store: State<'_, SettingsStore>) -> SettingsForm {
+    SettingsForm::from_settings(&store.read())
+}
+
+/// Saves every setting, applies it, and says when it was saved. A new own server must answer a
+/// ping first.
+///
+/// # Errors
+///
+/// The sentence shown under the form: an invalid address, a server that does not answer, or a
+/// storage failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_settings(
+    form: SettingsForm,
+    utc_offset_seconds: i32,
+    app: AppHandle,
+    store: State<'_, SettingsStore>,
+    inbox: State<'_, EngineInbox>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<String, String> {
+    let settings = form.to_settings(&catalog)?;
+    if let MeasurementServers::Custom(target) = settings.servers
+        && store.read().servers != settings.servers
+        && !answers_ping(target).await
+    {
+        return Err(catalog.render("server-unreachable", None));
+    }
+    store.save(&settings).map_err(|error| {
+        eprintln!("Saving the settings failed: {}", error.0);
+        catalog.render("settings-not-saved", None)
+    })?;
+    apply_settings(&app, &settings);
+    inbox.send_settings(settings).await;
+    Ok(confirm_saved(
+        SystemClock::start().read_utc_seconds(),
+        i64::from(utc_offset_seconds),
+        &catalog,
+    ))
+}
+
+/// One probe, as the engine sends them: an answer or a refused connection both prove the server
+/// is there. At most one probe timeout.
+async fn answers_ping(target: Target) -> bool {
+    FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener)
+        .send_probe(target)
+        .await
+        != ProbeOutcome::Unreachable
 }
 
 #[cfg(test)]

@@ -12,6 +12,7 @@ mod loss;
 mod offline;
 mod probe_outcome;
 mod segment;
+mod settings;
 mod target;
 mod timestamp;
 mod verdict;
@@ -37,6 +38,7 @@ pub use segment::{
     Fault, GatewayEcho, GatewayWindow, LOCAL_LATENCY_LIMIT, LOCAL_LOSS_LIMIT, LocalProblem,
     LocalSegment, Unmeasurable,
 };
+pub use settings::{Appearance, MeasurementServers, Settings};
 pub use target::Target;
 pub use timestamp::Timestamp;
 pub use verdict::Verdict;

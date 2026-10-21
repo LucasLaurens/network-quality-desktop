@@ -11,9 +11,9 @@ use application::{
     CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, EventKind, MeasurementEngine, VerdictView,
 };
 use domain::{
-    ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, Grade, LocalProblem,
-    LocalSegment, MacAddress, MeasuringCause, Medium, Metering, Metric, ProbeOutcome, Target,
-    Unmeasurable, Verdict, WifiBand, WifiLink,
+    Appearance, ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, Grade,
+    LocalProblem, LocalSegment, MacAddress, MeasurementServers, MeasuringCause, Medium, Metering,
+    Metric, ProbeOutcome, Settings, Target, Unmeasurable, Verdict, WifiBand, WifiLink,
 };
 
 // Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
@@ -1490,4 +1490,82 @@ async fn handles_a_sleep_notice_before_the_ticks_already_waiting() {
     // Assert
     assert!(answered.recv().is_ok());
     assert_eq!(presenter.count_views(), 0);
+}
+
+// Settings
+
+const OWN_SERVER: &str = "203.0.113.7";
+
+fn create_settings(servers: MeasurementServers) -> Settings {
+    Settings {
+        servers,
+        ..Settings::default()
+    }
+}
+
+#[tokio::test]
+async fn measures_the_own_server_alone_once_picked() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_every_target(ProbeOutcome::Unreachable);
+    harness
+        .network
+        .set_outcome(Target::parse(OWN_SERVER), ProbeOutcome::Answered(FAST));
+
+    // Act
+    harness
+        .engine
+        .handle(EngineMessage::SettingsChanged(create_settings(
+            MeasurementServers::Custom(Target::parse(OWN_SERVER)),
+        )))
+        .await;
+    harness.run_seconds(1).await;
+    let restarted = harness.read_last_view();
+    harness.run_seconds(WARM_UP).await;
+
+    // Assert
+    assert!(matches!(
+        restarted.diagnosis,
+        Diagnosis::Measuring {
+            collected: 1,
+            cause: MeasuringCause::NewServers,
+            ..
+        }
+    ));
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Solid)
+    );
+}
+
+#[tokio::test]
+async fn keeps_measuring_when_the_servers_stay_the_same() {
+    // Arrange
+    let mut harness = create_harness();
+    let own_server = MeasurementServers::Custom(Target::parse(OWN_SERVER));
+    harness
+        .network
+        .set_outcome(Target::parse(OWN_SERVER), ProbeOutcome::Answered(FAST));
+    harness
+        .engine
+        .handle(EngineMessage::SettingsChanged(create_settings(own_server)))
+        .await;
+    harness.run_seconds(WARM_UP).await;
+
+    // Act
+    harness
+        .engine
+        .handle(EngineMessage::SettingsChanged(Settings {
+            appearance: Appearance::Dark,
+            ..create_settings(own_server)
+        }))
+        .await;
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Solid)
+    );
 }

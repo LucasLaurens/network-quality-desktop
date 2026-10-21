@@ -124,4 +124,22 @@ describe('App', () => {
     // Assert
     expect(wrapper.get('[data-history-notice]').text()).toBe(notice)
   })
+
+  it('opens the settings page from the dashboard and back', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountApp(client)
+
+    // Act
+    await wrapper.get('[data-page="settings"]').trigger('click')
+    await flushPromises()
+    const onSettings = wrapper.find('#settings-title').exists()
+    await wrapper.get('[data-page="dashboard"]').trigger('click')
+    await flushPromises()
+
+    // Assert
+    expect(onSettings).toBe(true)
+    expect(wrapper.find('#settings-title').exists()).toBe(false)
+    expect(wrapper.get('[data-page="dashboard"]').attributes('aria-current')).toBe('page')
+  })
 })

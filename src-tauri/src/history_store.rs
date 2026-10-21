@@ -10,6 +10,7 @@ use fluent_bundle::FluentArgs;
 use infrastructure::{SqliteHistoryRecorder, SqliteMeasurementRepository, SystemClock};
 use tauri::{AppHandle, Manager};
 
+use crate::settings_store::SettingsStore;
 use crate::text_catalog::TextCatalog;
 
 const HISTORY_FILE: &str = "history.sqlite3";
@@ -66,11 +67,15 @@ impl HistoryReader for EmptyHistory {
 
 /// Opens the history in the app's data folder; an unreadable file is set aside and a new
 /// history starts. Without a usable disk, the history lives in memory for this session.
-pub fn open_history(
-    app: &AppHandle,
-    catalog: &TextCatalog,
-    now_utc: i64,
-) -> (SqliteHistoryRecorder, HistoryNotice, DashboardHistory) {
+/// Everything kept in the history file, each with the connection it needs.
+pub struct OpenedStores {
+    pub recorder: SqliteHistoryRecorder,
+    pub notice: HistoryNotice,
+    pub dashboard: DashboardHistory,
+    pub settings: SettingsStore,
+}
+
+pub fn open_history(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> OpenedStores {
     let opened = app
         .path()
         .app_data_dir()
@@ -93,21 +98,23 @@ pub fn open_history(
                 catalog.render("history-set-aside", Some(&args))
             });
             // Opened after the writer: the file exists and is migrated by now.
-            (
-                SqliteHistoryRecorder::start(opened.repository, SystemClock::start()),
-                HistoryNotice(notice),
-                DashboardHistory::open(&path),
-            )
+            OpenedStores {
+                recorder: SqliteHistoryRecorder::start(opened.repository, SystemClock::start()),
+                notice: HistoryNotice(notice),
+                dashboard: DashboardHistory::open(&path),
+                settings: SettingsStore::open(&path),
+            }
         }
         Err(error) => {
             eprintln!("Opening the history failed, it is kept in memory: {error}");
             let notice = HistoryNotice(Some(catalog.render("history-not-saved", None)));
             match SqliteMeasurementRepository::open_in_memory() {
-                Ok(repository) => (
-                    SqliteHistoryRecorder::start(repository, SystemClock::start()),
+                Ok(repository) => OpenedStores {
+                    recorder: SqliteHistoryRecorder::start(repository, SystemClock::start()),
                     notice,
-                    DashboardHistory::create_empty(),
-                ),
+                    dashboard: DashboardHistory::create_empty(),
+                    settings: SettingsStore::create_in_memory(),
+                },
                 Err(error) => panic!("an in-memory history cannot fail to open: {}", error.0),
             }
         }

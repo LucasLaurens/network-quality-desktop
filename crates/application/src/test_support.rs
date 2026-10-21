@@ -8,14 +8,14 @@ use std::time::Duration;
 use std::net::Ipv4Addr;
 
 use domain::{
-    Aggregate, ConnectionContext, GatewayEcho, Granularity, ProbeOutcome, Target, Timestamp,
-    WifiLink,
+    Aggregate, ConnectionContext, GatewayEcho, Granularity, ProbeOutcome, Settings, Target,
+    Timestamp, WifiLink,
 };
 
 use crate::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryCommand, HistoryEvent, HistoryReader,
     HistoryRecorder, LatencyProbe, MeasurementRepository, NetworkKey, RepositoryError,
-    VerdictPresenter, VerdictView, WifiReader,
+    SettingsRepository, VerdictPresenter, VerdictView, WifiReader,
 };
 
 /// The manual clock's wall-clock start: an arbitrary UTC second, on an hour boundary.
@@ -377,6 +377,23 @@ impl HistoryReader for InMemoryMeasurementRepository {
             .collect();
         events.sort_by_key(|event| event.utc);
         Ok(events)
+    }
+}
+
+/// Settings in memory: the defaults until saved.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct InMemorySettingsRepository {
+    saved: Option<Settings>,
+}
+
+impl SettingsRepository for InMemorySettingsRepository {
+    fn read_settings(&self) -> Result<Settings, RepositoryError> {
+        Ok(self.saved.unwrap_or_default())
+    }
+
+    fn save_settings(&mut self, settings: &Settings) -> Result<(), RepositoryError> {
+        self.saved = Some(*settings);
+        Ok(())
     }
 }
 

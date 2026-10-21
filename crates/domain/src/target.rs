@@ -20,6 +20,18 @@ impl Target {
         Self(address.parse().expect("a literal IP address"))
     }
 
+    /// An address typed by the user, spaces around it ignored; `None` unless it is an IP address.
+    /// O(length).
+    #[must_use]
+    pub fn try_parse(text: &str) -> Option<Self> {
+        text.trim().parse().ok().map(Self)
+    }
+
+    #[must_use]
+    pub const fn is_ipv6(self) -> bool {
+        self.0.is_ipv6()
+    }
+
     #[must_use]
     pub const fn address(self) -> IpAddr {
         self.0
