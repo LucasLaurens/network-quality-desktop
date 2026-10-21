@@ -1,5 +1,10 @@
 .DS_Store
-graft/.cache/
+node_modules/
+dist/
+target/
+src-tauri/gen/
+coverage/
+lefthook-local.yml
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/

@@ -1,0 +1,26 @@
+# Versioned hooks. A machine may add its own checks in lefthook-local.yml (not versioned).
+pre-commit:
+  parallel: true
+  commands:
+    rust-format:
+      glob: '*.rs'
+      run: cargo fmt --all --check
+    rust-lint:
+      glob: '*.rs'
+      run: cargo clippy --workspace --all-targets -- -D warnings
+    front-lint:
+      glob: '*.{ts,vue,js,mjs}'
+      run: pnpm exec eslint --max-warnings 0 --no-warn-ignored {staged_files}
+    format:
+      glob: '*.{ts,vue,js,mjs,json,md,css,html,yml,yaml}'
+      run: pnpm exec prettier --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude --check {staged_files}
+
+commit-msg:
+  commands:
+    conventional:
+      run: node scripts/check-commit-message.mjs {1}
+
+pre-push:
+  commands:
+    tests:
+      run: pnpm test

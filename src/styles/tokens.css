@@ -1,0 +1,73 @@
+/* Single source of the design tokens described in DESIGN.md. */
+:root {
+  color-scheme: light dark;
+  /* Warm stone tint shared by every neutral. */
+  --hue: 85;
+  --content-max: 900px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --bg: oklch(97.6% 0.004 var(--hue));
+  --surface: oklch(99.4% 0.003 var(--hue));
+  --sunken: oklch(95.2% 0.005 var(--hue));
+  --ink: oklch(23% 0.01 var(--hue));
+  --muted: oklch(48% 0.012 var(--hue));
+  --line: oklch(90% 0.006 var(--hue));
+  --zone: oklch(93.5% 0.005 var(--hue));
+  --focus: oklch(55% 0.12 250);
+  --solid: oklch(56% 0.13 150);
+  --unstable: oklch(62% 0.14 70);
+  --degraded: oklch(55% 0.18 27);
+  --offline: oklch(56% 0.01 var(--hue));
+  --measuring: oklch(56% 0.1 250);
+  --shadow: 0 1px 2px oklch(20% 0.01 var(--hue) / 6%), 0 12px 32px oklch(20% 0.01 var(--hue) / 10%);
+  --radius: 8px;
+  --radius-nested: 6px;
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --t-xs: 11px;
+  --t-sm: 12px;
+  --t-md: 13px;
+  --t-lg: 16px;
+  --t-xl: 19px;
+  --t-2xl: 28px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: oklch(18.5% 0.006 var(--hue));
+    --surface: oklch(22% 0.007 var(--hue));
+    --sunken: oklch(20% 0.006 var(--hue));
+    --ink: oklch(94% 0.006 var(--hue));
+    --muted: oklch(71% 0.01 var(--hue));
+    --line: oklch(31% 0.008 var(--hue));
+    --zone: oklch(31% 0.008 var(--hue));
+    --focus: oklch(72% 0.11 250);
+    --solid: oklch(72% 0.14 150);
+    --unstable: oklch(80% 0.14 75);
+    --degraded: oklch(68% 0.17 27);
+    --offline: oklch(66% 0.01 var(--hue));
+    --measuring: oklch(70% 0.1 250);
+    --shadow: 0 1px 2px oklch(0% 0 0 / 30%), 0 12px 32px oklch(0% 0 0 / 45%);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--t-md) / 1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
