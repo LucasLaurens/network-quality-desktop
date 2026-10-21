@@ -1132,7 +1132,7 @@ async fn writes_the_minute_in_progress_when_asked_to_flush() {
 }
 
 #[tokio::test]
-async fn answers_with_the_last_hour_second_by_second() {
+async fn answers_with_the_last_hour_and_the_current_network() {
     // Arrange
     let mut harness = create_harness();
     harness
@@ -1145,11 +1145,15 @@ async fn answers_with_the_last_hour_second_by_second() {
     // Act
     harness
         .engine
-        .handle(EngineMessage::ReadLastHour(answer))
+        .handle(EngineMessage::ReadLiveHistory(answer))
         .await;
 
     // Assert
-    let points = answered.await.expect("an answer");
-    assert_eq!(points.len(), 3);
-    assert_eq!(points[0].latency, Some(FAST));
+    let live = answered.await.expect("an answer");
+    assert_eq!(live.last_hour.len(), 3);
+    assert_eq!(live.last_hour[0].sample.latency, Some(FAST));
+    assert_eq!(
+        live.network.map(|network| network.kind),
+        Some(ConnectionKind::WiFi)
+    );
 }

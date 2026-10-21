@@ -30,6 +30,23 @@ export const commands = {
 	revealNetworkName: () => __TAURI_INVOKE<void>("reveal_network_name"),
 	/**  Why the history is not what it was, if something happened to it at launch. */
 	readHistoryNotice: () => __TAURI_INVOKE<string | null>("read_history_notice"),
+	/**
+	 *  The day so far and the networks of the last 30 days. `utc_offset_seconds` is the user's time
+	 *  zone, ahead of UTC: the day starts at local midnight.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The history could not be read.
+	 */
+	readDashboardSummary: (utcOffsetSeconds: number) => typedError<DashboardSummaryDisplay, string>(__TAURI_INVOKE("read_dashboard_summary", { utcOffsetSeconds })),
+	/**
+	 *  The chart of `period`, with every metric: switching metric needs no new reading.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The history could not be read.
+	 */
+	readEvolution: (period: PeriodChoice, utcOffsetSeconds: number) => typedError<EvolutionDisplay, string>(__TAURI_INVOKE("read_evolution", { period, utcOffsetSeconds })),
 };
 
 /** Events */
@@ -62,7 +79,29 @@ export type ConnectionDisplay = {
 /**  Sent to every window whenever what the popover shows changes. */
 export type ConnectionDisplayChanged = ConnectionDisplay;
 
+export type DashboardSummaryDisplay = {
+	overview: OverviewDisplay,
+	/**  The most measured first; empty before the first minute is kept. */
+	networks: NetworkRowDisplay[],
+};
+
 export type DisplayState = "solid" | "unstable" | "degraded" | "offline" | "measuring";
+
+export type EvolutionDisplay = {
+	/**  When each point starts, in the user's time zone. */
+	times: string[],
+	/**  The state that lasted longest in each point, for the band under the chart. */
+	states: (DisplayState | null)[],
+	latency: SeriesDisplay,
+	jitter: SeriesDisplay,
+	loss: SeriesDisplay,
+	networkChanges: NetworkChangeDisplay[],
+	/**  The band's legend, best state first; the tooltip names a state with it too. */
+	stateLabels: StateLabelDisplay[],
+	coverage: string,
+	/**  Nothing measured in the period yet: a sentence replaces the chart. */
+	isEmpty: boolean,
+};
 
 /**
  *  Positions on a gauge, as fractions of its length (0 = left end, 1 = right end), and the
@@ -77,12 +116,20 @@ export type Gauge = {
 
 export type MetricDisplay = {
 	name: string,
+	/**  What the metric means, in plain words. */
+	definition: string,
 	method: string,
 	/**  `None` while the metric cannot be computed yet. */
 	value: string | null,
 	gauge: Gauge | null,
 	/**  Shown under a metric close to its next threshold. */
 	hint: string | null,
+};
+
+export type NetworkChangeDisplay = {
+	/**  Where on the time axis, from 0 (left end) to 1 (right end). */
+	position: number | null,
+	label: string,
 };
 
 export type NetworkDisplay = {
@@ -92,6 +139,27 @@ export type NetworkDisplay = {
 	wifiDetails: string | null,
 	/**  Offered when the system hides the Wi-Fi name until the location permission is given. */
 	revealLabel: string | null,
+};
+
+export type NetworkRowDisplay = {
+	label: string,
+	connection: string,
+	shares: StateShares,
+	solidLabel: string,
+	/**  Every share in words, for screen readers. */
+	sharesLabel: string,
+	latencyP90: string,
+	loss: string,
+	isCurrent: boolean,
+	isMostReliable: boolean,
+};
+
+/**  The four facts under the current state. */
+export type OverviewDisplay = {
+	today: string,
+	outages: string,
+	worstMoment: string,
+	onNetworkSince: string,
 };
 
 export type PathDisplay = {
@@ -104,6 +172,9 @@ export type PathDisplay = {
 	description: string,
 };
 
+/**  The period picked above the chart. */
+export type PeriodChoice = "hour" | "day" | "week" | "month";
+
 export type SegmentDisplay = {
 	/**  The link and its latency, e.g. "Wi-Fi, 4 ms". */
 	label: string,
@@ -113,6 +184,30 @@ export type SegmentDisplay = {
 	state: DisplayState | null,
 	/**  Drawn as broken: the box answers, the Internet does not. */
 	isCut: boolean,
+};
+
+/**  One metric across the chart, in its own unit (ms or %). */
+export type SeriesDisplay = {
+	/**  One per point; `None` where nothing was measured: the line breaks there. */
+	values: (number | null)[],
+	texts: (string | null)[],
+	unstableFrom: number | null,
+	degradedAbove: number | null,
+	unstableLabel: string,
+	degradedLabel: string,
+};
+
+export type StateLabelDisplay = {
+	state: DisplayState,
+	label: string,
+};
+
+/**  Percent of the measured time spent in each state. */
+export type StateShares = {
+	solid: number | null,
+	unstable: number | null,
+	degraded: number | null,
+	offline: number | null,
 };
 
 /**
@@ -127,6 +222,15 @@ export type WindowModeTexts = {
 };
 
 /* Tauri Specta runtime */
+async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
+    try {
+        return { status: "ok", data: await result };
+    } catch (e) {
+        if (e instanceof Error) throw e;
+        return { status: "error", error: e as any };
+    }
+}
+
 type EventEmit<T> = [T] extends [null] ? () => Promise<void> : (payload: T) => Promise<void>;
 
 function makeEvent<T>(name: string, serialize?: (payload: T) => unknown, deserialize?: (payload: any) => T) {

@@ -124,21 +124,23 @@ mod tests {
 
     /// A unit right after a number, glued to it ("60s") or after a plain space ("60 s").
     fn has_missing_no_break_space_before_unit(text: &str) -> bool {
-        ["ms", "s", "Mbit/s", "dBm", "GHz"].iter().any(|unit| {
-            text.match_indices(unit).any(|(index, _)| {
-                let is_whole_word = text[index + unit.len()..]
-                    .chars()
-                    .next()
-                    .is_none_or(|c| !c.is_alphanumeric());
-                let mut before = text[..index].chars().rev();
-                let follows_a_number = match before.next() {
-                    Some(' ') => before.next().is_some_and(is_number_end),
-                    Some(c) => is_number_end(c),
-                    None => false,
-                };
-                is_whole_word && follows_a_number
+        ["ms", "s", "min", "h", "j", "Mbit/s", "dBm", "GHz"]
+            .iter()
+            .any(|unit| {
+                text.match_indices(unit).any(|(index, _)| {
+                    let is_whole_word = text[index + unit.len()..]
+                        .chars()
+                        .next()
+                        .is_none_or(|c| !c.is_alphanumeric());
+                    let mut before = text[..index].chars().rev();
+                    let follows_a_number = match before.next() {
+                        Some(' ') => before.next().is_some_and(is_number_end),
+                        Some(c) => is_number_end(c),
+                        None => false,
+                    };
+                    is_whole_word && follows_a_number
+                })
             })
-        })
     }
 
     fn is_number_end(character: char) -> bool {

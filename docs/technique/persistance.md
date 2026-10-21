@@ -41,22 +41,31 @@ Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; l
 - Changement de réseau : la minute en cours part sous l'ancien réseau, un événement `network_changed` est noté. Le même réseau relu sans sa MAC ou sans son nom garde ceux appris avant (`complete_with`). Coupure : `offline_started` puis `offline_ended`. Sans route, les secondes comptent pour le dernier réseau vu ; avant le premier réseau vu, sous « aucun réseau » (type `other`, sans MAC).
 - La gigue d'une seconde n'est comptée que si la seconde précédente est mesurée : pas d'écart calculé à travers une veille ou un tick sauté. L'heure UTC d'un tick est lue avant les sondes : deux ticks ne tombent jamais dans la même seconde.
 - Fermeture : `RunEvent::Exit` envoie `EngineMessage::Flush` ; l'app attend au plus 2 s en tout, envoi compris (boîte pleine, fil arrêté), que le fil confirme l'écriture de la minute en cours. Veille et réveil s'y ajouteront avec leur ticket.
-- La dernière heure se lit par `EngineMessage::ReadLastHour` ; la commande qui l'expose au front arrivera avec le tableau de bord.
+- La dernière heure et le réseau courant se lisent par `EngineMessage::ReadLiveHistory` (`LiveHistory`).
+
+## Lecture
+
+- Le tableau de bord lit par le port `HistoryReader` (`list_all_aggregates`, `list_events`), séparé de `MeasurementRepository` : l'écrivain n'en a pas besoin. `list_all_aggregates` rend les lignes de tous les réseaux d'une granularité et d'une plage, par l'index `(granularity, start)`.
+- Le shell ouvre une seconde connexion SQLite en lecture seule (`SqliteMeasurementRepository::open_read_only`), après l'écrivain : en WAL, elle lit pendant qu'il écrit, sans l'attendre, et ne peut rien écrire. Si l'historique vit en mémoire (repli), le lecteur est un objet nul qui ne rend rien : seule la dernière heure en mémoire s'affiche.
+- Les calculs sont des fonctions de la couche application (`dashboard.rs`) : `read_evolution` (seaux de largeur fixe, vides là où rien n'a été mesuré, changements de réseau, couverture), `read_day_overview` (journée, coupures, pire minute, arrivée sur le réseau courant), `list_network_summaries` (30 jours par réseau, le plus fiable). Les périodes de 7 et 30 jours lisent les heures closes puis les minutes de l'heure en cours. La dernière heure lit les minutes écrites avant le début de la mémoire, puis la mémoire, sans compter deux fois la minute où la mémoire commence.
+- Deux événements `network_changed` successifs dont l'un n'a pas de MAC (lue plus tard) ne sont pas un changement (`NetworkKey::is_likely_same`). Le regroupement par réseau suit l'identité stockée (`is_same_identity`).
 
 ## Contrat
 
-Le port `MeasurementRepository` a deux implémentations : `InMemoryMeasurementRepository` (faux pour les tests) et `SqliteMeasurementRepository`. Une seule suite, `application::repository_contract::check_contract`, tourne sur les deux (SQLite en mémoire) : ajout et fusion d'une minute, remplacement d'une heure, plage triée, réseaux séparés, heures ouvertes, purge, minutes d'une heure non conservée gardées, événements triés, libellé appris plus tard ou par un événement et jamais effacé, réseaux sans MAC regroupés par type.
+Les ports `MeasurementRepository` et `HistoryReader` ont deux implémentations : `InMemoryMeasurementRepository` (faux pour les tests) et `SqliteMeasurementRepository`. Une seule suite, `application::repository_contract::check_contract`, tourne sur les deux (SQLite en mémoire) : ajout et fusion d'une minute, remplacement d'une heure, plage triée, réseaux séparés, heures ouvertes, purge, minutes d'une heure non conservée gardées, événements triés, libellé appris plus tard ou par un événement et jamais effacé, réseaux sans MAC regroupés par type, lignes de tous les réseaux d'une plage.
 
 ## Complexité
 
-| Opération                                        | Temps                                                                                        | Espace  |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------- |
-| Seconde (cumul de la minute, tampon d'une heure) | O(1)                                                                                         | O(1)    |
-| Fin de minute (écriture depuis la mémoire)       | O(B), B = 24                                                                                 | O(B)    |
-| Fusion horaire                                   | O(60·B)                                                                                      | O(60·B) |
-| Percentile sur un histogramme fusionné           | O(B)                                                                                         | O(1)    |
-| Période sur la clé primaire                      | O(log n + k)                                                                                 | O(k)    |
-| Purge des minutes                                | O(log n + k) par l'index `(granularity, start)`, une vérification sur clé primaire par ligne | O(1)    |
-| Heures restées ouvertes                          | O(m log m), m minutes gardées                                                                | O(m)    |
-| Ouverture (`quick_check`)                        | O(taille du fichier)                                                                         | O(1)    |
-| Lecture de la dernière heure                     | O(n), n ≤ 3 600                                                                              | O(n)    |
+| Opération                                        | Temps                                                                                        | Espace                   |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------ |
+| Seconde (cumul de la minute, tampon d'une heure) | O(1)                                                                                         | O(1)                     |
+| Fin de minute (écriture depuis la mémoire)       | O(B), B = 24                                                                                 | O(B)                     |
+| Fusion horaire                                   | O(60·B)                                                                                      | O(60·B)                  |
+| Percentile sur un histogramme fusionné           | O(B)                                                                                         | O(1)                     |
+| Période sur la clé primaire                      | O(log n + k)                                                                                 | O(k)                     |
+| Purge des minutes                                | O(log n + k) par l'index `(granularity, start)`, une vérification sur clé primaire par ligne | O(1)                     |
+| Heures restées ouvertes                          | O(m log m), m minutes gardées                                                                | O(m)                     |
+| Ouverture (`quick_check`)                        | O(taille du fichier)                                                                         | O(1)                     |
+| Lecture de la dernière heure                     | O(n), n ≤ 3 600                                                                              | O(n)                     |
+| Courbe d'une période                             | O(log n + r + s + e), r lignes, s ≤ 3 600 secondes en mémoire, e événements                  | O(r + p), p ≤ 241 points |
+| Réseaux sur 30 jours                             | O(log n + r + k log k), k réseaux                                                            | O(r + k)                 |

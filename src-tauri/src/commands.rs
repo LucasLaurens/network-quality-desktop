@@ -4,12 +4,17 @@ use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Manager, State};
 
-use crate::display::ConnectionDisplay;
-use infrastructure::{LocationRequest, request_location_permission};
+use application::{Clock, list_network_summaries, read_day_overview};
+use infrastructure::{LocationRequest, SystemClock, request_location_permission};
 
-use crate::history_store::HistoryNotice;
+use crate::dashboard_display::{
+    DashboardSummaryDisplay, EvolutionDisplay, PeriodChoice, compute_day_start,
+};
+use crate::display::ConnectionDisplay;
+use crate::history_store::{DashboardHistory, EngineInbox, HistoryNotice};
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
 use crate::shell_presenter::DisplayStore;
+use crate::text_catalog::TextCatalog;
 use crate::windows::{POPOVER_WINDOW, report_failure, show_dashboard};
 
 /// Identity of the running build, shown in the window footer.
@@ -138,6 +143,64 @@ pub fn reveal_network_name(app: AppHandle) {
 )]
 pub fn read_history_notice(notice: State<'_, HistoryNotice>) -> Option<String> {
     notice.0.clone()
+}
+
+/// The day so far and the networks of the last 30 days. `utc_offset_seconds` is the user's time
+/// zone, ahead of UTC: the day starts at local midnight.
+///
+/// # Errors
+///
+/// The history could not be read.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_dashboard_summary(
+    utc_offset_seconds: i32,
+    inbox: State<'_, EngineInbox>,
+    history: State<'_, DashboardHistory>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<DashboardSummaryDisplay, String> {
+    let live = inbox.read_live().await;
+    let now = SystemClock::start().read_utc_seconds();
+    let offset = i64::from(utc_offset_seconds);
+    history
+        .read(|reader| {
+            let overview = read_day_overview(reader, &live, compute_day_start(now, offset), now)?;
+            let summaries = list_network_summaries(reader, &live, now)?;
+            Ok(DashboardSummaryDisplay::compose(
+                &overview,
+                &summaries,
+                live.network.is_some(),
+                now,
+                offset,
+                &catalog,
+            ))
+        })
+        .map_err(|error: application::RepositoryError| error.0)
+}
+
+/// The chart of `period`, with every metric: switching metric needs no new reading.
+///
+/// # Errors
+///
+/// The history could not be read.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_evolution(
+    period: PeriodChoice,
+    utc_offset_seconds: i32,
+    inbox: State<'_, EngineInbox>,
+    history: State<'_, DashboardHistory>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<EvolutionDisplay, String> {
+    let live = inbox.read_live().await;
+    let now = SystemClock::start().read_utc_seconds();
+    let period = period.into();
+    history
+        .read(|reader| application::read_evolution(reader, &live, period, now))
+        .map(|evolution| {
+            EvolutionDisplay::compose(&evolution, period, i64::from(utc_offset_seconds), &catalog)
+        })
+        .map_err(|error| error.0)
 }
 
 #[cfg(test)]

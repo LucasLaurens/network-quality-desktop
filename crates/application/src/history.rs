@@ -23,6 +23,22 @@ pub struct NetworkKey {
     pub name: Option<String>,
 }
 
+impl NetworkKey {
+    /// Same gateway and kind: the identity rows are stored under. O(1).
+    #[must_use]
+    pub fn is_same_identity(&self, other: &Self) -> bool {
+        self.gateway == other.gateway && self.kind == other.kind
+    }
+
+    /// Same kind, and no gateway that tells them apart: a MAC read late is not a new network.
+    /// O(1).
+    #[must_use]
+    pub fn is_likely_same(&self, other: &Self) -> bool {
+        self.kind == other.kind
+            && (self.gateway == other.gateway || self.gateway.is_none() || other.gateway.is_none())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventKind {
     NetworkChanged,
@@ -220,8 +236,7 @@ impl HistoryTracker {
         self.previous = second.latency.map(|latency| (second.utc, latency));
         self.ring.record(SecondPoint {
             utc: second.utc,
-            latency: second.latency,
-            state,
+            sample,
         });
         if let Some((start, aggregate)) = self.accumulator.record_second(second.utc, &sample) {
             recorder.record(HistoryCommand::SaveMinute {
@@ -242,6 +257,16 @@ impl HistoryTracker {
     #[must_use]
     pub fn list_last_hour(&self) -> Vec<SecondPoint> {
         self.ring.list_points()
+    }
+
+    /// What only memory holds: the last hour and the network the minutes are saved under.
+    /// O(n) for n ≤ 3 600.
+    #[must_use]
+    pub fn read_live(&self) -> LiveHistory {
+        LiveHistory {
+            last_hour: self.ring.list_points(),
+            network: self.context.map(|_| self.network.clone()),
+        }
     }
 
     /// Same network: keeps what was learnt (a MAC resolved, a name read later). Another one:
@@ -289,6 +314,15 @@ impl HistoryTracker {
             });
         }
     }
+}
+
+/// The part of the history kept in memory by the engine.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LiveHistory {
+    /// Oldest first.
+    pub last_hour: Vec<SecondPoint>,
+    /// `None` before any network was seen.
+    pub network: Option<NetworkKey>,
 }
 
 /// What the engine measured during one second.

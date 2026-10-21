@@ -1,6 +1,6 @@
 # Historique
 
-Ce qui est conservé, combien de temps, et ce qui se passe si le fichier est abîmé. La lecture des courbes et la comparaison des réseaux viendront avec le tableau de bord.
+Ce qui est conservé, combien de temps, et ce qui se passe si le fichier est abîmé. Le [tableau de bord](tableau-de-bord.md) en tire ses courbes et sa comparaison des réseaux.
 
 ## Ce qui est conservé
 
