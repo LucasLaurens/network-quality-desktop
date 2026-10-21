@@ -33,6 +33,22 @@ impl LatencyWindow {
     }
 }
 
+impl LatencyWindow {
+    /// Mean gap between successive answered seconds, the quantity RFC 3550's jitter estimates;
+    /// `None` without two successive answers. O(n) time and space, n ≤ 15.
+    #[must_use]
+    pub fn compute_jitter(&self) -> Option<Duration> {
+        let gaps: Vec<Duration> = self
+            .seconds
+            .iter()
+            .zip(self.seconds.iter().skip(1))
+            .filter_map(|(previous, current)| Some(current.as_ref()?.abs_diff(*previous.as_ref()?)))
+            .collect();
+        let count = u32::try_from(gaps.len()).ok().filter(|count| *count > 0)?;
+        Some(gaps.iter().sum::<Duration>() / count)
+    }
+}
+
 /// Median of the round trips that came back, `None` when no target answered.
 /// O(k log k) time, O(k) space, k being the number of targets (2 by default).
 #[must_use]

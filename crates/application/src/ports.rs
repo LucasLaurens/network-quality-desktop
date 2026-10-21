@@ -1,13 +1,12 @@
 use std::future::Future;
-use std::time::Duration;
 
-use domain::{Target, Timestamp};
+use domain::{ProbeOutcome, Target, Timestamp};
 
 use crate::VerdictView;
 
-/// Measures one round trip to a target; `None` when it did not answer in time.
+/// Sends one probe to a target and says whether it answered, was lost, or is unreachable.
 pub trait LatencyProbe {
-    fn measure_round_trip(&self, target: Target) -> impl Future<Output = Option<Duration>> + Send;
+    fn send_probe(&self, target: Target) -> impl Future<Output = ProbeOutcome> + Send;
 }
 
 /// Monotonic time source, replaced by a manual clock in tests.

@@ -1,10 +1,16 @@
 use std::time::Duration;
 
-use domain::{Hysteresis, LatencyWindow, Target, Thresholds, Verdict, compute_median};
+use domain::{
+    Grade, GradeBounds, Hysteresis, LatencyWindow, LossRate, LossWindow, OfflineDetector,
+    ProbeOutcome, Scalable, Target, Thresholds, Verdict, compute_median,
+};
 use futures_util::future::join_all;
 use tokio::sync::mpsc;
 
 use crate::{Clock, LatencyProbe, VerdictPresenter};
+
+/// Seconds with an answer needed before the first verdict.
+const WARM_UP_SAMPLES: u32 = 10;
 
 /// Messages the single measurement actor reacts to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,11 +19,31 @@ pub enum EngineMessage {
     Tick,
 }
 
+/// One metric as shown to the user: its value, its grade and whether it is close to getting worse.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MetricReading<T> {
+    pub value: Option<T>,
+    pub grade: Option<Grade>,
+    pub is_near_next_threshold: bool,
+}
+
+impl<T: Scalable> MetricReading<T> {
+    fn compute(value: Option<T>, bounds: &GradeBounds<T>) -> Self {
+        Self {
+            value,
+            grade: value.map(|value| bounds.compute_grade(value)),
+            is_near_next_threshold: value.is_some_and(|value| bounds.is_near_next_threshold(value)),
+        }
+    }
+}
+
 /// What the engine hands to the presenters after each tick.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VerdictView {
     pub verdict: Verdict,
-    pub latency_p90: Option<Duration>,
+    pub latency: MetricReading<Duration>,
+    pub jitter: MetricReading<Duration>,
+    pub loss: MetricReading<LossRate>,
 }
 
 /// Owns every piece of measurement state; nothing else mutates it.
@@ -27,8 +53,11 @@ pub struct MeasurementEngine<P, C, V> {
     presenter: V,
     targets: Vec<Target>,
     thresholds: Thresholds,
-    window: LatencyWindow,
+    latency: LatencyWindow,
+    loss: LossWindow,
+    offline: OfflineDetector,
     hysteresis: Hysteresis,
+    samples_since_restart: u32,
 }
 
 impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> {
@@ -40,8 +69,11 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
             presenter,
             targets,
             thresholds: Thresholds::for_video_calls(),
-            window: LatencyWindow::default(),
+            latency: LatencyWindow::default(),
+            loss: LossWindow::default(),
+            offline: OfflineDetector::default(),
             hysteresis: Hysteresis::default(),
+            samples_since_restart: 0,
         }
     }
 
@@ -61,24 +93,78 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
     }
 
     async fn measure_one_second(&mut self) {
-        let round_trips = join_all(
+        let outcomes = join_all(
             self.targets
                 .iter()
-                .map(|target| self.probe.measure_round_trip(*target)),
+                .map(|target| self.probe.send_probe(*target)),
         )
         .await;
-        self.window.record_second(compute_median(&round_trips));
-        let latency_p90 = self.window.compute_p90();
-        let verdict = match latency_p90 {
-            Some(p90) => {
-                let observed = self.thresholds.latency.compute_grade(p90);
-                self.hysteresis.observe(observed, self.clock.read_now())
+        self.record_outcomes(&outcomes);
+        let view = self.compute_view(&outcomes);
+        self.presenter.present(&view);
+    }
+
+    /// O(k log k) time, O(k) space for k targets.
+    fn record_outcomes(&mut self, outcomes: &[ProbeOutcome]) {
+        let round_trips: Vec<Option<Duration>> = outcomes
+            .iter()
+            .map(|outcome| match outcome {
+                ProbeOutcome::Answered(round_trip) => Some(*round_trip),
+                ProbeOutcome::LostButReachable | ProbeOutcome::Unreachable => None,
+            })
+            .collect();
+        let median = compute_median(&round_trips);
+        self.latency.record_second(median);
+        let sent = u32::try_from(outcomes.len()).unwrap_or(u32::MAX);
+        let lost = u32::try_from(
+            round_trips
+                .iter()
+                .filter(|round_trip| round_trip.is_none())
+                .count(),
+        )
+        .unwrap_or(sent);
+        self.loss.record_second(sent, lost);
+        if median.is_some() {
+            self.samples_since_restart += 1;
+        }
+    }
+
+    /// O(n log n) time, O(n) space, n ≤ 15 window samples.
+    fn compute_view(&mut self, outcomes: &[ProbeOutcome]) -> VerdictView {
+        let any_reachable = outcomes
+            .iter()
+            .any(|outcome| *outcome != ProbeOutcome::Unreachable);
+        let latency = MetricReading::compute(self.latency.compute_p90(), &self.thresholds.latency);
+        let jitter = MetricReading::compute(self.latency.compute_jitter(), &self.thresholds.jitter);
+        let loss = MetricReading::compute(self.loss.compute_rate(), &self.thresholds.loss);
+        let verdict = if self.offline.record_second(any_reachable) {
+            self.restart();
+            Verdict::Offline
+        } else if self.samples_since_restart < WARM_UP_SAMPLES {
+            Verdict::Measuring
+        } else {
+            let worst = [latency.grade, jitter.grade, loss.grade]
+                .into_iter()
+                .flatten()
+                .max();
+            match worst {
+                Some(grade) => self.hysteresis.observe(grade, self.clock.read_now()),
+                None => Verdict::Measuring,
             }
-            None => self.hysteresis.restart(),
         };
-        self.presenter.present(&VerdictView {
+        VerdictView {
             verdict,
-            latency_p90,
-        });
+            latency,
+            jitter,
+            loss,
+        }
+    }
+
+    /// After an outage the history no longer describes the connection: measure again from scratch.
+    fn restart(&mut self) {
+        self.latency = LatencyWindow::default();
+        self.loss = LossWindow::default();
+        self.hysteresis = Hysteresis::default();
+        self.samples_since_restart = 0;
     }
 }

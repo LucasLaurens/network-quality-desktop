@@ -59,5 +59,6 @@ pub const fn describe_verdict(verdict: Verdict) -> &'static str {
         Verdict::Graded(Grade::Solid) => "Solide",
         Verdict::Graded(Grade::Unstable) => "Instable",
         Verdict::Graded(Grade::Degraded) => "Dégradée",
+        Verdict::Offline => "Hors ligne",
     }
 }
