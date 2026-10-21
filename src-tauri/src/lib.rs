@@ -182,7 +182,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         urgent: urgent_sender,
     };
     app.manage(engine_inbox.clone());
-    let engine = MeasurementEngine::new(
+    let mut engine = MeasurementEngine::new(
         EnginePorts {
             probe: create_latency_probe(),
             clock: SystemClock::start(),
@@ -195,6 +195,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         },
         list_targets(settings.servers),
     );
+    engine.apply_settings(settings);
     let change_sender = sender.clone();
     InterfaceChangeWatcher.watch(move || {
         // Dropped when the inbox is full: the periodic reading still catches the change within 10 s.
@@ -202,13 +203,6 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     });
     SystemPowerEventSource.watch(move |event| engine_inbox.relay_power_event(event));
     keep_measuring_in_background();
-    // The engine starts with the defaults: the saved notification choice reaches it first.
-    if sender
-        .try_send(EngineMessage::SettingsChanged(settings))
-        .is_err()
-    {
-        eprintln!("The saved settings could not reach the measurement engine");
-    }
     tauri::async_runtime::spawn(engine.run(inbox, urgent));
     tauri::async_runtime::spawn(send_ticks(sender));
     Ok(())

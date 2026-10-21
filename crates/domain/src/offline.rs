@@ -1,4 +1,5 @@
-const OFFLINE_AFTER_SECONDS: u32 = 5;
+/// Seconds without any server before « Hors ligne » shows.
+pub const OFFLINE_AFTER_SECONDS: u32 = 5;
 
 /// Counts consecutive seconds in which no target was reachable at all.
 #[derive(Debug, Clone, Default)]

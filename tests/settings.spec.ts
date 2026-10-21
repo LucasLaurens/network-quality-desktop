@@ -64,6 +64,23 @@ describe('SettingsView', () => {
     expect(client.savedForms.at(-1)?.notifiesOnDegradation).toBe(false)
   })
 
+  it('shows the notifications as turned off once saved so', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    await client.saveSettings({
+      launchAtLogin: true,
+      appearance: 'system',
+      ownServer: null,
+      notifiesOnDegradation: false,
+    })
+
+    // Act
+    const wrapper = await mountSettings(client)
+
+    // Assert
+    expect((wrapper.get('#setting-notify').element as HTMLInputElement).checked).toBe(false)
+  })
+
   it('saves the appearance picked', async () => {
     // Arrange
     const client = new InMemoryNetworkQualityClient()

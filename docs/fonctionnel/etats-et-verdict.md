@@ -49,8 +49,9 @@ L'app s'ouvre à l'ouverture de session tant que le réglage « Lancer à l'ouve
 
 Quand l'état affiché empire durablement, une notification du système le dit : son titre est le nouvel état (« Instable », « Dégradée », « Hors ligne »), son texte le constat (« L'opérateur est en cause, le Wi-Fi va bien. »), sans action ni chiffre.
 
-- Empirer durablement : un état plus mauvais ne s'affiche qu'après 10 secondes soutenues ; une coupure est annoncée quand « Hors ligne » dure depuis 10 secondes.
-- Jamais pour une amélioration, ni pour le premier état mesuré après « Mesure en cours » (démarrage, réveil, nouveau réseau, nouveaux serveurs) : il n'empire rien de connu.
+- Empirer durablement : un état plus mauvais ne s'affiche qu'après 10 secondes soutenues ; une coupure est annoncée après 10 secondes sans aucun serveur (« Hors ligne » s'affiche à 5 secondes), même juste après un démarrage ou un réveil.
+- Jamais pour une amélioration, ni pour le premier niveau mesuré après « Mesure en cours » (démarrage, réveil, nouveau réseau, nouveaux serveurs) : il n'empire rien de connu.
+- Un lien qui oscille entre Instable et Dégradée peut notifier à chaque passage vers le pire : au plus une fois toutes les 40 secondes, puisqu'un retour vers le mieux demande 30 secondes.
 - Une fois par dégradation : Solide puis Instable puis Dégradée donne deux notifications, une à chaque marche.
 - Le réglage « Prévenir quand la connexion se dégrade » les coupe toutes (voir [Réglages](reglages.md#notifications)).
 

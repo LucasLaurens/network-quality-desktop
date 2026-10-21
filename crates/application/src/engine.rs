@@ -530,9 +530,9 @@ where
         Some(jitters.iter().sum::<Duration>() / count)
     }
 
-    /// The servers change the measurement; the notifications only what is announced. O(k) for
-    /// k targets.
-    fn apply_settings(&mut self, settings: Settings) {
+    /// The servers change the measurement; the notifications only what is announced. Called with
+    /// the saved settings before `run`, then through `SettingsChanged`. O(k) for k targets.
+    pub fn apply_settings(&mut self, settings: Settings) {
         self.notifies_on_degradation = settings.notifies_on_degradation;
         let targets = list_targets(settings.servers);
         if targets == self.targets {

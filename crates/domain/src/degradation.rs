@@ -2,18 +2,28 @@
 
 use std::time::Duration;
 
-use crate::{Grade, Timestamp, Verdict};
+use crate::{DEGRADE_AFTER, Grade, OFFLINE_AFTER_SECONDS, Timestamp, Verdict};
 
-/// Offline shows after 5 s without any server; a cut is announced once it has lasted 10 s more.
-const OFFLINE_NOTICE_AFTER: Duration = Duration::from_secs(10);
+/// A cut is announced once it has lasted as long as a worse grade must: « Hors ligne » already
+/// waited `OFFLINE_AFTER_SECONDS` before showing.
+const OFFLINE_SHOWN_BEFORE_NOTICE: Duration =
+    DEGRADE_AFTER.saturating_sub(Duration::from_secs(OFFLINE_AFTER_SECONDS as u64));
 
-/// Follows the verdicts shown. A worse grade is already confirmed by the hysteresis (10 s); an
-/// improvement, or the first verdict after « Mesure en cours », is never a degradation.
+/// How bad a measured state is: the grades in their own order, then the cut.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Severity {
+    Graded(Grade),
+    Offline,
+}
+
+/// Follows the verdicts shown. A worse grade is already confirmed by the hysteresis; an
+/// improvement, or the first grade after « Mesure en cours », is never a degradation. A cut long
+/// enough is always one, unless it was announced already.
 #[derive(Debug, Clone, Default)]
 pub struct DegradationWatch {
     /// The last state measured, forgotten when measuring starts over.
-    last_known: Option<Verdict>,
-    /// When the cut began, until it is announced.
+    last_known: Option<Severity>,
+    /// When the cut began to show, until it is announced.
     offline_since: Option<Timestamp>,
 }
 
@@ -27,11 +37,10 @@ impl DegradationWatch {
                 false
             }
             Verdict::Offline => self.observe_offline(now),
-            Verdict::Graded(_) => {
+            Verdict::Graded(grade) => {
                 self.offline_since = None;
-                let is_worse = self
-                    .last_known
-                    .is_some_and(|previous| rank(shown) > rank(previous));
+                let shown = Severity::Graded(grade);
+                let is_worse = self.last_known.is_some_and(|previous| shown > previous);
                 self.last_known = Some(shown);
                 is_worse
             }
@@ -40,30 +49,16 @@ impl DegradationWatch {
 
     /// O(1).
     fn observe_offline(&mut self, now: Timestamp) -> bool {
-        if !self
-            .last_known
-            .is_some_and(|previous| matches!(previous, Verdict::Graded(_)))
-        {
+        if self.last_known == Some(Severity::Offline) {
             return false;
         }
         let since = *self.offline_since.get_or_insert(now);
-        if now.compute_elapsed_since(since) < OFFLINE_NOTICE_AFTER {
+        if now.compute_elapsed_since(since) < OFFLINE_SHOWN_BEFORE_NOTICE {
             return false;
         }
-        self.last_known = Some(Verdict::Offline);
+        self.last_known = Some(Severity::Offline);
         self.offline_since = None;
         true
-    }
-}
-
-/// Worse is higher; « Mesure en cours » ranks nowhere. O(1).
-const fn rank(verdict: Verdict) -> Option<u8> {
-    match verdict {
-        Verdict::Graded(Grade::Solid) => Some(0),
-        Verdict::Graded(Grade::Unstable) => Some(1),
-        Verdict::Graded(Grade::Degraded) => Some(2),
-        Verdict::Offline => Some(3),
-        Verdict::Measuring => None,
     }
 }
 
@@ -128,11 +123,10 @@ mod tests {
         // Arrange
         let mut watch = DegradationWatch::default();
         watch.observe(SOLID, at(0));
-        let mut shown = vec![Verdict::Offline; 12];
-        shown.push(Verdict::Offline);
 
         // Act
-        let answers = observe_all(&mut watch, 1, &shown);
+        // Offline shows after 5 s without any server: 5 s more make 10 s of cut.
+        let answers = observe_all(&mut watch, 1, &[Verdict::Offline; 8]);
 
         // Assert
         let announced: Vec<usize> = answers
@@ -140,7 +134,20 @@ mod tests {
             .enumerate()
             .filter_map(|(second, answer)| answer.then_some(second))
             .collect();
-        assert_eq!(announced, vec![10]);
+        assert_eq!(announced, vec![5]);
+    }
+
+    #[test]
+    fn announces_a_long_cut_even_right_after_measuring_started_over() {
+        // Arrange
+        let mut watch = DegradationWatch::default();
+        watch.observe(Verdict::Measuring, at(0));
+
+        // Act
+        let answers = observe_all(&mut watch, 1, &[Verdict::Offline; 6]);
+
+        // Assert
+        assert_eq!(answers.iter().filter(|answer| **answer).count(), 1);
     }
 
     #[test]
@@ -150,7 +157,7 @@ mod tests {
         watch.observe(SOLID, at(0));
 
         // Act
-        let answers = observe_all(&mut watch, 1, &[Verdict::Offline; 9]);
+        let answers = observe_all(&mut watch, 1, &[Verdict::Offline; 5]);
 
         // Assert
         assert!(answers.iter().all(|answer| !answer));

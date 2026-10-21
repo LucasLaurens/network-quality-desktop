@@ -31,10 +31,10 @@ pub use history::{
     RING_SECONDS, SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE, SecondPoint, SecondRing,
     SecondSample, StateSeconds,
 };
-pub use hysteresis::Hysteresis;
+pub use hysteresis::{DEGRADE_AFTER, Hysteresis};
 pub use latency_window::{LatencyWindow, compute_median};
 pub use loss::{LossRate, LossWindow};
-pub use offline::OfflineDetector;
+pub use offline::{OFFLINE_AFTER_SECONDS, OfflineDetector};
 pub use probe_outcome::ProbeOutcome;
 pub use segment::{
     Fault, GatewayEcho, GatewayWindow, LOCAL_LATENCY_LIMIT, LOCAL_LOSS_LIMIT, LocalProblem,

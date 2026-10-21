@@ -1621,7 +1621,7 @@ async fn never_notifies_an_improvement() {
     harness.set_latency(FAST);
 
     // Act
-    // 15 s for the slow samples to leave the p90 window, then 30 s of improvement.
+    // 15 s for the slow samples to leave the p90 window, 30 s of improvement, and a margin.
     harness.run_seconds(50).await;
 
     // Assert
@@ -1655,4 +1655,50 @@ async fn stays_silent_when_notifications_are_turned_off() {
         Verdict::Graded(Grade::Unstable)
     );
     assert!(harness.notifier.list_notified().is_empty());
+}
+
+#[tokio::test]
+async fn notifies_at_the_tick_the_worse_state_shows() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_latency(SLOW);
+    let mut ticks = Vec::new();
+
+    // Act
+    for _ in 0..20 {
+        harness.run_seconds(1).await;
+        ticks.push((
+            harness.read_presented_verdict(),
+            harness.notifier.list_notified().len(),
+        ));
+    }
+
+    // Assert
+    let first_shown = ticks
+        .iter()
+        .position(|(verdict, _)| *verdict == Verdict::Graded(Grade::Unstable));
+    let first_notified = ticks.iter().position(|(_, notified)| *notified > 0);
+    assert!(first_shown.is_some());
+    assert_eq!(first_notified, first_shown);
+}
+
+#[tokio::test]
+async fn notifies_a_cut_that_lasts() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_every_target(ProbeOutcome::Unreachable);
+
+    // Act
+    harness.run_seconds(20).await;
+
+    // Assert
+    let verdicts: Vec<Verdict> = harness
+        .notifier
+        .list_notified()
+        .iter()
+        .map(|view| view.verdict)
+        .collect();
+    assert_eq!(verdicts, vec![Verdict::Offline]);
 }
