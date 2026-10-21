@@ -17,6 +17,7 @@ cause-near-threshold = Bonne connexion, proche de la limite.
 cause-out-of-threshold = La connexion ne tient pas les seuils de la visio.
 cause-recovering = La connexion s'améliore, confirmation en cours.
 cause-measuring = Premières mesures en cours.
+cause-new-network = Nouveau réseau, premières mesures en cours.
 cause-no-server = Aucun serveur ne répond.
 action-check-connection = Vérifier le Wi-Fi ou le câble.
 action-open-dashboard = Ouvrir le tableau de bord
@@ -36,6 +37,7 @@ connection-hotspot = Partage de connexion d'un téléphone
 connection-other = Connexion non reconnue
 connection-vpn = VPN
 connection-through-vpn = { $connection }, via un VPN
+connection-limited = { $connection }, connexion limitée
 
 ## Menu
 

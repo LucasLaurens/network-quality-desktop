@@ -4,6 +4,8 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 
 use application::ConnectionContextReader;
+
+use crate::metering;
 use domain::{ConnectionContext, Gateway, InterfaceSnapshot, MacAddress, Medium};
 use netdev::Interface;
 use netdev::interface::types::InterfaceType;
@@ -71,7 +73,11 @@ fn read_context_now(route_reference: IpAddr) -> Option<ConnectionContext> {
         })
         .map(to_snapshot)
         .collect();
-    Some(ConnectionContext::classify(&to_snapshot(measured), &others))
+    Some(ConnectionContext::classify(
+        &to_snapshot(measured),
+        &others,
+        metering::read_metering(),
+    ))
 }
 
 /// The local address the system would use to reach `target`; `None` without a route.

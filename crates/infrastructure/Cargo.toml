@@ -10,10 +10,18 @@ application.workspace = true
 domain.workspace = true
 ping-async.workspace = true
 netdev.workspace = true
+netwatcher.workspace = true
 tokio = { workspace = true, features = ["net", "rt"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+dispatch2.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { workspace = true, features = ["Foundation", "Networking_Connectivity"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["net", "macros", "rt"] }

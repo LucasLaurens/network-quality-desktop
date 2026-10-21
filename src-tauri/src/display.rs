@@ -3,7 +3,9 @@
 use std::time::Duration;
 
 use application::{MetricReading, VerdictView};
-use domain::{ConnectionContext, ConnectionKind, Diagnosis, Grade, LossRate, Metric, Verdict};
+use domain::{
+    ConnectionContext, ConnectionKind, Diagnosis, Grade, LossRate, MeasuringCause, Metric, Verdict,
+};
 use fluent_bundle::FluentArgs;
 use serde::Serialize;
 use specta::Type;
@@ -103,15 +105,22 @@ impl NetworkDisplay {
         };
         let mut connection = catalog.render(connection_key, None);
         if context.is_vpn && context.kind != ConnectionKind::Other {
-            let mut args = FluentArgs::new();
-            args.set("connection", connection);
-            connection = catalog.render("connection-through-vpn", Some(&args));
+            connection = append_to_connection(connection, "connection-through-vpn", catalog);
+        }
+        if context.is_limited() {
+            connection = append_to_connection(connection, "connection-limited", catalog);
         }
         Self {
             label: catalog.render(label_key, None),
             connection,
         }
     }
+}
+
+fn append_to_connection(connection: String, key: &str, catalog: &TextCatalog) -> String {
+    let mut args = FluentArgs::new();
+    args.set("connection", connection);
+    catalog.render(key, Some(&args))
 }
 
 /// Everything the popover shows, already worded and laid out: the front end adds no rule.
@@ -138,6 +147,7 @@ impl ConnectionDisplay {
             diagnosis: Diagnosis::Measuring {
                 collected: 0,
                 needed: application::WARM_UP_SAMPLES,
+                cause: MeasuringCause::FirstMeasures,
             },
             latency: None,
             jitter: None,
@@ -156,7 +166,14 @@ impl ConnectionDisplay {
             Diagnosis::NearThreshold(_) => ("cause-near-threshold", None),
             Diagnosis::OutOfThreshold(_) => ("cause-out-of-threshold", None),
             Diagnosis::Recovering => ("cause-recovering", None),
-            Diagnosis::Measuring { .. } => ("cause-measuring", None),
+            Diagnosis::Measuring {
+                cause: MeasuringCause::FirstMeasures,
+                ..
+            } => ("cause-measuring", None),
+            Diagnosis::Measuring {
+                cause: MeasuringCause::NewNetwork,
+                ..
+            } => ("cause-new-network", None),
             Diagnosis::NoServerReachable => ("cause-no-server", Some("action-check-connection")),
         };
         Self {
@@ -282,7 +299,9 @@ fn compose_detail(view: &VerdictView, catalog: &TextCatalog) -> Option<String> {
     let mut args = FluentArgs::new();
     match view.diagnosis {
         // Past the warm-up, a metric can still lack samples: "10 sur 10" would only confuse.
-        Diagnosis::Measuring { collected, needed } if collected < needed => {
+        Diagnosis::Measuring {
+            collected, needed, ..
+        } if collected < needed => {
             args.set("collected", collected.to_string());
             args.set("needed", needed.to_string());
             Some(catalog.render("detail-measuring", Some(&args)))
@@ -320,7 +339,9 @@ mod tests {
     use std::time::Duration;
 
     use application::{MetricReading, VerdictView};
-    use domain::{Diagnosis, Grade, GradeBounds, LossRate, Metric, Scalable, Thresholds, Verdict};
+    use domain::{
+        Diagnosis, Grade, GradeBounds, LossRate, Metering, Metric, Scalable, Thresholds, Verdict,
+    };
 
     use super::*;
 
@@ -394,6 +415,7 @@ mod tests {
             Diagnosis::Measuring {
                 collected: 6,
                 needed: 10,
+                cause: MeasuringCause::FirstMeasures,
             },
             Duration::ZERO,
         );
@@ -505,6 +527,7 @@ mod tests {
             diagnosis: Diagnosis::Measuring {
                 collected: 10,
                 needed: 10,
+                cause: MeasuringCause::FirstMeasures,
             },
             latency: None,
             jitter: None,
@@ -524,7 +547,49 @@ mod tests {
             kind,
             is_vpn,
             gateway: None,
+            gateway_address: None,
+            metering: Metering::Unmetered,
         }
+    }
+
+    #[test]
+    fn says_when_data_counts_on_the_connection() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let metered = ConnectionContext {
+            metering: Metering::Metered,
+            ..create_context(ConnectionKind::WiFi, true)
+        };
+
+        // Act
+        let network = NetworkDisplay::from_context(&metered, &catalog);
+
+        // Assert
+        assert_eq!(network.connection, "Wi-Fi, via un VPN, connexion limitée");
+    }
+
+    #[test]
+    fn says_a_new_network_is_being_measured() {
+        // Arrange
+        let view = VerdictView {
+            verdict: Verdict::Measuring,
+            diagnosis: Diagnosis::Measuring {
+                collected: 2,
+                needed: 10,
+                cause: MeasuringCause::NewNetwork,
+            },
+            latency: None,
+            jitter: None,
+            loss: None,
+            context: None,
+        };
+
+        // Act
+        let display = ConnectionDisplay::from_view(&view, &TextCatalog::load());
+
+        // Assert
+        assert_eq!(display.cause, "Nouveau réseau, premières mesures en cours.");
+        assert_eq!(display.detail.as_deref(), Some("2 sur 10"));
     }
 
     #[test]

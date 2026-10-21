@@ -3,6 +3,8 @@
 
 mod fallback_latency_probe;
 mod icmp_echo_sender;
+mod interface_change_watcher;
+mod metering;
 mod netdev_context_reader;
 mod system_clock;
 mod system_tray_host;
@@ -10,6 +12,7 @@ mod tcp_connection_opener;
 
 pub use fallback_latency_probe::{ConnectionOpener, EchoResult, EchoSender, FallbackLatencyProbe};
 pub use icmp_echo_sender::IcmpEchoSender;
+pub use interface_change_watcher::InterfaceChangeWatcher;
 pub use netdev_context_reader::NetdevContextReader;
 pub use system_clock::SystemClock;
 pub use system_tray_host::SystemTrayHost;
