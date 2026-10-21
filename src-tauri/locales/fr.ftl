@@ -39,6 +39,7 @@ cause-recovering = La connexion s'améliore, confirmation en cours.
 cause-measuring = Premières mesures en cours.
 cause-new-network = Nouveau réseau, premières mesures en cours.
 cause-wake = Retour de veille, premières mesures en cours.
+cause-new-servers = Nouveaux serveurs de mesure, premières mesures en cours.
 cause-no-server = Aucun serveur ne répond.
 cause-no-network = Aucun réseau connecté.
 action-no-network = Se connecter à un Wi-Fi ou brancher un câble.
@@ -144,6 +145,14 @@ chart-coverage = Mesuré { $value } % de la période
 share-solid = { $value } % Solide
 shares = { $solid } % Solide, { $unstable } % Instable, { $degraded } % Dégradée, { $offline } % Hors ligne
 value-unknown = –
+
+## Settings
+
+settings-saved = Enregistré à { $time }.
+settings-saved-session = Enregistré à { $time }, pour cette session seulement.
+settings-not-saved = Le réglage n'a pas pu être enregistré.
+server-invalid = Adresse IP invalide.
+server-unreachable = Ce serveur ne répond pas au ping.
 
 ## Window mode, when the desktop shows no tray icon
 

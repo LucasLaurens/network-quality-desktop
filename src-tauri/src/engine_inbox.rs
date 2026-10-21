@@ -5,6 +5,7 @@ use std::sync::mpsc::SyncSender;
 use std::time::{Duration, Instant};
 
 use application::{EngineMessage, LiveHistory, PowerEvent};
+use domain::Settings;
 use tokio::sync::{mpsc, oneshot};
 
 /// How long quitting waits for the last minute to be written.
@@ -37,6 +38,14 @@ impl EngineInbox {
             return LiveHistory::default();
         }
         answered.await.unwrap_or_default()
+    }
+
+    /// Hands saved settings to the engine; nothing to do when it is gone.
+    pub async fn send_settings(&self, settings: Settings) {
+        let _ = self
+            .regular
+            .send(EngineMessage::SettingsChanged(settings))
+            .await;
     }
 
     /// Writes the minute in progress before the app quits.
@@ -119,7 +128,8 @@ mod tests {
                     EngineMessage::Wake => received.push("wake"),
                     EngineMessage::Tick
                     | EngineMessage::NetworkChanged
-                    | EngineMessage::ReadLiveHistory(_) => received.push("other"),
+                    | EngineMessage::ReadLiveHistory(_)
+                    | EngineMessage::SettingsChanged(_) => received.push("other"),
                 }
             }
             received

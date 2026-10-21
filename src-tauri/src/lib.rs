@@ -10,6 +10,9 @@ mod engine_inbox;
 mod history_store;
 mod network_display;
 mod path_display;
+mod settings_effects;
+mod settings_form;
+mod settings_store;
 mod shell_mode;
 mod shell_presenter;
 mod text_catalog;
@@ -21,7 +24,7 @@ use std::time::Duration;
 
 use application::{
     Clock, EngineMessage, EnginePorts, MeasurementEngine, NetworkChangeWatcher, PowerEventSource,
-    list_default_targets,
+    list_default_targets, list_targets,
 };
 use display::ConnectionDisplay;
 use domain::Verdict;
@@ -68,7 +71,9 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::reveal_network_name,
             commands::read_history_notice,
             commands::read_dashboard_summary,
-            commands::read_evolution
+            commands::read_evolution,
+            commands::read_settings,
+            commands::save_settings
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -84,6 +89,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_dashboard(app);
         }))
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .plugin(tauri_plugin_positioner::init());
     #[cfg(target_os = "macos")]
     let app = app.menu(app_menu::build_app_menu);
@@ -118,6 +124,13 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     // The dashboard commands word their figures with their own copy.
     app.manage(TextCatalog::load());
     let initial = ConnectionDisplay::create_initial(&catalog);
+    // Before any window shows: the look is set, and the settings choose the servers.
+    let stores = history_store::open_stores(app, &catalog, SystemClock::start().read_utc_seconds());
+    let settings = stores.settings.read();
+    settings_effects::apply_settings(app, &settings);
+    app.manage(stores.notice);
+    app.manage(stores.dashboard);
+    app.manage(stores.settings);
     let mode = ShellMode::detect(&SystemTrayHost);
     app.manage(mode);
     app.manage(WindowModeTexts::compose(mode, &catalog));
@@ -155,15 +168,11 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     if mode == ShellMode::Window {
         show_dashboard(app);
     }
-    let targets = list_default_targets();
-    let route_reference = targets
+    // The default route is the one to the Internet, whichever server the user measures against.
+    let route_reference = list_default_targets()
         .first()
         .expect("the default targets are listed")
         .address();
-    let (history_recorder, history_notice, dashboard_history) =
-        history_store::open_history(app, &catalog, SystemClock::start().read_utc_seconds());
-    app.manage(history_notice);
-    app.manage(dashboard_history);
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
     let (urgent_sender, urgent) = mpsc::channel(engine_inbox::URGENT_CAPACITY);
     let engine_inbox = EngineInbox {
@@ -173,15 +182,15 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(engine_inbox.clone());
     let engine = MeasurementEngine::new(
         EnginePorts {
-            probe: FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener),
+            probe: create_latency_probe(),
             clock: SystemClock::start(),
             presenter: ShellPresenter::new(app.clone(), tray, menu, catalog, store),
             context_reader: NetdevContextReader::new(route_reference),
             gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
             wifi_reader: SystemWifiReader,
-            history_recorder,
+            history_recorder: stores.recorder,
         },
-        targets,
+        list_targets(settings.servers),
     );
     let change_sender = sender.clone();
     InterfaceChangeWatcher.watch(move || {
@@ -193,6 +202,12 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     tauri::async_runtime::spawn(engine.run(inbox, urgent));
     tauri::async_runtime::spawn(send_ticks(sender));
     Ok(())
+}
+
+/// ICMP echo, then a TCP connection where ICMP is refused: the probe the engine measures with,
+/// and the one a new own server must answer.
+fn create_latency_probe() -> FallbackLatencyProbe<IcmpEchoSender, TcpConnectionOpener> {
+    FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener)
 }
 
 async fn send_ticks(sender: mpsc::Sender<EngineMessage>) {

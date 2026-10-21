@@ -50,6 +50,11 @@ Points laissés ouverts par la recherche (#19), tranchés :
 - **Linux** : ni `zbus` ni `logind-zbus`. La crate `dbus`, déjà utilisée pour la barre système, NetworkManager et le Wi-Fi, suffit ; `zbus` n'arrive que par `tauri-plugin-single-instance`. Sans logind (pas de systemd, conteneur), l'adaptateur le note dans le journal et le filet prend le relais.
 - **Filet** : plus de 10 s d'heure murale entre deux ticks, ou pendant les sondes d'un tick, valent un réveil (voir [Mesure](mesure.md#moteur)). Il couvre aussi l'hibernation et une coupure de courant.
 
+## Réglages
+
+- Apparence : `AppHandle::set_theme` applique Clair ou Sombre à toutes les fenêtres (Système : `None`). Le webview suit le thème de sa fenêtre, donc les media queries `prefers-color-scheme` des tokens CSS aussi : pas de second jeu de couleurs. Non vérifié dans l'app réelle : à contrôler à la main sur les trois systèmes (barre de titre et page).
+- Ouverture de session : `tauri-plugin-autostart` 2.7.0, appelé depuis Rust seulement (aucune permission front) : LaunchAgent sous macOS, clé `Run` du registre sous Windows, fichier `.desktop` dans `~/.config/autostart` sous Linux. Le réglage est appliqué au lancement, avant toute fenêtre, et à chaque enregistrement : le réglage de l'app fait foi sur l'état du système. Une version de développement (`debug_assertions`) ne s'inscrit jamais.
+
 ## Tâche de fond et App Nap
 
 - macOS : `keep_measuring_in_background` déclare au lancement une activité `NSActivityUserInitiatedAllowingIdleSystemSleep` (`NSProcessInfo`), pour toute la vie de l'app : App Nap ne peut plus espacer les ticks quand aucune fenêtre n'est visible, et le Mac peut toujours se mettre en veille quand il est inactif.

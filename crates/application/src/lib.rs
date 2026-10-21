@@ -7,6 +7,7 @@ mod history;
 mod ports;
 #[cfg(any(test, feature = "test-support"))]
 pub mod repository_contract;
+mod settings;
 mod targets;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
@@ -25,7 +26,8 @@ pub use history::{
 };
 pub use ports::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryReader, HistoryRecorder, LatencyProbe,
-    MeasurementRepository, NetworkChangeWatcher, PowerEvent, PowerEventSource, TrayHost,
-    VerdictPresenter, WifiReader,
+    MeasurementRepository, NetworkChangeWatcher, PowerEvent, PowerEventSource, SettingsRepository,
+    TrayHost, VerdictPresenter, WifiReader,
 };
-pub use targets::list_default_targets;
+pub use settings::can_measure_against;
+pub use targets::{list_default_targets, list_targets};

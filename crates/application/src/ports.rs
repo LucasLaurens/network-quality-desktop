@@ -3,8 +3,8 @@ use std::future::Future;
 use std::net::Ipv4Addr;
 
 use domain::{
-    Aggregate, ConnectionContext, GatewayEcho, Granularity, ProbeOutcome, Target, Timestamp,
-    WifiLink,
+    Aggregate, ConnectionContext, GatewayEcho, Granularity, ProbeOutcome, Settings, Target,
+    Timestamp, WifiLink,
 };
 
 use crate::{HistoryCommand, HistoryEvent, NetworkKey, RepositoryError, VerdictView};
@@ -138,6 +138,23 @@ pub trait HistoryReader {
     ///
     /// The storage failed.
     fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError>;
+}
+
+/// Where the settings are kept: one row, defaults until the first save.
+pub trait SettingsRepository {
+    /// The defaults when nothing was saved yet.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn read_settings(&self) -> Result<Settings, RepositoryError>;
+
+    /// Replaces every setting at once.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed; nothing was written.
+    fn save_settings(&mut self, settings: &Settings) -> Result<(), RepositoryError>;
 }
 
 /// Says whether the desktop can show a tray icon: some Linux sessions cannot.

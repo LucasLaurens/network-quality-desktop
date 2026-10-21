@@ -47,6 +47,18 @@ export const commands = {
 	 *  The history could not be read.
 	 */
 	readEvolution: (period: PeriodChoice, utcOffsetSeconds: number) => typedError<EvolutionDisplay, string>(__TAURI_INVOKE("read_evolution", { period, utcOffsetSeconds })),
+	/**  The settings as last saved, for the Réglages page. */
+	readSettings: () => __TAURI_INVOKE<SettingsForm>("read_settings"),
+	/**
+	 *  Saves every setting, applies it, and says when it was saved. A new own server must answer a
+	 *  ping first.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The sentence shown under the form: an invalid address, a server that does not answer, or a
+	 *  storage failure.
+	 */
+	saveSettings: (form: SettingsForm, utcOffsetSeconds: number) => typedError<string, string>(__TAURI_INVOKE("save_settings", { form, utcOffsetSeconds })),
 };
 
 /** Events */
@@ -60,6 +72,8 @@ export type AppInfo = {
 	name: string,
 	version: string,
 };
+
+export type AppearanceChoice = "system" | "light" | "dark";
 
 /**  Everything the popover shows, already worded and laid out: the front end adds no rule. */
 export type ConnectionDisplay = {
@@ -195,6 +209,13 @@ export type SeriesDisplay = {
 	degradedAbove: number | null,
 	unstableLabel: string,
 	degradedLabel: string,
+};
+
+export type SettingsForm = {
+	launchAtLogin: boolean,
+	appearance: AppearanceChoice,
+	/**  The address typed for the user's own server; `None` for the public servers. */
+	ownServer: string | null,
 };
 
 export type StateLabelDisplay = {

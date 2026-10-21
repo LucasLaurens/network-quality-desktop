@@ -6,6 +6,7 @@ import {
   type DashboardSummaryDisplay,
   type EvolutionDisplay,
   type PeriodChoice,
+  type SettingsForm,
   type WindowModeTexts,
 } from '../bindings'
 import type { NetworkQualityClient } from './network-quality-client'
@@ -60,6 +61,14 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
 
   async readEvolution(period: PeriodChoice, utcOffsetSeconds: number): Promise<EvolutionDisplay> {
     return unwrap(await commands.readEvolution(period, utcOffsetSeconds))
+  }
+
+  readSettings(): Promise<SettingsForm> {
+    return commands.readSettings()
+  }
+
+  async saveSettings(form: SettingsForm, utcOffsetSeconds: number): Promise<string> {
+    return unwrap(await commands.saveSettings(form, utcOffsetSeconds))
   }
 }
 
