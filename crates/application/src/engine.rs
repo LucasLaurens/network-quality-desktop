@@ -156,13 +156,17 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
     /// virtual interface coming and going) leaves the network and the verdict as they are. O(1).
     fn record_context(&mut self, context: Option<ConnectionContext>) {
         if let Some(current) = context {
-            if let Some(previous) = self.last_network
-                && !previous.is_same_network(&current)
-            {
-                self.restart();
-                self.measuring_cause = MeasuringCause::NewNetwork;
-            }
-            self.last_network = Some(current);
+            self.last_network = Some(match self.last_network {
+                Some(previous) if previous.is_same_network(&current) => {
+                    current.complete_with(&previous)
+                }
+                Some(_) => {
+                    self.restart();
+                    self.measuring_cause = MeasuringCause::NewNetwork;
+                    current
+                }
+                None => current,
+            });
         }
         self.context = context;
         self.seconds_since_context = 0;

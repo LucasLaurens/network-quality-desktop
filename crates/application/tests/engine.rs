@@ -763,3 +763,29 @@ async fn notices_a_new_network_reached_through_a_moment_without_route() {
     // Assert
     assert_eq!(harness.read_presented_verdict(), Verdict::Measuring);
 }
+
+#[tokio::test]
+async fn notices_another_box_at_the_same_address_once_its_mac_is_read() {
+    // Arrange
+    let mut harness = create_harness();
+    let first_box = create_context(ConnectionKind::WiFi, 13);
+    harness.connection.set_context(Some(first_box));
+    harness.warm_up_with_latency(FAST).await;
+    harness.connection.set_context(Some(ConnectionContext {
+        gateway: None,
+        ..first_box
+    }));
+    harness.engine.handle(EngineMessage::NetworkChanged).await;
+    harness.run_seconds(1).await;
+    harness.connection.set_context(Some(ConnectionContext {
+        gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, 14]),
+        ..first_box
+    }));
+    harness.engine.handle(EngineMessage::NetworkChanged).await;
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(harness.read_presented_verdict(), Verdict::Measuring);
+}

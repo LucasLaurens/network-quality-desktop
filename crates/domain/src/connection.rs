@@ -144,17 +144,28 @@ impl ConnectionContext {
         }
     }
 
-    /// Data counts on this connection. Without an answer from the system, a cellular modem or a
-    /// phone hotspot is assumed limited: guessing wrong there costs the user money.
+    /// Data counts on this connection. A recognised phone hotspot always counts (macOS calls an
+    /// Android hotspot free); without an answer from the system, so does a cellular modem.
     #[must_use]
     pub fn is_limited(&self) -> bool {
         match self.metering {
             Metering::Metered | Metering::Constrained => true,
-            Metering::Unmetered => false,
+            Metering::Unmetered => self.kind == ConnectionKind::PhoneHotspot,
             Metering::Unknown => matches!(
                 self.kind,
                 ConnectionKind::Cellular | ConnectionKind::PhoneHotspot
             ),
+        }
+    }
+
+    /// This reading, with the gateway known from an `earlier` reading of the same network where
+    /// this one could not read it: a gateway that later turns out different then still shows. O(1).
+    #[must_use]
+    pub fn complete_with(&self, earlier: &Self) -> Self {
+        Self {
+            gateway: self.gateway.or(earlier.gateway),
+            gateway_address: self.gateway_address.or(earlier.gateway_address),
+            ..*self
         }
     }
 
@@ -563,5 +574,41 @@ mod tests {
         // Act & Assert
         assert_eq!(after.kind, ConnectionKind::PhoneHotspot);
         assert!(before.is_same_network(&after));
+    }
+
+    #[test]
+    fn counts_a_recognised_hotspot_as_limited_even_when_the_system_says_otherwise() {
+        // Arrange
+        let mut snapshot = create_snapshot(Medium::Ethernet, [192, 168, 42, 129], ROUTER_MAC);
+        snapshot.has_phone_name = true;
+
+        // Act
+        let context = ConnectionContext::classify(&snapshot, &[], Metering::Unmetered);
+
+        // Assert
+        assert_eq!(context.kind, ConnectionKind::PhoneHotspot);
+        assert!(context.is_limited());
+    }
+
+    #[test]
+    fn keeps_what_an_earlier_reading_knew_of_the_same_network() {
+        // Arrange
+        let known = ConnectionContext::classify(
+            &create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC),
+            &[],
+            Metering::Unknown,
+        );
+        let mut unresolved = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+        if let Some(gateway) = unresolved.gateway.as_mut() {
+            gateway.mac = None;
+        }
+        let later = ConnectionContext::classify(&unresolved, &[], Metering::Metered);
+
+        // Act
+        let merged = later.complete_with(&known);
+
+        // Assert
+        assert_eq!(merged.gateway, known.gateway);
+        assert_eq!(merged.metering, Metering::Metered);
     }
 }
