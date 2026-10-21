@@ -23,6 +23,7 @@ pub struct SettingsForm {
     pub appearance: AppearanceChoice,
     /// The address typed for the user's own server; `None` for the public servers.
     pub own_server: Option<String>,
+    pub notifies_on_degradation: bool,
 }
 
 impl SettingsForm {
@@ -40,6 +41,7 @@ impl SettingsForm {
                 .servers
                 .to_own_target()
                 .map(|target| target.address().to_string()),
+            notifies_on_degradation: settings.notifies_on_degradation,
         }
     }
 
@@ -63,6 +65,7 @@ impl SettingsForm {
                 AppearanceChoice::Dark => Appearance::Dark,
             },
             servers,
+            notifies_on_degradation: self.notifies_on_degradation,
         })
     }
 }
@@ -104,6 +107,7 @@ mod tests {
             launch_at_login: false,
             appearance: AppearanceChoice::Dark,
             own_server: own_server.map(str::to_owned),
+            notifies_on_degradation: true,
         }
     }
 

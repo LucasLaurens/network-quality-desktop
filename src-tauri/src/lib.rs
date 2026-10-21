@@ -14,6 +14,7 @@ mod settings_effects;
 mod settings_form;
 mod settings_store;
 mod shell_mode;
+mod shell_notifier;
 mod shell_presenter;
 mod text_catalog;
 mod tray_icon;
@@ -90,6 +91,7 @@ pub fn run() {
             show_dashboard(app);
         }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_positioner::init());
     #[cfg(target_os = "macos")]
     let app = app.menu(app_menu::build_app_menu);
@@ -180,7 +182,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         urgent: urgent_sender,
     };
     app.manage(engine_inbox.clone());
-    let engine = MeasurementEngine::new(
+    let mut engine = MeasurementEngine::new(
         EnginePorts {
             probe: create_latency_probe(),
             clock: SystemClock::start(),
@@ -189,9 +191,11 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
             gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
             wifi_reader: SystemWifiReader,
             history_recorder: stores.recorder,
+            notifier: shell_notifier::ShellNotifier::new(app.clone(), TextCatalog::load()),
         },
         list_targets(settings.servers),
     );
+    engine.apply_settings(settings);
     let change_sender = sender.clone();
     InterfaceChangeWatcher.watch(move || {
         // Dropped when the inbox is full: the periodic reading still catches the change within 10 s.

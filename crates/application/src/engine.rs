@@ -3,17 +3,17 @@ use std::sync::mpsc::SyncSender;
 use std::time::Duration;
 
 use domain::{
-    ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayWindow, Grade, GradeBounds,
-    Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause, Metric,
-    OfflineDetector, ProbeOutcome, Scalable, Settings, Target, Thresholds, Unmeasurable, Verdict,
-    WifiLink, compute_median,
+    ConnectionContext, ConnectionKind, DegradationWatch, Diagnosis, Fault, GatewayWindow, Grade,
+    GradeBounds, Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause,
+    Metric, OfflineDetector, ProbeOutcome, Scalable, Settings, Target, Thresholds, Unmeasurable,
+    Verdict, WifiLink, compute_median,
 };
 use futures_util::future::{join, join_all, join3};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryRecorder, HistoryTracker, LatencyProbe,
-    LiveHistory, MeasuredSecond, VerdictPresenter, WifiReader, list_targets,
+    LiveHistory, MeasuredSecond, Notifier, VerdictPresenter, WifiReader, list_targets,
 };
 
 /// Seconds with an answer needed before the first verdict.
@@ -102,8 +102,12 @@ pub struct VerdictView {
 }
 
 /// Owns every piece of measurement state; nothing else mutates it.
-pub struct MeasurementEngine<P, C, V, R, G, W, H> {
+pub struct MeasurementEngine<P, C, V, R, G, W, H, N> {
     history_recorder: H,
+    notifier: N,
+    degradation: DegradationWatch,
+    /// The setting « Prévenir quand la connexion se dégrade ».
+    notifies_on_degradation: bool,
     history: HistoryTracker,
     probe: P,
     clock: C,
@@ -132,8 +136,9 @@ pub struct MeasurementEngine<P, C, V, R, G, W, H> {
 }
 
 /// The ports the engine talks to, gathered so the constructor stays readable.
-pub struct EnginePorts<P, C, V, R, G, W, H> {
+pub struct EnginePorts<P, C, V, R, G, W, H, N> {
     pub history_recorder: H,
+    pub notifier: N,
     pub probe: P,
     pub clock: C,
     pub presenter: V,
@@ -142,9 +147,10 @@ pub struct EnginePorts<P, C, V, R, G, W, H> {
     pub wifi_reader: W,
 }
 
-impl<P, C, V, R, G, W, H> MeasurementEngine<P, C, V, R, G, W, H>
+impl<P, C, V, R, G, W, H, N> MeasurementEngine<P, C, V, R, G, W, H, N>
 where
     H: HistoryRecorder,
+    N: Notifier,
     P: LatencyProbe,
     C: Clock,
     V: VerdictPresenter,
@@ -153,9 +159,10 @@ where
     W: WifiReader,
 {
     #[must_use]
-    pub fn new(ports: EnginePorts<P, C, V, R, G, W, H>, targets: Vec<Target>) -> Self {
+    pub fn new(ports: EnginePorts<P, C, V, R, G, W, H, N>, targets: Vec<Target>) -> Self {
         let EnginePorts {
             history_recorder,
+            notifier,
             probe,
             clock,
             presenter,
@@ -166,6 +173,9 @@ where
         let jitter = vec![LatencyWindow::default(); targets.len()];
         Self {
             history_recorder,
+            notifier,
+            degradation: DegradationWatch::default(),
+            notifies_on_degradation: Settings::default().notifies_on_degradation,
             history: HistoryTracker::default(),
             probe,
             clock,
@@ -304,7 +314,18 @@ where
         let (latency, probes_lost) = self.record_outcomes(&outcomes);
         let view = self.compute_view(&outcomes);
         self.record_history(utc, latency, probes_lost, &view);
-        self.presenter.present(&view);
+        self.present(&view);
+    }
+
+    /// Shows the view, and announces a durable degradation when the user wants it. O(1).
+    fn present(&mut self, view: &VerdictView) {
+        self.presenter.present(view);
+        let is_degraded = self
+            .degradation
+            .observe(view.verdict, self.clock.read_now());
+        if is_degraded && self.notifies_on_degradation {
+            self.notifier.notify_degradation(view);
+        }
     }
 
     /// Starts measuring again when another network took over; noise (an address renewed, a
@@ -509,8 +530,10 @@ where
         Some(jitters.iter().sum::<Duration>() / count)
     }
 
-    /// Only the servers matter to the measurement. O(k) for k targets.
-    fn apply_settings(&mut self, settings: Settings) {
+    /// The servers change the measurement; the notifications only what is announced. Called with
+    /// the saved settings before `run`, then through `SettingsChanged`. O(k) for k targets.
+    pub fn apply_settings(&mut self, settings: Settings) {
+        self.notifies_on_degradation = settings.notifies_on_degradation;
         let targets = list_targets(settings.servers);
         if targets == self.targets {
             return;
@@ -541,7 +564,7 @@ where
         self.restart_for(MeasuringCause::Wake);
         self.offline = OfflineDetector::default();
         self.history.record_wake(utc, &self.history_recorder);
-        self.presenter.present(&VerdictView {
+        self.present(&VerdictView {
             verdict: Verdict::Measuring,
             diagnosis: self.compose_measuring_diagnosis(),
             latency: None,
