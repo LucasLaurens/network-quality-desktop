@@ -124,6 +124,8 @@ pub struct ConnectionContext {
     /// Tells two networks apart when their gateway's MAC address cannot be read.
     pub gateway_address: Option<Ipv4Addr>,
     pub metering: Metering,
+    /// What carries the physical link: a phone hotspot may come over Wi-Fi or a USB cable.
+    pub medium: Medium,
 }
 
 impl ConnectionContext {
@@ -148,6 +150,7 @@ impl ConnectionContext {
                 gateway: None,
                 gateway_address: None,
                 metering,
+                medium: Medium::Tunnel,
             },
         }
     }
@@ -175,6 +178,13 @@ impl ConnectionContext {
             gateway_address: self.gateway_address.or(earlier.gateway_address),
             ..*self
         }
+    }
+
+    /// The Wi-Fi radio matters only when it carries the traffic: the computer may stay
+    /// associated with a Wi-Fi while a cable serves.
+    #[must_use]
+    pub fn is_carried_by_wifi(&self) -> bool {
+        self.medium == Medium::WiFi
     }
 
     /// Whether `other` is still this network. What is learnt later about the same link (a
@@ -216,6 +226,7 @@ impl ConnectionContext {
             gateway: snapshot.gateway.and_then(|gateway| gateway.mac),
             gateway_address: snapshot.gateway.and_then(|gateway| gateway.ipv4),
             metering,
+            medium: snapshot.medium,
         }
     }
 }
@@ -393,6 +404,7 @@ mod tests {
                 gateway: MacAddress::from_octets(ROUTER_MAC),
                 gateway_address: Some(Ipv4Addr::new(192, 168, 1, 1)),
                 metering: Metering::Unknown,
+                medium: Medium::WiFi,
             }
         );
     }
@@ -618,5 +630,22 @@ mod tests {
         // Assert
         assert_eq!(merged.gateway, known.gateway);
         assert_eq!(merged.metering, Metering::Metered);
+    }
+
+    #[test]
+    fn knows_a_phone_hotspot_over_usb_is_not_carried_by_wifi() {
+        // Arrange
+        let mut tether = create_snapshot(Medium::Ethernet, [192, 168, 42, 129], ROUTER_MAC);
+        tether.has_phone_name = true;
+        let wifi = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+
+        // Act
+        let tether = ConnectionContext::classify(&tether, &[], Metering::Unknown);
+        let wifi = ConnectionContext::classify(&wifi, &[], Metering::Unknown);
+
+        // Assert
+        assert_eq!(tether.kind, ConnectionKind::PhoneHotspot);
+        assert!(!tether.is_carried_by_wifi());
+        assert!(wifi.is_carried_by_wifi());
     }
 }

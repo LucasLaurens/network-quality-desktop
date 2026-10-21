@@ -10,7 +10,12 @@ const NBSP = ' '
 const scenarios: Record<string, ConnectionDisplay> = {
   degraded: createConnectionDisplay({
     openDashboardLabel: 'Ouvrir le tableau de bord',
-    network: { label: 'Réseau Wi-Fi', connection: 'Wi-Fi, via un VPN' },
+    network: {
+      label: 'Wi-Fi (nom masqué)',
+      connection: 'Wi-Fi 5 GHz, via un VPN',
+      wifiDetails: `−58${NBSP}dBm, canal 36, 866${NBSP}Mbit/s`,
+      revealLabel: 'Afficher le nom du réseau',
+    },
     state: 'unstable',
     stateLabel: 'Instable',
     cause: "L'opérateur est en cause, le Wi-Fi va bien.",
@@ -65,7 +70,7 @@ const scenarios: Record<string, ConnectionDisplay> = {
   }),
   offline: createConnectionDisplay({
     openDashboardLabel: 'Ouvrir le tableau de bord',
-    network: { label: 'Réseau Wi-Fi', connection: 'Wi-Fi' },
+    network: { label: 'Livebox-4F2A', connection: 'Wi-Fi 5 GHz', wifiDetails: null, revealLabel: null },
     state: 'offline',
     stateLabel: 'Hors ligne',
     cause: 'La box répond, mais Internet ne répond plus.',

@@ -207,7 +207,7 @@ mod tests {
     use std::time::Duration;
 
     use application::MetricReading;
-    use domain::{ConnectionContext, Grade, Metering, Metric, Thresholds, Unmeasurable};
+    use domain::{ConnectionContext, Grade, Medium, Metering, Metric, Thresholds, Unmeasurable};
 
     use super::*;
 
@@ -233,8 +233,10 @@ mod tests {
                 gateway: None,
                 gateway_address: None,
                 metering: Metering::Unmetered,
+                medium: Medium::WiFi,
             }),
             local,
+            wifi: None,
         }
     }
 

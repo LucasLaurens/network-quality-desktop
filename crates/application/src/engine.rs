@@ -4,13 +4,15 @@ use std::time::Duration;
 use domain::{
     ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayWindow, Grade, GradeBounds,
     Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause, Metric,
-    OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Unmeasurable, Verdict,
+    OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Unmeasurable, Verdict, WifiLink,
     compute_median,
 };
-use futures_util::future::{join_all, join3};
+use futures_util::future::{join, join_all, join3};
 use tokio::sync::mpsc;
 
-use crate::{Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, VerdictPresenter};
+use crate::{
+    Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, VerdictPresenter, WifiReader,
+};
 
 /// Seconds with an answer needed before the first verdict.
 pub const WARM_UP_SAMPLES: u32 = 10;
@@ -51,7 +53,7 @@ impl<T: Scalable> MetricReading<T> {
 }
 
 /// What the engine hands to the presenters after each tick.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VerdictView {
     pub verdict: Verdict,
     pub diagnosis: Diagnosis,
@@ -63,16 +65,20 @@ pub struct VerdictView {
     pub context: Option<ConnectionContext>,
     /// The link to the gateway: only says where a problem lies, never sets the verdict.
     pub local: LocalSegment,
+    /// `None` without Wi-Fi, or before the first reading.
+    pub wifi: Option<WifiLink>,
 }
 
 /// Owns every piece of measurement state; nothing else mutates it.
-pub struct MeasurementEngine<P, C, V, R, G> {
+pub struct MeasurementEngine<P, C, V, R, G, W> {
     probe: P,
     clock: C,
     presenter: V,
     context_reader: R,
     gateway_probe: G,
     gateway: GatewayWindow,
+    wifi_reader: W,
+    wifi: Option<WifiLink>,
     context: Option<ConnectionContext>,
     /// The last network seen, kept through a moment without route: switching from one Wi-Fi to
     /// another passes through one.
@@ -91,30 +97,33 @@ pub struct MeasurementEngine<P, C, V, R, G> {
 }
 
 /// The ports the engine talks to, gathered so the constructor stays readable.
-pub struct EnginePorts<P, C, V, R, G> {
+pub struct EnginePorts<P, C, V, R, G, W> {
     pub probe: P,
     pub clock: C,
     pub presenter: V,
     pub context_reader: R,
     pub gateway_probe: G,
+    pub wifi_reader: W,
 }
 
-impl<P, C, V, R, G> MeasurementEngine<P, C, V, R, G>
+impl<P, C, V, R, G, W> MeasurementEngine<P, C, V, R, G, W>
 where
     P: LatencyProbe,
     C: Clock,
     V: VerdictPresenter,
     R: ConnectionContextReader,
     G: GatewayProbe,
+    W: WifiReader,
 {
     #[must_use]
-    pub fn new(ports: EnginePorts<P, C, V, R, G>, targets: Vec<Target>) -> Self {
+    pub fn new(ports: EnginePorts<P, C, V, R, G, W>, targets: Vec<Target>) -> Self {
         let EnginePorts {
             probe,
             clock,
             presenter,
             context_reader,
             gateway_probe,
+            wifi_reader,
         } = ports;
         let jitter = vec![LatencyWindow::default(); targets.len()];
         Self {
@@ -124,6 +133,8 @@ where
             context_reader,
             gateway_probe,
             gateway: GatewayWindow::default(),
+            wifi_reader,
+            wifi: None,
             context: None,
             last_network: None,
             // Due at once: the first tick reads the connection.
@@ -168,7 +179,15 @@ where
             ),
             async {
                 if is_context_due {
-                    Some(self.context_reader.read_context().await)
+                    // Read with the context: the radio changes slowly, and Windows shows its
+                    // location icon on every reading.
+                    Some(
+                        join(
+                            self.context_reader.read_context(),
+                            self.wifi_reader.read_wifi(),
+                        )
+                        .await,
+                    )
                 } else {
                     None
                 }
@@ -184,8 +203,9 @@ where
         if let Some(echo) = gateway_echo {
             self.gateway.record_second(echo);
         }
-        if let Some(context) = context {
+        if let Some((context, wifi)) = context {
             self.record_context(context);
+            self.wifi = wifi;
         }
         self.seconds_since_context += 1;
         self.record_outcomes(&outcomes);
@@ -285,6 +305,7 @@ where
                 loss: None,
                 context: self.context,
                 local: self.compute_local_segment(),
+                wifi: self.wifi.clone(),
             };
         }
         let thresholds = self.thresholds;
@@ -328,7 +349,15 @@ where
             ),
         ];
         let local = self.compute_local_segment();
-        let fault = Fault::attribute(ConnectionKind::from_context(self.context), local);
+        let wifi_in_use = self.wifi.as_ref().filter(|_| {
+            self.context
+                .is_some_and(|context| context.is_carried_by_wifi())
+        });
+        let fault = Fault::attribute(
+            ConnectionKind::from_context(self.context),
+            local,
+            wifi_in_use,
+        );
         let diagnosis = match verdict {
             Verdict::Offline => self.diagnose_offline(),
             Verdict::Measuring => Diagnosis::Measuring {
@@ -346,6 +375,7 @@ where
             loss,
             context: self.context,
             local,
+            wifi: self.wifi.clone(),
         }
     }
 

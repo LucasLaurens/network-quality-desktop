@@ -22,3 +22,4 @@ Le code est en anglais, l'interface et la documentation en français. Chaque con
 | Connexion limitée | `Metering`          | Ce que le système dit du coût des données : payante, réduite, libre, inconnue            |
 | Tronçon en cause  | `Fault`             | Lien local, opérateur, réseau mobile, ou indéterminé                                     |
 | Non mesurable     | `Unmeasurable`      | Ping refusé, passerelle muette, ou pas de passerelle                                     |
+| Lien Wi-Fi        | `WifiLink`          | Nom (s'il est lisible), signal, bruit, débit, canal et bande                             |

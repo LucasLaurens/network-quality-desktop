@@ -13,6 +13,8 @@ export interface NetworkQualityClient {
   readWindowModeTexts(): Promise<WindowModeTexts | null>
   openTrayExtensionPage(): Promise<void>
   quitApp(): Promise<void>
+  /** Asks for the permission that reveals the Wi-Fi name, or opens the system settings. */
+  revealNetworkName(): Promise<void>
 }
 
 export const NETWORK_QUALITY_CLIENT_KEY: InjectionKey<NetworkQualityClient> = Symbol('NetworkQualityClient')

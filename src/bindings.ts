@@ -23,6 +23,11 @@ export const commands = {
 	openTrayExtensionPage: () => __TAURI_INVOKE<void>("open_tray_extension_page"),
 	/**  Quits from the dashboard, the only way out in window mode. */
 	quitApp: () => __TAURI_INVOKE<void>("quit_app"),
+	/**
+	 *  Asks for the location permission that reveals the Wi-Fi name, or opens the system settings
+	 *  where it can be given once the question was answered.
+	 */
+	revealNetworkName: () => __TAURI_INVOKE<void>("reveal_network_name"),
 };
 
 /** Events */
@@ -78,10 +83,13 @@ export type MetricDisplay = {
 	hint: string | null,
 };
 
-/**  The network in words: what to call it, and how the computer reaches it. */
 export type NetworkDisplay = {
 	label: string,
 	connection: string,
+	/**  Signal, channel and rate of the Wi-Fi carrying the traffic, e.g. "-58 dBm, canal 36". */
+	wifiDetails: string | null,
+	/**  Offered when the system hides the Wi-Fi name until the location permission is given. */
+	revealLabel: string | null,
 };
 
 export type PathDisplay = {

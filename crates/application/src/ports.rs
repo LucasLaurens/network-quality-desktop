@@ -2,7 +2,7 @@ use std::future::Future;
 
 use std::net::Ipv4Addr;
 
-use domain::{ConnectionContext, GatewayEcho, ProbeOutcome, Target, Timestamp};
+use domain::{ConnectionContext, GatewayEcho, ProbeOutcome, Target, Timestamp, WifiLink};
 
 use crate::VerdictView;
 
@@ -14,6 +14,11 @@ pub trait LatencyProbe {
 /// Pings the gateway over ICMP only: a TCP fallback would say nothing reliable about the link.
 pub trait GatewayProbe {
     fn ping_gateway(&self, gateway: Ipv4Addr) -> impl Future<Output = GatewayEcho> + Send;
+}
+
+/// Reads the Wi-Fi link in use; `None` without Wi-Fi or when the system says nothing.
+pub trait WifiReader {
+    fn read_wifi(&self) -> impl Future<Output = Option<WifiLink>> + Send;
 }
 
 /// Describes the connection of the default route; `None` when there is none.
