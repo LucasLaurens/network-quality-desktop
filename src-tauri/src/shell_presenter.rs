@@ -14,6 +14,7 @@ use tauri_specta::Event;
 use crate::display::{ConnectionDisplay, DisplayState};
 use crate::text_catalog::TextCatalog;
 use crate::tray_icon::{ICON_SIZE, render_verdict_icon};
+use crate::tray_menu::{TrayMenu, compose_menu_entries};
 
 /// Sent to every window whenever what the popover shows changes.
 #[derive(Debug, Clone, Serialize, Type, Event)]
@@ -49,6 +50,7 @@ impl DisplayStore {
 pub struct ShellPresenter {
     app: AppHandle,
     tray: TrayIcon,
+    menu: TrayMenu,
     catalog: TextCatalog,
     store: DisplayStore,
     shown: Mutex<Verdict>,
@@ -57,10 +59,17 @@ pub struct ShellPresenter {
 impl ShellPresenter {
     /// `tray` must already show `Verdict::Measuring`, as built by `create_icon_image`.
     #[must_use]
-    pub fn new(app: AppHandle, tray: TrayIcon, catalog: TextCatalog, store: DisplayStore) -> Self {
+    pub fn new(
+        app: AppHandle,
+        tray: TrayIcon,
+        menu: TrayMenu,
+        catalog: TextCatalog,
+        store: DisplayStore,
+    ) -> Self {
         Self {
             app,
             tray,
+            menu,
             catalog,
             store,
             shown: Mutex::new(Verdict::Measuring),
@@ -88,6 +97,8 @@ impl VerdictPresenter for ShellPresenter {
     fn present(&self, view: &VerdictView) {
         let display = ConnectionDisplay::from_view(view, &self.catalog);
         self.update_tray(view.verdict, &display.state_label);
+        self.menu
+            .update(&compose_menu_entries(&display, &self.catalog));
         if self.store.replace(display.clone())
             && let Err(error) = ConnectionDisplayChanged(display).emit(&self.app)
         {

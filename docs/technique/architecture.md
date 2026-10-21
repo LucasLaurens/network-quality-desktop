@@ -14,9 +14,9 @@ Le cœur est en Rust, organisé en workspace Cargo de quatre crates. Le sens des
 État actuel :
 
 - `domain` : niveaux et seuils, diagnostic (`Diagnosis`, `Metric`), fenêtre de latence (p90, gigue), fenêtre de perte, détection Hors ligne, issue d'une sonde, médiane, hystérésis, verdict.
-- `application` : moteur de mesure (acteur sur un canal tokio, seule dépendance d'exécution de cette crate), ports `LatencyProbe`, `Clock`, `VerdictPresenter`. Les faux en mémoire ne sont compilés que pour les tests (feature `test-support`).
-- `infrastructure` : sonde à repli (écho ICMP, connexion TCP 443) et horloge système.
-- `app` : icône de barre système (avec un menu minimal « Quitter »), horloge à 1 Hz, `ShellPresenter` qui met à jour l'icône et publie l'objet d'affichage, fenêtre popover ancrée à l'icône (plugin positioner), commandes `read_app_info`, `read_connection_display`, `open_dashboard`, `close_popover`, événement `ConnectionDisplayChanged`.
+- `application` : moteur de mesure (acteur sur un canal tokio, seule dépendance d'exécution de cette crate), ports `LatencyProbe`, `Clock`, `VerdictPresenter`, `TrayHost`. Les faux en mémoire ne sont compilés que pour les tests (feature `test-support`).
+- `infrastructure` : sonde à repli (écho ICMP, connexion TCP 443), horloge système, détection de la barre système (`SystemTrayHost`, D-Bus sous Linux).
+- `app` : icône de barre système et son menu natif (`TrayMenu`), choix du mode barre système ou fenêtre (`ShellMode`), horloge à 1 Hz, `ShellPresenter` qui met à jour l'icône et publie l'objet d'affichage, fenêtre popover ancrée à l'icône (plugin positioner), commandes `read_app_info`, `read_connection_display`, `open_dashboard`, `close_popover`, `read_tray_hint`, `open_tray_extension_page`, événement `ConnectionDisplayChanged`.
 
 ## Front
 

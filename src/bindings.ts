@@ -12,6 +12,14 @@ export const commands = {
 	openDashboard: () => __TAURI_INVOKE<void>("open_dashboard"),
 	/**  Closes the popover from the keyboard (Escape). */
 	closePopover: () => __TAURI_INVOKE<void>("close_popover"),
+	/**  The note shown in window mode; `None` when the tray works. */
+	readTrayHint: () => __TAURI_INVOKE<{
+	message: string,
+	linkLabel: string,
+	dismissLabel: string,
+} | null>("read_tray_hint"),
+	/**  Opens the extension page in the default browser. */
+	openTrayExtensionPage: () => __TAURI_INVOKE<void>("open_tray_extension_page"),
 };
 
 /** Events */
@@ -61,6 +69,13 @@ export type MetricDisplay = {
 	gauge: Gauge | null,
 	/**  Shown under a metric close to its next threshold. */
 	hint: string | null,
+};
+
+/**  The discreet note shown in window mode, pointing to the extension. */
+export type TrayHint = {
+	message: string,
+	linkLabel: string,
+	dismissLabel: string,
 };
 
 /* Tauri Specta runtime */

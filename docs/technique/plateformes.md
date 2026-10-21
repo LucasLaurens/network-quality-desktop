@@ -13,5 +13,13 @@ La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le gr
 ## Icône de barre système
 
 - L'icône est dessinée en Rust (`src-tauri/src/tray_icon.rs`), une forme par état (cinq, Hors ligne compris), avec les couleurs claires des tokens. Elle a été vérifiée lisible sur barre claire et sombre ; le gris de Hors ligne y est plus discret ; elle n'est pas redessinée quand le thème change.
-- Elle porte un menu minimal (« Quitter ») : sous Linux, certains environnements masquent une icône sans menu, et c'est le seul moyen d'interagir avec elle. Le clic gauche n'ouvre pas ce menu, il est réservé au popover.
-- Le popover est ancré à l'icône par le plugin positioner : centré sous l'icône sous macOS, au-dessus sous Windows (barre des tâches en bas). Sous Linux, Tauri ne transmet pas le clic sur l'icône : le popover y sera ouvert depuis le menu (ticket « Menu natif »).
+- Elle porte un menu natif défini une seule fois pour les trois systèmes (`src-tauri/src/tray_menu.rs`) : état et constat (lignes grisées, réécrites quand leur texte change), « Ouvrir le tableau de bord », « Quitter ». Sous macOS et Windows, il s'ouvre au clic droit ; le clic gauche est réservé au popover.
+- Le popover est ancré à l'icône par le plugin positioner : centré sous l'icône sous macOS, au-dessus sous Windows (barre des tâches en bas). Sous Linux, Tauri ne transmet pas le clic sur l'icône : il n'y a pas de popover (`HAS_POPOVER`), le menu s'ouvre à tout clic.
+- Fermer le tableau de bord ne quitte jamais l'app : il est masqué en mode barre système, réduit en mode fenêtre. On quitte par le menu.
+
+## Bureaux sans barre système
+
+- Au lancement, `SystemTrayHost` (crate `infrastructure`) demande au bus de session D-Bus si le nom `org.kde.StatusNotifierWatcher` a un propriétaire (`NameHasOwner`, délai 500 ms). Sans propriétaire, ou sans bus, l'app passe en mode fenêtre (`ShellMode::Window`). macOS et Windows ont toujours une barre système.
+- Le client D-Bus est la crate `dbus`, déjà liée par `tao` sous Linux : aucune dépendance native de plus.
+- En mode fenêtre, l'icône est quand même créée ; le tableau de bord est affiché au lancement et réduit à la fermeture. La note vers l'extension AppIndicator vient de la commande `read_tray_hint` ; son lien ouvre le navigateur par `tauri-plugin-opener`, côté Rust, sans permission front.
+- Limite connue : un bureau qui affiche encore les anciennes icônes XEmbed sans `StatusNotifierWatcher` passe aussi en mode fenêtre ; l'app y reste utilisable.

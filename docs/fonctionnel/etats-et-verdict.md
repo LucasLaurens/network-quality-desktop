@@ -12,6 +12,18 @@ La pastille de la barre des menus montre l'état de la connexion. Chaque état a
 
 Survoler la pastille affiche le nom de l'état (sauf sous Linux). Un clic sur la pastille (macOS et Windows) ouvre le **popover** : l'état, le [diagnostic](diagnostic.md), et les trois mesures avec leur méthode et une jauge qui situe la valeur entre les zones Solide, Instable et Dégradée. Le popover se ferme dès qu'on clique ailleurs, sur un nouveau clic sur la pastille ou avec Échap ; son bouton « Ouvrir le tableau de bord » ouvre la fenêtre principale.
 
+## Menu de la pastille
+
+Un clic droit sur la pastille (macOS et Windows) ouvre un menu : l'état, le constat, « Ouvrir le tableau de bord » et « Quitter ». L'état et le constat se mettent à jour quand la connexion change. Sous Linux, ce même menu remplace le popover : la barre système n'y transmet pas le clic.
+
+Les entrées « Réglages » et « Tests de débit » s'ajouteront au menu avec leurs pages.
+
+## Sans barre système
+
+Certains bureaux n'affichent pas les icônes de la barre système (GNOME sans l'extension AppIndicator). L'app le détecte au lancement et passe en **mode fenêtre** : le tableau de bord s'ouvre au lancement, reste dans la barre des tâches et se réduit au lieu de se fermer. Une note discrète explique pourquoi et mène à la page de l'extension ; « Masquer » la fait disparaître pour les lancements suivants.
+
+L'ouverture automatique à l'ouverture de session arrivera avec le réglage « Lancer à l'ouverture de session ».
+
 ## Les trois mesures
 
 | Mesure  | Ce qu'elle dit                                                          | Solide          | Instable     | Dégradée       |

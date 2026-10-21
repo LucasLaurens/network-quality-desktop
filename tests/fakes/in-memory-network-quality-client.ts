@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import type { AppInfo, ConnectionDisplay, MetricDisplay } from '../../src/bindings'
+import type { AppInfo, ConnectionDisplay, MetricDisplay, TrayHint } from '../../src/bindings'
 import type { NetworkQualityClient } from '../../src/services/network-quality-client'
 
 export function createMetricDisplay(overrides: Partial<MetricDisplay> = {}): MetricDisplay {
@@ -31,6 +31,14 @@ export function createConnectionDisplay(overrides: Partial<ConnectionDisplay> = 
   }
 }
 
+export function createTrayHint(): TrayHint {
+  return {
+    message: faker.lorem.sentence(),
+    linkLabel: faker.lorem.words(3),
+    dismissLabel: faker.word.verb(),
+  }
+}
+
 /**
  * Serves prepared data, lets the test push new displays, and records the dashboard openings.
  * Reads can be held, to replay a read that answers after a newer display was pushed.
@@ -38,6 +46,7 @@ export function createConnectionDisplay(overrides: Partial<ConnectionDisplay> = 
 export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   dashboardOpenings = 0
   popoverClosings = 0
+  extensionPageOpenings = 0
   private listeners: ((display: ConnectionDisplay) => void)[] = []
   private isHoldingReads = false
   private heldReads: (() => void)[] = []
@@ -45,6 +54,7 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   constructor(
     private readonly appInfo: AppInfo = { name: faker.word.noun(), version: faker.system.semver() },
     private display: ConnectionDisplay = createConnectionDisplay(),
+    private readonly trayHint: TrayHint | null = null,
   ) {}
 
   get listenerCount(): number {
@@ -91,6 +101,15 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   closePopover(): Promise<void> {
     this.popoverClosings += 1
+    return Promise.resolve()
+  }
+
+  readTrayHint(): Promise<TrayHint | null> {
+    return Promise.resolve(this.trayHint)
+  }
+
+  openTrayExtensionPage(): Promise<void> {
+    this.extensionPageOpenings += 1
     return Promise.resolve()
   }
 
