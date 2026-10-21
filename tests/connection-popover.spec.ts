@@ -7,6 +7,8 @@ import {
   InMemoryNetworkQualityClient,
   createConnectionDisplay,
   createMetricDisplay,
+  createPathDisplay,
+  createSegmentDisplay,
 } from './fakes/in-memory-network-quality-client'
 
 async function mountPopover(client: InMemoryNetworkQualityClient) {
@@ -61,6 +63,24 @@ describe('ConnectionPopover', () => {
 
     // Assert
     expect(wrapper.find('[data-network]').exists()).toBe(false)
+  })
+
+  it('draws the path and names the segment at fault with a word', async () => {
+    // Arrange
+    const fault = faker.lorem.word()
+    const path = createPathDisplay({ internetSegment: createSegmentDisplay({ fault, state: 'degraded' }) })
+    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ path }))
+
+    // Act
+    const wrapper = await mountPopover(client)
+
+    // Assert
+    const drawn = wrapper.get('[data-path]')
+    expect(drawn.attributes('aria-label')).toBe(path.description)
+    expect(drawn.text()).toContain(path.computer)
+    expect(drawn.text()).toContain(path.gateway)
+    expect(drawn.get('[data-segment="internet"]').text()).toContain(fault)
+    expect(drawn.find('[data-segment="local"] [data-fault]').exists()).toBe(false)
   })
 
   it('shows each metric with its value, its method and its gauge marker', async () => {

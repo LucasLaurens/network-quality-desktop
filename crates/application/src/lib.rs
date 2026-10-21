@@ -8,10 +8,11 @@ mod targets;
 pub mod test_support;
 
 pub use engine::{
-    CONTEXT_REFRESH_SECONDS, EngineMessage, MeasurementEngine, MetricReading, VerdictView,
-    WARM_UP_SAMPLES,
+    CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, MeasurementEngine, MetricReading,
+    VerdictView, WARM_UP_SAMPLES,
 };
 pub use ports::{
-    Clock, ConnectionContextReader, LatencyProbe, NetworkChangeWatcher, TrayHost, VerdictPresenter,
+    Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, NetworkChangeWatcher, TrayHost,
+    VerdictPresenter,
 };
 pub use targets::list_default_targets;

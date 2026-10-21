@@ -13,7 +13,16 @@ const scenarios: Record<string, ConnectionDisplay> = {
     network: { label: 'Réseau Wi-Fi', connection: 'Wi-Fi, via un VPN' },
     state: 'unstable',
     stateLabel: 'Instable',
-    cause: 'La connexion ne tient pas les seuils de la visio.',
+    cause: "L'opérateur est en cause, le Wi-Fi va bien.",
+    action: 'Patienter, ou redémarrer la box si cela dure.',
+    path: {
+      computer: 'Ce Mac',
+      gateway: 'Box',
+      internet: 'Internet',
+      local: { label: `Wi-Fi, 4${NBSP}ms`, fault: null, state: 'solid', isCut: false },
+      internetSegment: { label: `Opérateur, 180${NBSP}ms`, fault: 'en cause', state: 'unstable', isCut: false },
+      description: 'Chemin : Ce Mac, Box, Internet. Tronçon Opérateur en cause.',
+    },
     detail: `Latence 180${NBSP}ms, seuil 100${NBSP}ms`,
     metrics: [
       {
@@ -59,8 +68,16 @@ const scenarios: Record<string, ConnectionDisplay> = {
     network: { label: 'Réseau Wi-Fi', connection: 'Wi-Fi' },
     state: 'offline',
     stateLabel: 'Hors ligne',
-    cause: 'Aucun serveur ne répond.',
-    action: 'Vérifier le Wi-Fi ou le câble.',
+    cause: 'La box répond, mais Internet ne répond plus.',
+    action: "Redémarrer la box ou vérifier le réseau de l'opérateur.",
+    path: {
+      computer: 'Ce Mac',
+      gateway: 'Box',
+      internet: 'Internet',
+      local: { label: `Wi-Fi, 3${NBSP}ms`, fault: null, state: 'solid', isCut: false },
+      internetSegment: { label: 'Opérateur, en attente', fault: 'coupé', state: 'offline', isCut: true },
+      description: 'Chemin : Ce Mac, Box, Internet. Tronçon Opérateur coupé.',
+    },
     metrics: ['Latence', 'Gigue', 'Perte'].map((name) => ({
       name,
       method: `15${NBSP}s`,

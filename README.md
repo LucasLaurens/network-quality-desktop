@@ -2,7 +2,7 @@
 
 App de bureau (macOS, Linux, Windows) qui affiche en temps réel l'état de la connexion Internet : **Solide**, **Instable**, **Dégradée**, **Hors ligne** ou **Mesure en cours**, avec la raison en une phrase et un historique par réseau. Locale d'abord et gratuite : par défaut, seuls de petits pings quittent l'ordinateur.
 
-> État actuel (version 0.1.0) : la pastille suit en continu la latence, la gigue et la perte ; un clic ouvre le popover avec l'état, le réseau et son type de connexion, sa cause et les trois mesures, un clic droit le menu (seul accès sous Linux). Sans barre système, l'app reste ouverte dans une fenêtre. Historique, tableau de bord et réglages arrivent dans les prochaines versions. La feuille de route est suivie dans les issues GitHub.
+> État actuel (version 0.1.0) : la pastille suit en continu la latence, la gigue et la perte ; un clic ouvre le popover avec l'état, le réseau et son type de connexion, la cause et le tronçon en cause sur le chemin Ce Mac → Box → Internet, et les trois mesures, un clic droit le menu (seul accès sous Linux). Sans barre système, l'app reste ouverte dans une fenêtre. Historique, tableau de bord et réglages arrivent dans les prochaines versions. La feuille de route est suivie dans les issues GitHub.
 
 ## Prérequis
 

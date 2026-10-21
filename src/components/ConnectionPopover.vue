@@ -2,6 +2,7 @@
 import { inject, onMounted, onUnmounted, ref } from 'vue'
 import type { ConnectionDisplay } from '../bindings'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
+import ConnectionPath from './ConnectionPath.vue'
 import MetricGauge from './MetricGauge.vue'
 import StateShape from './StateShape.vue'
 
@@ -56,6 +57,7 @@ const openDashboard = async (): Promise<void> => {
     <p class="cause" aria-live="polite">{{ display.cause }}</p>
     <p v-if="display.action" class="action">{{ display.action }}</p>
     <p v-if="display.detail" class="detail num">{{ display.detail }}</p>
+    <ConnectionPath v-if="display.path" :path="display.path" />
 
     <ul class="metrics">
       <li v-for="metric in display.metrics" :key="metric.name" class="metric" data-metric>

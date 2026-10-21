@@ -10,7 +10,7 @@ La pastille de la barre des menus montre l'état de la connexion. Chaque état a
 | Hors ligne      | anneau barré gris     | aucun serveur ne répond, ni au ping ni en TCP, pendant 5 secondes                                                       |
 | Mesure en cours | anneau pointillé bleu | au démarrage, au retour de connexion et quand un autre réseau prend le relais, tant que 10 mesures n'ont pas été reçues |
 
-Survoler la pastille affiche le nom de l'état (sauf sous Linux). Un clic sur la pastille (macOS et Windows) ouvre le **popover** : l'état, le [diagnostic](diagnostic.md), et les trois mesures avec leur méthode et une jauge qui situe la valeur entre les zones Solide, Instable et Dégradée. Le popover se ferme dès qu'on clique ailleurs, sur un nouveau clic sur la pastille ou avec Échap ; son bouton « Ouvrir le tableau de bord » ouvre la fenêtre principale.
+Survoler la pastille affiche le nom de l'état (sauf sous Linux). Un clic sur la pastille (macOS et Windows) ouvre le **popover** : l'état, le [diagnostic](diagnostic.md) avec le chemin Ce Mac → Box → Internet et le tronçon en cause, et les trois mesures avec leur méthode et une jauge qui situe la valeur entre les zones Solide, Instable et Dégradée. Le popover se ferme dès qu'on clique ailleurs, sur un nouveau clic sur la pastille ou avec Échap ; son bouton « Ouvrir le tableau de bord » ouvre la fenêtre principale.
 
 ## Réseau et type de connexion
 
