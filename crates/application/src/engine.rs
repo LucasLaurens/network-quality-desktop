@@ -349,10 +349,14 @@ where
             ),
         ];
         let local = self.compute_local_segment();
+        let wifi_in_use = self.wifi.as_ref().filter(|_| {
+            self.context
+                .is_some_and(|context| context.is_carried_by_wifi())
+        });
         let fault = Fault::attribute(
             ConnectionKind::from_context(self.context),
             local,
-            self.wifi.as_ref(),
+            wifi_in_use,
         );
         let diagnosis = match verdict {
             Verdict::Offline => self.diagnose_offline(),

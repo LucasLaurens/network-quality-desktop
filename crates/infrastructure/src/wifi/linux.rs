@@ -1,12 +1,12 @@
 //! `NetworkManager` over the system bus. No permission guards the name; the signal comes as a
-//! percentage, turned into dBm with the scale Windows documents.
+//! percentage, turned back into dBm with `NetworkManager`'s own scale.
 
 use std::time::Duration;
 
 use dbus::Path;
 use dbus::blocking::stdintf::org_freedesktop_dbus::Properties;
 use dbus::blocking::{Connection, Proxy};
-use domain::{WifiBand, WifiLink, compute_channel, convert_quality_to_dbm};
+use domain::{WifiBand, WifiLink, compute_channel, convert_kilobits_to_megabits};
 
 const NETWORK_MANAGER: &str = "org.freedesktop.NetworkManager";
 const NETWORK_MANAGER_PATH: &str = "/org/freedesktop/NetworkManager";
@@ -40,15 +40,31 @@ pub fn read_wifi() -> Option<WifiLink> {
         name: ssid
             .and_then(|bytes| String::from_utf8(bytes).ok())
             .filter(|name| !name.is_empty()),
-        signal_dbm: strength.map(convert_quality_to_dbm),
-        noise_dbm: None,
-        // Kbit/s.
-        rate_mbps: read_u32(&device, WIRELESS, "Bitrate").map(|rate| rate / 1000),
+        signal_dbm: strength.map(convert_strength_to_dbm),
+        rate_mbps: read_u32(&device, WIRELESS, "Bitrate").map(convert_kilobits_to_megabits),
         channel: frequency.and_then(compute_channel),
         band: frequency.map_or(WifiBand::Unknown, WifiBand::from_frequency),
     })
 }
 
+/// `NetworkManager` maps −100 dBm to 0 % and −40 dBm to 100 %, linearly. O(1).
+fn convert_strength_to_dbm(percent: u8) -> i32 {
+    i32::from(percent.min(100)) * 3 / 5 - 100
+}
+
 fn read_u32(proxy: &Proxy<'_, &Connection>, interface: &str, property: &str) -> Option<u32> {
     proxy.get(interface, property).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_strength_on_the_network_manager_scale() {
+        // Act & Assert
+        assert_eq!(convert_strength_to_dbm(0), -100);
+        assert_eq!(convert_strength_to_dbm(50), -70);
+        assert_eq!(convert_strength_to_dbm(100), -40);
+    }
 }

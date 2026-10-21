@@ -86,6 +86,8 @@ export type MetricDisplay = {
 export type NetworkDisplay = {
 	label: string,
 	connection: string,
+	/**  Signal, channel and rate of the Wi-Fi carrying the traffic, e.g. "-58 dBm, canal 36". */
+	wifiDetails: string | null,
 	/**  Offered when the system hides the Wi-Fi name until the location permission is given. */
 	revealLabel: string | null,
 };

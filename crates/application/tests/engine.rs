@@ -12,8 +12,8 @@ use application::{
 };
 use domain::{
     ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, Grade, LocalProblem,
-    LocalSegment, MacAddress, MeasuringCause, Metering, Metric, ProbeOutcome, Target, Unmeasurable,
-    Verdict, WifiBand, WifiLink,
+    LocalSegment, MacAddress, MeasuringCause, Medium, Metering, Metric, ProbeOutcome, Target,
+    Unmeasurable, Verdict, WifiBand, WifiLink,
 };
 
 // Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
@@ -609,6 +609,11 @@ fn create_context(kind: ConnectionKind, last_octet: u8) -> ConnectionContext {
         gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, last_octet]),
         gateway_address: Some(Ipv4Addr::new(192, 168, last_octet, 1)),
         metering: Metering::Unknown,
+        medium: if kind == ConnectionKind::WiFi {
+            Medium::WiFi
+        } else {
+            Medium::Ethernet
+        },
     }
 }
 
@@ -1027,7 +1032,6 @@ async fn puts_a_slow_wifi_down_to_its_weak_signal() {
     harness.wifi.set_link(Some(WifiLink {
         name: None,
         signal_dbm: Some(-80),
-        noise_dbm: None,
         rate_mbps: None,
         channel: None,
         band: WifiBand::TwoPointFourGhz,
@@ -1047,6 +1051,36 @@ async fn puts_a_slow_wifi_down_to_its_weak_signal() {
         Diagnosis::OutOfThreshold {
             metric: Metric::Latency,
             fault: Fault::LocalLink(LocalProblem::WeakSignal),
+        }
+    );
+}
+
+#[tokio::test]
+async fn ignores_a_weak_wifi_while_a_cable_carries_the_traffic() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.wifi.set_link(Some(WifiLink {
+        name: None,
+        signal_dbm: Some(-80),
+        rate_mbps: None,
+        channel: None,
+        band: WifiBand::TwoPointFourGhz,
+    }));
+
+    // Act
+    run_slow_internet_behind(
+        &mut harness,
+        ConnectionKind::Ethernet,
+        GatewayEcho::Answered(Duration::from_millis(45)),
+    )
+    .await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::OutOfThreshold {
+            metric: Metric::Latency,
+            fault: Fault::LocalLink(LocalProblem::Latency),
         }
     );
 }

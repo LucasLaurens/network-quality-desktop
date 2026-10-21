@@ -31,7 +31,6 @@ windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_WiFi",
 ] }
-windows-core = "=0.62.2"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["net", "macros", "rt"] }

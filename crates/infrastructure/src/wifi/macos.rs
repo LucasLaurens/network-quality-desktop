@@ -1,13 +1,19 @@
 //! `CoreWLAN` for the radio values, `CoreLocation` for the permission that reveals the name.
 
 use domain::{WifiBand, WifiLink};
+use objc2::rc::autoreleasepool;
 use objc2_core_location::{CLAuthorizationStatus, CLLocationManager};
 use objc2_core_wlan::{CWChannelBand, CWWiFiClient};
 
 use super::LocationRequest;
 
-/// O(1).
+/// O(1). Runs on a blocking thread with no pool of its own: the pool frees what `CoreWLAN` and
+/// the name conversion autorelease, every reading.
 pub fn read_wifi() -> Option<WifiLink> {
+    autoreleasepool(|_| read_wifi_in_pool())
+}
+
+fn read_wifi_in_pool() -> Option<WifiLink> {
     // SAFETY: CoreWLAN getters only read the state of the default interface; every object they
     // return is retained by `Retained` for as long as it is used.
     unsafe {
@@ -21,9 +27,6 @@ pub fn read_wifi() -> Option<WifiLink> {
         Some(WifiLink {
             name: interface.ssid().map(|name| name.to_string()),
             signal_dbm: i32::try_from(signal).ok(),
-            noise_dbm: i32::try_from(interface.noiseMeasurement())
-                .ok()
-                .filter(|noise| *noise != 0),
             rate_mbps: to_whole_mbps(interface.transmitRate()),
             channel: channel
                 .as_ref()

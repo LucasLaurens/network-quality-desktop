@@ -13,6 +13,7 @@ const scenarios: Record<string, ConnectionDisplay> = {
     network: {
       label: 'Wi-Fi (nom masqué)',
       connection: 'Wi-Fi 5 GHz, via un VPN',
+      wifiDetails: `−58${NBSP}dBm, canal 36, 866${NBSP}Mbit/s`,
       revealLabel: 'Afficher le nom du réseau',
     },
     state: 'unstable',
@@ -69,7 +70,7 @@ const scenarios: Record<string, ConnectionDisplay> = {
   }),
   offline: createConnectionDisplay({
     openDashboardLabel: 'Ouvrir le tableau de bord',
-    network: { label: 'Livebox-4F2A', connection: 'Wi-Fi 5 GHz', revealLabel: null },
+    network: { label: 'Livebox-4F2A', connection: 'Wi-Fi 5 GHz', wifiDetails: null, revealLabel: null },
     state: 'offline',
     stateLabel: 'Hors ligne',
     cause: 'La box répond, mais Internet ne répond plus.',

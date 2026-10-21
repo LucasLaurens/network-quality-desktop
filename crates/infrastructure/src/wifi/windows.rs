@@ -4,7 +4,7 @@
 use std::ffi::c_void;
 use std::ptr;
 
-use domain::{WifiBand, WifiLink};
+use domain::{WifiBand, WifiLink, convert_kilobits_to_megabits};
 use windows::Win32::Foundation::{ERROR_SUCCESS, HANDLE};
 use windows::Win32::NetworkManagement::WiFi::{
     WLAN_CONNECTION_ATTRIBUTES, WLAN_INTERFACE_INFO, WLAN_INTERFACE_INFO_LIST, WLAN_INTF_OPCODE,
@@ -15,8 +15,6 @@ use windows::Win32::NetworkManagement::WiFi::{
 
 /// Version 2 of the client API: Windows Vista and later.
 const WLAN_CLIENT_VERSION: u32 = 2;
-/// The 2.4 GHz band ends at channel 14; above, 5 and 6 GHz share channel numbers.
-const LAST_2_4_GHZ_CHANNEL: u32 = 14;
 
 /// O(i) for i wireless interfaces.
 pub fn read_wifi() -> Option<WifiLink> {
@@ -38,15 +36,12 @@ pub fn read_wifi() -> Option<WifiLink> {
                 .filter(|name| !name.is_empty())
         }),
         signal_dbm,
-        noise_dbm: None,
-        // Kbit/s in the association attributes.
-        rate_mbps: connection
-            .map(|connection| connection.wlanAssociationAttributes.ulTxRate / 1000),
+        rate_mbps: connection.map(|connection| {
+            convert_kilobits_to_megabits(connection.wlanAssociationAttributes.ulTxRate)
+        }),
         channel,
-        band: match channel {
-            Some(number) if number <= LAST_2_4_GHZ_CHANNEL => WifiBand::TwoPointFourGhz,
-            _ => WifiBand::Unknown,
-        },
+        // The channel number alone cannot tell the bands apart: 6 GHz reuses 1 to 233.
+        band: WifiBand::Unknown,
     })
 }
 
@@ -88,7 +83,7 @@ impl WlanClient {
     }
 
     /// Copies the answer out and frees the API's buffer; `None` when refused or unavailable.
-    fn query<T: Copy>(&self, guid: &windows_core::GUID, opcode: WLAN_INTF_OPCODE) -> Option<T> {
+    fn query<T: Copy>(&self, guid: &windows::core::GUID, opcode: WLAN_INTF_OPCODE) -> Option<T> {
         let mut size = 0_u32;
         let mut data: *mut c_void = ptr::null_mut();
         // SAFETY: the buffer is checked for null and size before it is read, then freed.

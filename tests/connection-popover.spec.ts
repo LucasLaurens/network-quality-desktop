@@ -42,7 +42,12 @@ describe('ConnectionPopover', () => {
 
   it('names the network and how it is reached', async () => {
     // Arrange
-    const network = { label: faker.company.name(), connection: faker.lorem.words(2), revealLabel: null }
+    const network = {
+      label: faker.company.name(),
+      connection: faker.lorem.words(2),
+      wifiDetails: null,
+      revealLabel: null,
+    }
     const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ network }))
 
     // Act
@@ -54,10 +59,23 @@ describe('ConnectionPopover', () => {
     expect(where.text()).toContain(network.connection)
   })
 
+  it('shows the details of the Wi-Fi link', async () => {
+    // Arrange
+    const wifiDetails = faker.lorem.words(4)
+    const network = { label: faker.lorem.words(2), connection: faker.lorem.word(), wifiDetails, revealLabel: null }
+    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ network }))
+
+    // Act
+    const wrapper = await mountPopover(client)
+
+    // Assert
+    expect(wrapper.get('[data-wifi-details]').text()).toBe(wifiDetails)
+  })
+
   it('offers to reveal a hidden Wi-Fi name', async () => {
     // Arrange
     const revealLabel = faker.lorem.words(3)
-    const network = { label: faker.lorem.words(2), connection: faker.lorem.word(), revealLabel }
+    const network = { label: faker.lorem.words(2), connection: faker.lorem.word(), wifiDetails: null, revealLabel }
     const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ network }))
     const wrapper = await mountPopover(client)
     const button = wrapper.get('[data-reveal-name]')

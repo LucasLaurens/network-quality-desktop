@@ -56,6 +56,9 @@ const openDashboard = async (): Promise<void> => {
       <p v-if="display.network" class="where" data-network>
         <span>{{ display.network.label }}</span>
         <span class="connection">{{ display.network.connection }}</span>
+        <span v-if="display.network.wifiDetails" class="connection num" data-wifi-details>
+          {{ display.network.wifiDetails }}
+        </span>
         <button
           v-if="display.network.revealLabel"
           type="button"

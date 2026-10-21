@@ -5,7 +5,7 @@ use std::time::Duration;
 use application::{MetricReading, VerdictView};
 use domain::{
     ConnectionKind, Diagnosis, Fault, Grade, LocalProblem, LocalSegment, LossRate, MeasuringCause,
-    Metric, Unmeasurable, Verdict,
+    Metric, Unmeasurable, Verdict, WifiBand,
 };
 use fluent_bundle::FluentArgs;
 use serde::Serialize;
@@ -128,8 +128,19 @@ impl ConnectionDisplay {
     #[must_use]
     pub fn from_view(view: &VerdictView, catalog: &TextCatalog) -> Self {
         let state = DisplayState::from(view.verdict);
-        let (cause_key, action_key) =
-            select_cause_keys(view.diagnosis, ConnectionKind::from_context(view.context));
+        let wifi_band = view
+            .wifi
+            .as_ref()
+            .filter(|_| {
+                view.context
+                    .is_some_and(|context| context.is_carried_by_wifi())
+            })
+            .map(|link| link.band);
+        let (cause_key, action_key) = select_cause_keys(
+            view.diagnosis,
+            ConnectionKind::from_context(view.context),
+            wifi_band,
+        );
         Self {
             state,
             state_label: catalog.render(state.to_catalogue_key(), None),
@@ -286,11 +297,12 @@ fn compose_detail(view: &VerdictView, catalog: &TextCatalog) -> Option<String> {
 const fn select_cause_keys(
     diagnosis: Diagnosis,
     kind: ConnectionKind,
+    wifi_band: Option<WifiBand>,
 ) -> (&'static str, Option<&'static str>) {
     match diagnosis {
         Diagnosis::Healthy => ("cause-healthy", None),
         Diagnosis::NearThreshold(_) => ("cause-near-threshold", None),
-        Diagnosis::OutOfThreshold { fault, .. } => select_fault_keys(fault, kind),
+        Diagnosis::OutOfThreshold { fault, .. } => select_fault_keys(fault, kind, wifi_band),
         Diagnosis::Recovering => ("cause-recovering", None),
         Diagnosis::Measuring {
             cause: MeasuringCause::FirstMeasures,
@@ -313,17 +325,22 @@ const fn select_cause_keys(
     }
 }
 
+/// Moving to 5 GHz is advice only for a link that is still on 2.4 GHz, or of unknown band.
 const fn select_fault_keys(
     fault: Fault,
     kind: ConnectionKind,
+    wifi_band: Option<WifiBand>,
 ) -> (&'static str, Option<&'static str>) {
     match (fault, kind) {
         (Fault::LocalLink(_), ConnectionKind::PhoneHotspot) => {
             ("cause-phone-link", Some("action-phone-link"))
         }
-        (Fault::LocalLink(LocalProblem::WeakSignal), _) => {
-            ("cause-wifi-weak", Some("action-wifi-weak"))
-        }
+        (Fault::LocalLink(LocalProblem::WeakSignal), _) => match wifi_band {
+            Some(WifiBand::FiveGhz | WifiBand::SixGhz) => {
+                ("cause-wifi-weak", Some("action-wifi-weak-closer"))
+            }
+            _ => ("cause-wifi-weak", Some("action-wifi-weak")),
+        },
         (Fault::LocalLink(LocalProblem::Loss), ConnectionKind::WiFi) => {
             ("cause-wifi-losses", Some("action-wifi-losses"))
         }
@@ -363,8 +380,8 @@ mod tests {
 
     use application::{MetricReading, VerdictView};
     use domain::{
-        ConnectionContext, Diagnosis, Fault, Grade, GradeBounds, LocalSegment, LossRate, Metering,
-        Metric, Scalable, Thresholds, Unmeasurable, Verdict,
+        ConnectionContext, Diagnosis, Fault, Grade, GradeBounds, LocalSegment, LossRate, Medium,
+        Metering, Metric, Scalable, Thresholds, Unmeasurable, Verdict,
     };
 
     use super::*;
@@ -585,6 +602,11 @@ mod tests {
             gateway: None,
             gateway_address: None,
             metering: Metering::Unmetered,
+            medium: if kind == ConnectionKind::WiFi {
+                Medium::WiFi
+            } else {
+                Medium::Ethernet
+            },
         }
     }
 
@@ -877,5 +899,28 @@ mod tests {
             display.action,
             Some(format!("Se rapprocher de la box ou passer en 5{NBSP}GHz."))
         );
+    }
+
+    #[test]
+    fn advises_moving_to_5_ghz_only_on_a_2_4_ghz_link() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let mut view = create_fault_view(
+            Fault::LocalLink(LocalProblem::WeakSignal),
+            ConnectionKind::WiFi,
+        );
+        view.wifi = Some(domain::WifiLink {
+            name: None,
+            signal_dbm: Some(-78),
+            rate_mbps: None,
+            channel: Some(36),
+            band: WifiBand::FiveGhz,
+        });
+
+        // Act
+        let display = ConnectionDisplay::from_view(&view, &catalog);
+
+        // Assert
+        assert_eq!(display.action.as_deref(), Some("Se rapprocher de la box."));
     }
 }

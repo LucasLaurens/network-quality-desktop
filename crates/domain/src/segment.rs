@@ -134,16 +134,14 @@ pub enum Fault {
 impl Fault {
     /// Applies the attribution rules once the Internet segment is known to be bad. The local
     /// link is cleared only once its losses can be judged; a bad local link over a weak Wi-Fi
-    /// signal is put down to the signal. O(1).
+    /// signal is put down to the signal. `wifi` is the link carrying the traffic, if any. O(1).
     #[must_use]
     pub fn attribute(kind: ConnectionKind, local: LocalSegment, wifi: Option<&WifiLink>) -> Self {
         if kind == ConnectionKind::Cellular {
             return Self::MobileNetwork;
         }
-        // The computer may stay associated with a Wi-Fi while a cable carries the traffic.
-        let is_over_wifi = matches!(kind, ConnectionKind::WiFi | ConnectionKind::PhoneHotspot);
         match Self::attribute_link(kind, local) {
-            Self::LocalLink(_) if is_over_wifi && wifi.is_some_and(WifiLink::is_signal_weak) => {
+            Self::LocalLink(_) if wifi.is_some_and(WifiLink::is_signal_weak) => {
                 Self::LocalLink(LocalProblem::WeakSignal)
             }
             fault => fault,
@@ -369,7 +367,6 @@ mod tests {
         let weak = WifiLink {
             name: None,
             signal_dbm: Some(-78),
-            noise_dbm: None,
             rate_mbps: None,
             channel: None,
             band: crate::WifiBand::Unknown,
@@ -383,30 +380,6 @@ mod tests {
         assert_eq!(
             Fault::attribute(ConnectionKind::WiFi, GOOD_LOCAL, Some(&weak)),
             Fault::Operator
-        );
-    }
-
-    #[test]
-    fn ignores_the_wifi_signal_when_a_cable_carries_the_traffic() {
-        // Arrange
-        let slow = LocalSegment::Measured {
-            latency: Some(Duration::from_millis(45)),
-            loss: Some(LossRate::from_percent(0.0)),
-            lost: 0,
-        };
-        let weak = WifiLink {
-            name: None,
-            signal_dbm: Some(-80),
-            noise_dbm: None,
-            rate_mbps: None,
-            channel: None,
-            band: crate::WifiBand::Unknown,
-        };
-
-        // Act & Assert
-        assert_eq!(
-            Fault::attribute(ConnectionKind::Ethernet, slow, Some(&weak)),
-            Fault::LocalLink(LocalProblem::Latency)
         );
     }
 }

@@ -34,4 +34,6 @@ pub use segment::{
 pub use target::Target;
 pub use timestamp::Timestamp;
 pub use verdict::Verdict;
-pub use wifi::{WEAK_SIGNAL_DBM, WifiBand, WifiLink, compute_channel, convert_quality_to_dbm};
+pub use wifi::{
+    WEAK_SIGNAL_DBM, WifiBand, WifiLink, compute_channel, convert_kilobits_to_megabits,
+};

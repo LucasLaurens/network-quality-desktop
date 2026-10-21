@@ -15,6 +15,8 @@ const CAN_REVEAL_NAME: bool = cfg!(any(target_os = "macos", target_os = "windows
 pub struct NetworkDisplay {
     pub label: String,
     pub connection: String,
+    /// Signal, channel and rate of the Wi-Fi carrying the traffic, e.g. "-58 dBm, canal 36".
+    pub wifi_details: Option<String>,
     /// Offered when the system hides the Wi-Fi name until the location permission is given.
     pub reveal_label: Option<String>,
 }
@@ -35,13 +37,7 @@ impl NetworkDisplay {
             (ConnectionKind::Other, true) => ("network-vpn", "connection-vpn"),
             (ConnectionKind::Other, false) => ("network-other", "connection-other"),
         };
-        // A Wi-Fi association says nothing when a cable carries the traffic.
-        let wifi = wifi.filter(|_| {
-            matches!(
-                context.kind,
-                ConnectionKind::WiFi | ConnectionKind::PhoneHotspot
-            )
-        });
+        let wifi = wifi.filter(|_| context.is_carried_by_wifi());
         let label = match wifi {
             Some(WifiLink {
                 name: Some(name), ..
@@ -69,10 +65,32 @@ impl NetworkDisplay {
         Self {
             label,
             connection,
+            wifi_details: wifi.and_then(|link| describe_wifi(link, catalog)),
             reveal_label: (CAN_REVEAL_NAME && is_name_hidden)
                 .then(|| catalog.render("action-reveal-name", None)),
         }
     }
+}
+
+/// `None` when the system gave none of the three values. O(1).
+fn describe_wifi(link: &WifiLink, catalog: &TextCatalog) -> Option<String> {
+    let render = |key: &str, value: String| {
+        let mut args = FluentArgs::new();
+        args.set("value", value);
+        catalog.render(key, Some(&args))
+    };
+    let parts: Vec<String> = [
+        link.signal_dbm
+            .map(|signal| render("unit-dbm", signal.unsigned_abs().to_string())),
+        link.channel
+            .map(|channel| render("wifi-channel", channel.to_string())),
+        link.rate_mbps
+            .map(|rate| render("unit-megabits", rate.to_string())),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    (!parts.is_empty()).then(|| parts.join(", "))
 }
 
 const fn select_band_key(band: WifiBand) -> Option<&'static str> {
@@ -92,7 +110,7 @@ fn append_to_connection(connection: String, key: &str, catalog: &TextCatalog) ->
 
 #[cfg(test)]
 mod tests {
-    use domain::Metering;
+    use domain::{Medium, Metering};
 
     use super::*;
 
@@ -103,6 +121,11 @@ mod tests {
             gateway: None,
             gateway_address: None,
             metering: Metering::Unmetered,
+            medium: if kind == ConnectionKind::WiFi {
+                Medium::WiFi
+            } else {
+                Medium::Ethernet
+            },
         }
     }
 
@@ -110,8 +133,7 @@ mod tests {
         WifiLink {
             name: name.map(str::to_owned),
             signal_dbm: Some(-58),
-            noise_dbm: None,
-            rate_mbps: None,
+            rate_mbps: Some(866),
             channel: Some(36),
             band: WifiBand::FiveGhz,
         }
@@ -120,7 +142,7 @@ mod tests {
     #[test]
     fn names_the_wifi_network_when_the_system_gives_its_name() {
         // Arrange
-        let name = "Livebox-4F2A";
+        let name = "réseau-de-test";
 
         // Act
         let network = NetworkDisplay::from_context(
@@ -132,6 +154,10 @@ mod tests {
         // Assert
         assert_eq!(network.label, name);
         assert_eq!(network.connection, "Wi-Fi 5\u{a0}GHz");
+        assert_eq!(
+            network.wifi_details.as_deref(),
+            Some("\u{2212}58\u{a0}dBm, canal 36, 866\u{a0}Mbit/s")
+        );
         assert_eq!(network.reveal_label, None);
     }
 
