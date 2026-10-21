@@ -23,7 +23,7 @@ mod traffic;
 mod verdict;
 mod wifi;
 
-pub use access::{ACCESS_TESTS, AccessEstimate, BoxLine, WanAccessType};
+pub use access::{ACCESS_MIN_TESTS, ACCESS_TESTS, AccessEstimate, BoxLine, WanAccessType};
 pub use calendar::{CivilDate, CivilDateTime};
 pub use connection::{
     ConnectionContext, ConnectionKind, Gateway, InterfaceSnapshot, MacAddress, Medium, Metering,

@@ -44,6 +44,7 @@ describe('SettingsView, data', () => {
     // Assert
     expect(warning).toContain('mesures')
     expect(warning).toContain('tests de débit')
+    expect(warning).toContain('réseaux connus')
     expect(warning).toContain('réglages sont conservés')
     expect(before).toBe(0)
     expect(client.erases).toBe(1)

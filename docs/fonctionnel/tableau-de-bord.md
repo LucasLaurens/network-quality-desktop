@@ -63,14 +63,14 @@ Le trafic observé vient des compteurs de l'interface réseau : c'est ce que l'o
 
 ### Accès et ligne
 
-L'app demande à la box, en UPnP et en lecture seule, ce qu'elle sait de sa ligne. Beaucoup de box ont l'UPnP désactivé ou ne répondent pas : le panneau le dit (« La box ne répond pas en UPnP : l'accès n'est qu'estimé, d'après les tests de débit de ce réseau et la latence. »).
+L'app demande à la box, en UPnP et en lecture seule, ce qu'elle sait de sa ligne. Beaucoup de box ont l'UPnP désactivé ou ne répondent pas : le panneau le dit, et précise si l'accès est estimé ou reste inconnu faute de trois tests de débit concordants. Quand la box ne donne qu'un sens (souvent la réception), l'autre s'affiche « – ». Si la ligne ne peut pas être lue, le panneau l'écrit au lieu d'attendre.
 
-| Accès affiché             | Quand                                                                                                                         |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| ADSL (annoncé par la box) | La box dit « DSL ».                                                                                                           |
-| Fibre (estimé)            | Sinon : envoi d'au moins 20 Mbit/s (médiane des 5 derniers tests de débit sur ce réseau) et latence affichée de 8 ms au plus. |
-| ADSL (estimé)             | Sinon : envoi de 2 Mbit/s au plus et latence affichée d'au moins 10 ms.                                                       |
-| Inconnu                   | Dans tous les autres cas, et tant qu'il manque un test de débit sur ce réseau ou une latence affichée.                        |
+| Accès affiché            | Quand                                                                                                                                     |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| DSL (annoncé par la box) | La box dit « DSL » (ADSL ou VDSL).                                                                                                        |
+| Fibre (estimé)           | Sinon : envoi d'au moins 20 Mbit/s (médiane des 5 derniers tests de débit sur ce réseau, 3 au moins) et latence affichée de 8 ms au plus. |
+| ADSL (estimé)            | Sinon : envoi de 2 Mbit/s au plus et latence affichée d'au moins 10 ms.                                                                   |
+| Inconnu                  | Dans tous les autres cas, et tant qu'il y a moins de trois tests de débit sur ce réseau ou pas de latence affichée.                       |
 
 Une box fibre se dit « Ethernet », comme une box câble ou une box derrière une autre : cette réponse ne prouve rien. La fibre et le câble se ressemblent, et le VDSL tombe entre les deux : ils restent « Inconnu » plutôt que devinés. Les seuils sont des propositions, pas encore vérifiées sur des lignes réelles.
 

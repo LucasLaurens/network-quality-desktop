@@ -204,6 +204,8 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     refreshSeconds: faker.number.int({ min: 2, max: 10 }),
   }
   readonly lineDetails: LineDetails = { section: createDetailSection(), note: faker.lorem.sentence() }
+  /** Empty while the line is read. */
+  private lineRefusal = ''
   /** Empty while exports and erases succeed. */
   private dataRefusal = ''
   private throughputPanel = createThroughputPanel()
@@ -444,7 +446,13 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   readLineDetails(): Promise<LineDetails> {
     this.lineDetailsReads += 1
+    if (this.lineRefusal !== '') return Promise.reject(new Error(this.lineRefusal))
     return Promise.resolve(this.lineDetails)
+  }
+
+  /** Every reading of the line is refused with `refusal`. */
+  refuseLineDetails(refusal: string): void {
+    this.lineRefusal = refusal
   }
 
   readNextThroughputRow(): ThroughputRow {

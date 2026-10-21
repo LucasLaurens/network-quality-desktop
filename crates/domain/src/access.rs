@@ -13,6 +13,8 @@ const ADSL_UPLOAD_UP_TO: Bitrate = Bitrate::from_bits_per_second(2_000_000);
 const ADSL_ROUND_TRIP_FROM: Duration = Duration::from_millis(10);
 /// The upload signal is the median of the latest tests: one slow server does not decide.
 pub const ACCESS_TESTS: usize = 5;
+/// Fewer tests than this say nothing yet.
+pub const ACCESS_MIN_TESTS: usize = 3;
 
 /// `WANAccessType` of the `UPnP` `WANCommonInterfaceConfig` service. Only « DSL » proves anything:
 /// a fibre box sees its link as Ethernet, as a cable box or a box behind another one does.
@@ -61,8 +63,8 @@ pub enum AccessEstimate {
 }
 
 impl AccessEstimate {
-    /// `uploads` are the latest throughput tests on this network, any order; `round_trip` the
-    /// latency measured at rest. Fibre and cable look alike, and VDSL falls in between: both
+    /// `uploads` are the latest throughput tests on this network, any order, `ACCESS_MIN_TESTS`
+    /// at least; `round_trip` the latency measured at rest. Fibre and cable look alike, and VDSL falls in between: both
     /// stay unknown rather than guessed. O(u log u) for u uploads.
     #[must_use]
     pub fn estimate(
@@ -89,11 +91,17 @@ impl AccessEstimate {
     }
 }
 
-/// The middle rate, the lower one of the two middles on an even count. O(u log u).
+/// The middle rate, the mean of the two middles on an even count; `None` below
+/// `ACCESS_MIN_TESTS` rates. O(u log u).
 fn compute_median_rate(rates: &[Bitrate]) -> Option<Bitrate> {
-    let mut sorted = rates.to_vec();
+    if rates.len() < ACCESS_MIN_TESTS {
+        return None;
+    }
+    let mut sorted: Vec<u64> = rates.iter().map(|rate| rate.to_bits_per_second()).collect();
     sorted.sort_unstable();
-    sorted.get(sorted.len().checked_sub(1)? / 2).copied()
+    let upper = sorted[sorted.len() / 2];
+    let lower = sorted[(sorted.len() - 1) / 2];
+    Some(Bitrate::from_bits_per_second(lower.midpoint(upper)))
 }
 
 #[cfg(test)]
@@ -141,7 +149,7 @@ mod tests {
             create_megabits(2),
             create_megabits(250),
         ];
-        let slow = [create_megabits(1)];
+        let slow = [create_megabits(1), create_megabits(1), create_megabits(2)];
 
         // Act
         let fibre = AccessEstimate::estimate(None, &fast, Some(Duration::from_millis(4)));
@@ -157,9 +165,37 @@ mod tests {
     }
 
     #[test]
+    fn waits_for_three_tests_and_splits_an_even_count_evenly() {
+        // Arrange
+        let two_slow = [create_megabits(1), create_megabits(1)];
+        let split = [
+            create_megabits(1),
+            create_megabits(1),
+            create_megabits(300),
+            create_megabits(300),
+        ];
+        let near = Some(Duration::from_millis(4));
+        let far = Some(Duration::from_millis(30));
+
+        // Act
+        let too_few = AccessEstimate::estimate(None, &two_slow, far);
+        let undecided_far = AccessEstimate::estimate(None, &split, far);
+        let fibre_near = AccessEstimate::estimate(None, &split, near);
+
+        // Assert
+        assert_eq!(too_few, AccessEstimate::Unknown);
+        assert_eq!(
+            undecided_far,
+            AccessEstimate::Unknown,
+            "150 Mbit/s is no ADSL"
+        );
+        assert_eq!(fibre_near, AccessEstimate::EstimatedFibre);
+    }
+
+    #[test]
     fn needs_both_signals() {
         // Arrange
-        let slow = [create_megabits(1)];
+        let slow = [create_megabits(1), create_megabits(1), create_megabits(1)];
 
         // Act
         let without_test = AccessEstimate::estimate(None, &[], Some(Duration::from_millis(30)));

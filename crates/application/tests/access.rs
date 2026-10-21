@@ -40,7 +40,8 @@ async fn estimates_from_the_tests_of_this_network_only() {
     let here = create_network(1);
     let elsewhere = create_network(2);
     let detector = InMemoryAccessDetector::default();
-    let tests = [create_test(&elsewhere, 1), create_test(&here, 300)];
+    let mut tests: Vec<ThroughputRecord> = (0..3).map(|_| create_test(&elsewhere, 1)).collect();
+    tests.extend((0..3).map(|_| create_test(&here, 300)));
 
     // Act
     let reading = detect_access(&detector, &tests, Some(&here), NEAR).await;

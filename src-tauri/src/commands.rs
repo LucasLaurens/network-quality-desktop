@@ -377,18 +377,32 @@ pub async fn export_history(
     let history = history.clone();
     let now = SystemClock::start().read_utc_seconds();
     let offset = i64::from(utc_offset_seconds);
-    let folder = tauri::async_runtime::spawn_blocking(move || {
-        write_export(&history, &downloads, period.into(), now, offset)
-    })
-    .await
-    .map_err(|error| {
-        eprintln!("The export thread failed: {error}");
-        failed()
-    })?
-    .map_err(|error| {
-        eprintln!("The export failed: {error:?}");
-        failed()
-    })?;
+    let (answer, answered) = tokio::sync::oneshot::channel();
+    std::thread::Builder::new()
+        .name("export".to_owned())
+        .spawn(move || {
+            let _ = answer.send(write_export(
+                &history,
+                &downloads,
+                period.into(),
+                now,
+                offset,
+            ));
+        })
+        .map_err(|error| {
+            eprintln!("Starting the export failed: {error}");
+            failed()
+        })?;
+    let folder = answered
+        .await
+        .map_err(|error| {
+            eprintln!("The export thread stopped: {error}");
+            failed()
+        })?
+        .map_err(|error| {
+            eprintln!("The export failed: {error:?}");
+            failed()
+        })?;
     if let Err(error) = tauri_plugin_opener::reveal_item_in_dir(&folder) {
         eprintln!("Showing the export failed: {error}");
     }

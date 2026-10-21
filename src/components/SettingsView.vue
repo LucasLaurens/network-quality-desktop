@@ -245,8 +245,8 @@ onMounted(async () => {
             data-erase-warning
           >
             <p id="erase-warning">
-              Toutes les mesures (minutes et heures), les événements (coupures, changements de réseau, veilles) et les
-              tests de débit seront supprimés, sans retour possible. Les réglages sont conservés.
+              Toutes les mesures (minutes et heures), les événements (coupures, changements de réseau, veilles), les
+              tests de débit et les réseaux connus seront supprimés, sans retour possible. Les réglages sont conservés.
             </p>
             <div class="actions">
               <button type="button" class="secondary" data-erase-confirm @click="eraseHistory">

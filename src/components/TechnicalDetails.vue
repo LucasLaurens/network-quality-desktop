@@ -8,6 +8,7 @@ if (!client) throw new Error('NetworkQualityClient is not provided')
 
 const details = ref<TechnicalDetails | null>(null)
 const line = ref<LineDetails | null>(null)
+const lineRefusal = ref('')
 let refresh: ReturnType<typeof setInterval> | undefined
 
 const sections = computed(() => [...(details.value?.sections ?? []), ...(line.value ? [line.value.section] : [])])
@@ -21,10 +22,11 @@ const loadDetails = async (): Promise<void> => {
 }
 
 const loadLine = async (): Promise<void> => {
+  lineRefusal.value = ''
   try {
     line.value = await client.readLineDetails()
   } catch (error) {
-    console.error('Reading the line failed', error)
+    lineRefusal.value = error instanceof Error ? error.message : String(error)
   }
 }
 
@@ -64,6 +66,7 @@ onUnmounted(stopRefreshing)
       </section>
     </div>
     <p v-if="line" class="small" data-line-note>{{ line.note }}</p>
+    <p v-else-if="lineRefusal" class="small" role="alert" data-line-refused>{{ lineRefusal }}</p>
     <p v-else-if="details" class="small" role="status">Interrogation de la box…</p>
   </details>
 </template>

@@ -1,3 +1,4 @@
+import { faker } from '@faker-js/faker'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TechnicalDetails from '../src/components/TechnicalDetails.vue'
@@ -63,5 +64,20 @@ describe('TechnicalDetails', () => {
     expect(client.technicalDetailsReads).toBe(2)
     expect(client.lineDetailsReads).toBe(1)
     expect(wrapper.text()).toContain(newer.title)
+  })
+
+  it('says why the line could not be read instead of waiting forever', async () => {
+    // Arrange
+    const refusal = faker.lorem.sentence()
+    const client = new InMemoryNetworkQualityClient()
+    client.refuseLineDetails(refusal)
+    const wrapper = mountDetails(client)
+
+    // Act
+    await toggle(wrapper, true)
+
+    // Assert
+    expect(wrapper.get('[data-line-refused]').text()).toBe(refusal)
+    expect(wrapper.text()).not.toContain('Interrogation de la box')
   })
 })

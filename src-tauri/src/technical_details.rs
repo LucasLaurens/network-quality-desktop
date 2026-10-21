@@ -146,10 +146,15 @@ fn compose_traffic_section(traffic: TrafficReading, catalog: &TextCatalog) -> De
             |rate| format_pair(rate.received, rate.sent, catalog),
         )
     };
+    let mut window_args = FluentArgs::new();
+    window_args.set("seconds", TRAFFIC_WINDOW.as_secs().to_string());
     DetailSection {
         title: catalog.render("details-traffic", None),
         rows: vec![
-            DetailRow::compose("details-traffic-now", format(traffic.current), catalog),
+            DetailRow {
+                label: catalog.render("details-traffic-now", Some(&window_args)),
+                value: format(traffic.current),
+            },
             DetailRow::compose("details-traffic-peak", format(traffic.peak), catalog),
         ],
     }
@@ -165,23 +170,22 @@ impl LineDetails {
             catalog.render(to_access_key(reading.access), None),
         )];
         if let Some(line) = &reading.line {
-            if let (Some(down), Some(up)) = (line.downstream_max, line.upstream_max) {
-                rows.push(row("details-line-rate", format_pair(down, up, catalog)));
+            // Each way on its own: many boxes give one and not the other.
+            let rates = [line.downstream_max, line.upstream_max]
+                .map(|rate| rate.map(|rate| format_bitrate(rate, catalog)));
+            if let Some(value) = format_known_pair(rates, catalog) {
+                rows.push(row("details-line-rate", value));
             }
-            if let (Some(received), Some(sent)) = (line.total_received, line.total_sent) {
-                let mut args = FluentArgs::new();
-                args.set("received", format_bytes(received, catalog));
-                args.set("sent", format_bytes(sent, catalog));
-                rows.push(row(
-                    "details-box-traffic",
-                    catalog.render("details-pair", Some(&args)),
-                ));
+            let totals = [line.total_received, line.total_sent]
+                .map(|bytes| bytes.map(|bytes| format_bytes(bytes, catalog)));
+            if let Some(value) = format_known_pair(totals, catalog) {
+                rows.push(row("details-box-traffic", value));
             }
         }
-        let note_key = if reading.line.is_some() {
-            "details-line-note"
-        } else {
-            "details-line-silent"
+        let note_key = match (reading.line, reading.access) {
+            (Some(_), _) => "details-line-note",
+            (None, AccessEstimate::Unknown) => "details-line-silent-unknown",
+            (None, _) => "details-line-silent",
         };
         Self {
             section: DetailSection {
@@ -200,6 +204,21 @@ const fn to_access_key(access: AccessEstimate) -> &'static str {
         AccessEstimate::EstimatedAdsl => "access-estimated-adsl",
         AccessEstimate::Unknown => "access-unknown",
     }
+}
+
+/// « ↓ 17 Mbit/s, ↑ – » when one way is known; `None` when neither is. O(1).
+fn format_known_pair(
+    [received, sent]: [Option<String>; 2],
+    catalog: &TextCatalog,
+) -> Option<String> {
+    if received.is_none() && sent.is_none() {
+        return None;
+    }
+    let unknown = || catalog.render("value-unknown", None);
+    let mut args = FluentArgs::new();
+    args.set("received", received.unwrap_or_else(unknown));
+    args.set("sent", sent.unwrap_or_else(unknown));
+    Some(catalog.render("details-pair", Some(&args)))
 }
 
 /// « ↓ 85 Mbit/s, ↑ 2,5 Mbit/s ». O(1).
@@ -349,7 +368,7 @@ mod tests {
         assert_eq!(
             values,
             [
-                "ADSL (annoncé par la box)".to_owned(),
+                "DSL (annoncé par la box)".to_owned(),
                 insert_no_break_spaces("↓ 17~Mbit/s, ↑ 1,0~Mbit/s"),
                 insert_no_break_spaces("↓ 9,0~Go, ↑ 700,0~Mo"),
             ]
@@ -373,5 +392,48 @@ mod tests {
         assert_eq!(details.section.rows.len(), 1);
         assert_eq!(details.section.rows[0].value, "Fibre (estimé)");
         assert_eq!(details.note, catalog.render("details-line-silent", None));
+    }
+
+    #[test]
+    fn shows_the_one_way_a_box_announces() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let reading = LineReading {
+            line: Some(BoxLine {
+                access_type: WanAccessType::Ethernet,
+                downstream_max: Some(Bitrate::from_bits_per_second(17_400_000)),
+                upstream_max: None,
+                total_received: None,
+                total_sent: None,
+            }),
+            access: AccessEstimate::Unknown,
+        };
+
+        // Act
+        let details = LineDetails::compose(&reading, &catalog);
+
+        // Assert
+        let rows = &details.section.rows;
+        assert_eq!(rows.len(), 2, "the access and the one rate known");
+        assert_eq!(rows[1].value, insert_no_break_spaces("↓ 17~Mbit/s, ↑ –"));
+    }
+
+    #[test]
+    fn does_not_call_estimated_what_stays_unknown() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let reading = LineReading {
+            line: None,
+            access: AccessEstimate::Unknown,
+        };
+
+        // Act
+        let details = LineDetails::compose(&reading, &catalog);
+
+        // Assert
+        assert_eq!(
+            details.note,
+            catalog.render("details-line-silent-unknown", None)
+        );
     }
 }
