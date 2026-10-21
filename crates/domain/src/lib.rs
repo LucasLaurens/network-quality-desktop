@@ -4,13 +4,19 @@
 mod grade;
 mod hysteresis;
 mod latency_window;
+mod loss;
+mod offline;
+mod probe_outcome;
 mod target;
 mod timestamp;
 mod verdict;
 
-pub use grade::{Grade, GradeBounds, Thresholds};
+pub use grade::{Grade, GradeBounds, Scalable, Thresholds};
 pub use hysteresis::Hysteresis;
 pub use latency_window::{LatencyWindow, compute_median};
+pub use loss::{LossRate, LossWindow};
+pub use offline::OfflineDetector;
+pub use probe_outcome::ProbeOutcome;
 pub use target::Target;
 pub use timestamp::Timestamp;
 pub use verdict::Verdict;

@@ -5,35 +5,35 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use domain::{Target, Timestamp};
+use domain::{ProbeOutcome, Target, Timestamp};
 
 use crate::{Clock, LatencyProbe, VerdictPresenter, VerdictView};
 
-/// A simulated network: each target answers with the round trip set for it, or not at all.
+/// A simulated network: each target gives the outcome set for it; an unknown target is unreachable.
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryNetwork {
-    round_trips: Arc<Mutex<HashMap<Target, Option<Duration>>>>,
+    outcomes: Arc<Mutex<HashMap<Target, ProbeOutcome>>>,
 }
 
 impl InMemoryNetwork {
-    pub fn set_round_trip(&self, target: Target, round_trip: Option<Duration>) {
-        self.round_trips
+    pub fn set_outcome(&self, target: Target, outcome: ProbeOutcome) {
+        self.outcomes
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .insert(target, round_trip);
+            .insert(target, outcome);
     }
 }
 
 impl LatencyProbe for InMemoryNetwork {
-    fn measure_round_trip(&self, target: Target) -> impl Future<Output = Option<Duration>> + Send {
-        let round_trip = self
-            .round_trips
+    fn send_probe(&self, target: Target) -> impl Future<Output = ProbeOutcome> + Send {
+        let outcome = self
+            .outcomes
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .get(&target)
             .copied()
-            .flatten();
-        std::future::ready(round_trip)
+            .unwrap_or(ProbeOutcome::Unreachable);
+        std::future::ready(outcome)
     }
 }
 

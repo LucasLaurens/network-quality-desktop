@@ -7,6 +7,6 @@ mod targets;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
-pub use engine::{EngineMessage, MeasurementEngine, VerdictView};
+pub use engine::{EngineMessage, MeasurementEngine, MetricReading, VerdictView};
 pub use ports::{Clock, LatencyProbe, VerdictPresenter};
 pub use targets::list_default_targets;

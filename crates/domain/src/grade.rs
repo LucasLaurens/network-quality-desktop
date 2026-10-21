@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use crate::LossRate;
+
 /// Quality level of one metric, ordered from best to worst.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Grade {
@@ -8,24 +10,40 @@ pub enum Grade {
     Degraded,
 }
 
+/// A value is "near" the next grade once it reaches this share of the next boundary.
+const NEAR_NEXT_SHARE: f64 = 0.8;
+
 /// Boundaries of one metric: Solid below `unstable_from`, Degraded above `degraded_above`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct GradeBounds {
-    unstable_from: Duration,
-    degraded_above: Duration,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradeBounds<T> {
+    unstable_from: T,
+    degraded_above: T,
 }
 
-impl GradeBounds {
+/// A measured quantity that can be compared with a scaled boundary.
+pub trait Scalable: Copy + PartialOrd {
     #[must_use]
-    pub const fn new(unstable_from: Duration, degraded_above: Duration) -> Self {
+    fn scale_by(self, factor: f64) -> Self;
+}
+
+impl Scalable for Duration {
+    fn scale_by(self, factor: f64) -> Self {
+        self.mul_f64(factor)
+    }
+}
+
+impl<T: Scalable> GradeBounds<T> {
+    #[must_use]
+    pub const fn new(unstable_from: T, degraded_above: T) -> Self {
         Self {
             unstable_from,
             degraded_above,
         }
     }
 
+    /// O(1).
     #[must_use]
-    pub fn compute_grade(&self, value: Duration) -> Grade {
+    pub fn compute_grade(&self, value: T) -> Grade {
         if value < self.unstable_from {
             Grade::Solid
         } else if value <= self.degraded_above {
@@ -34,12 +52,24 @@ impl GradeBounds {
             Grade::Degraded
         }
     }
+
+    /// True when the value is within 20 % of the boundary that would make it worse. O(1).
+    #[must_use]
+    pub fn is_near_next_threshold(&self, value: T) -> bool {
+        match self.compute_grade(value) {
+            Grade::Solid => value >= self.unstable_from.scale_by(NEAR_NEXT_SHARE),
+            Grade::Unstable => value >= self.degraded_above.scale_by(NEAR_NEXT_SHARE),
+            Grade::Degraded => false,
+        }
+    }
 }
 
-/// Single home of every verdict threshold.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Single home of every metric threshold.
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Thresholds {
-    pub latency: GradeBounds,
+    pub latency: GradeBounds<Duration>,
+    pub jitter: GradeBounds<Duration>,
+    pub loss: GradeBounds<LossRate>,
 }
 
 impl Thresholds {
@@ -48,6 +78,8 @@ impl Thresholds {
     pub const fn for_video_calls() -> Self {
         Self {
             latency: GradeBounds::new(Duration::from_millis(100), Duration::from_millis(300)),
+            jitter: GradeBounds::new(Duration::from_millis(30), Duration::from_millis(50)),
+            loss: GradeBounds::new(LossRate::from_percent(1.0), LossRate::from_percent(5.0)),
         }
     }
 }

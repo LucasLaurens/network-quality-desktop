@@ -5,4 +5,5 @@ use crate::Grade;
 pub enum Verdict {
     Measuring,
     Graded(Grade),
+    Offline,
 }

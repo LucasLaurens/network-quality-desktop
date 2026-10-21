@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use application::{EngineMessage, MeasurementEngine, list_default_targets};
 use domain::Verdict;
-use infrastructure::{IcmpLatencyProbe, SystemClock};
+use infrastructure::{FallbackLatencyProbe, IcmpEchoSender, SystemClock, TcpConnectionOpener};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri_specta::{Builder, collect_commands};
@@ -62,7 +62,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         .build(app)?;
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
     let engine = MeasurementEngine::new(
-        IcmpLatencyProbe,
+        FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener),
         SystemClock::start(),
         TrayPresenter::new(tray),
         list_default_targets(),
