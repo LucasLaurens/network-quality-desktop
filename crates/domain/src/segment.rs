@@ -2,13 +2,19 @@
 //! to the Internet. The verdict comes from the Internet segment alone; the local one only tells
 //! where a problem lies.
 
+use std::collections::VecDeque;
 use std::time::Duration;
 
-use crate::{ConnectionKind, LatencyWindow, LossRate, LossWindow};
+use crate::{ConnectionKind, LatencyWindow, LossRate};
 
 /// Above this, the link to the gateway is the problem: a box answers within a few milliseconds.
 pub const LOCAL_LATENCY_LIMIT: Duration = Duration::from_millis(30);
 pub const LOCAL_LOSS_LIMIT: LossRate = LossRate::from_percent(1.0);
+/// Boxes drop the odd ping aimed at themselves when busy: one loss proves nothing.
+pub const LOCAL_LOST_PINGS_MIN: u32 = 2;
+/// One ping per second: loss is judged over a minute, and only after ten pings.
+const LOSS_WINDOW_SECONDS: usize = 60;
+const LOSS_MIN_PINGS: u32 = 10;
 
 /// Why the local segment cannot be measured. There is no fallback: a TCP connection to a box
 /// says nothing reliable about the Wi-Fi.
@@ -18,18 +24,22 @@ pub enum Unmeasurable {
     NotPermitted,
     /// No gateway to ping: no default route, a VPN hiding it, or a cellular modem.
     NoGateway,
-    /// The gateway ignores pings: some boxes are set up that way.
+    /// The gateway answered no ping for a minute: some boxes are set up to ignore them.
     NoAnswer,
+    /// Too few pings yet to judge the losses.
+    TooFewPings,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LocalSegment {
     Unmeasurable(Unmeasurable),
     Measured {
-        /// p90 over the latency window.
-        latency: Duration,
-        /// `None` until the loss window is long enough to grade.
+        /// p90 over 15 s; `None` when no ping was answered in that time.
+        latency: Option<Duration>,
+        /// `None` until enough pings were sent.
         loss: Option<LossRate>,
+        /// Pings lost over the loss window.
+        lost: u32,
     },
 }
 
@@ -41,12 +51,13 @@ pub enum GatewayEcho {
     NotPermitted,
 }
 
-/// What the gateway answered over the last seconds, with the same windows as the Internet
-/// segment.
+/// What the gateway answered over the last minute.
 #[derive(Debug, Clone, Default)]
 pub struct GatewayWindow {
     latency: LatencyWindow,
-    loss: LossWindow,
+    /// One entry per second, newest last: whether the ping was answered.
+    answers: VecDeque<bool>,
+    lost: u32,
     is_refused: bool,
 }
 
@@ -62,23 +73,41 @@ impl GatewayWindow {
             }
         };
         self.latency.record_second(round_trip);
-        self.loss.record_second(1, u32::from(round_trip.is_none()));
+        if self.answers.len() == LOSS_WINDOW_SECONDS && self.answers.pop_front() == Some(false) {
+            self.lost -= 1;
+        }
+        self.answers.push_back(round_trip.is_some());
+        self.lost += u32::from(round_trip.is_none());
     }
 
-    /// A gateway that never answered in the window is ignoring pings, not a broken link: a
-    /// broken link would cut the Internet too. O(n log n) for n ≤ 15 samples.
+    /// O(n log n) for n ≤ 15 latency samples.
     #[must_use]
     pub fn compute_segment(&self) -> LocalSegment {
         if self.is_refused {
             return LocalSegment::Unmeasurable(Unmeasurable::NotPermitted);
         }
-        self.latency.compute_p90().map_or(
-            LocalSegment::Unmeasurable(Unmeasurable::NoAnswer),
-            |latency| LocalSegment::Measured {
-                latency,
-                loss: self.loss.compute_rate(),
-            },
-        )
+        // At most 60 entries: the conversion cannot fail.
+        let sent = u32::try_from(self.answers.len()).unwrap_or(u32::MAX);
+        // A broken link would cut the Internet too: a gateway silent for a minute ignores pings.
+        if self.lost == sent {
+            return LocalSegment::Unmeasurable(Unmeasurable::NoAnswer);
+        }
+        LocalSegment::Measured {
+            latency: self.latency.compute_p90(),
+            loss: (sent >= LOSS_MIN_PINGS)
+                .then(|| LossRate::from_percent(f64::from(self.lost) * 100.0 / f64::from(sent))),
+            lost: self.lost,
+        }
+    }
+
+    /// Whether the gateway answered within the last `seconds`. O(seconds).
+    #[must_use]
+    pub fn has_answered_within(&self, seconds: usize) -> bool {
+        self.answers
+            .iter()
+            .rev()
+            .take(seconds)
+            .any(|answered| *answered)
     }
 }
 
@@ -101,7 +130,8 @@ pub enum Fault {
 }
 
 impl Fault {
-    /// Applies the attribution rules once the Internet segment is known to be bad. O(1).
+    /// Applies the attribution rules once the Internet segment is known to be bad. The local
+    /// link is cleared only once its losses can be judged. O(1).
     #[must_use]
     pub fn attribute(kind: ConnectionKind, local: LocalSegment) -> Self {
         if kind == ConnectionKind::Cellular {
@@ -110,10 +140,18 @@ impl Fault {
         match local {
             LocalSegment::Unmeasurable(reason) => Self::Undetermined(reason),
             LocalSegment::Measured {
-                loss: Some(loss), ..
-            } if loss > LOCAL_LOSS_LIMIT => Self::LocalLink(LocalProblem::Loss),
-            LocalSegment::Measured { latency, .. } if latency > LOCAL_LATENCY_LIMIT => {
-                Self::LocalLink(LocalProblem::Latency)
+                loss: Some(rate),
+                lost,
+                ..
+            } if rate > LOCAL_LOSS_LIMIT && lost >= LOCAL_LOST_PINGS_MIN => {
+                Self::LocalLink(LocalProblem::Loss)
+            }
+            LocalSegment::Measured {
+                latency: Some(latency),
+                ..
+            } if latency > LOCAL_LATENCY_LIMIT => Self::LocalLink(LocalProblem::Latency),
+            LocalSegment::Measured { loss: None, .. } => {
+                Self::Undetermined(Unmeasurable::TooFewPings)
             }
             LocalSegment::Measured { .. } if kind == ConnectionKind::PhoneHotspot => {
                 Self::MobileNetwork
@@ -128,9 +166,16 @@ mod tests {
     use super::*;
 
     const GOOD_LOCAL: LocalSegment = LocalSegment::Measured {
-        latency: Duration::from_millis(4),
+        latency: Some(Duration::from_millis(4)),
         loss: Some(LossRate::from_percent(0.0)),
+        lost: 0,
     };
+
+    fn record(window: &mut GatewayWindow, echo: GatewayEcho, seconds: usize) {
+        for _ in 0..seconds {
+            window.record_second(echo);
+        }
+    }
 
     #[test]
     fn blames_the_operator_when_the_local_link_is_good() {
@@ -151,11 +196,12 @@ mod tests {
     }
 
     #[test]
-    fn blames_the_local_link_when_packets_are_lost_before_the_gateway() {
+    fn blames_the_local_link_when_pings_are_lost_before_the_gateway() {
         // Arrange
         let lossy = LocalSegment::Measured {
-            latency: Duration::from_millis(4),
-            loss: Some(LossRate::from_percent(3.0)),
+            latency: Some(Duration::from_millis(4)),
+            loss: Some(LossRate::from_percent(5.0)),
+            lost: 3,
         };
 
         // Act & Assert
@@ -166,11 +212,30 @@ mod tests {
     }
 
     #[test]
+    fn forgives_a_single_lost_ping() {
+        // Arrange
+        let mut window = GatewayWindow::default();
+        record(
+            &mut window,
+            GatewayEcho::Answered(Duration::from_millis(4)),
+            59,
+        );
+        window.record_second(GatewayEcho::Lost);
+
+        // Act
+        let fault = Fault::attribute(ConnectionKind::WiFi, window.compute_segment());
+
+        // Assert
+        assert_eq!(fault, Fault::Operator);
+    }
+
+    #[test]
     fn blames_the_local_link_when_the_gateway_answers_slowly() {
         // Arrange
         let slow = LocalSegment::Measured {
-            latency: Duration::from_millis(45),
-            loss: None,
+            latency: Some(Duration::from_millis(45)),
+            loss: Some(LossRate::from_percent(0.0)),
+            lost: 0,
         };
 
         // Act & Assert
@@ -178,6 +243,37 @@ mod tests {
             Fault::attribute(ConnectionKind::WiFi, slow),
             Fault::LocalLink(LocalProblem::Latency)
         );
+    }
+
+    #[test]
+    fn waits_for_enough_pings_before_clearing_the_local_link() {
+        // Arrange
+        let mut window = GatewayWindow::default();
+        record(
+            &mut window,
+            GatewayEcho::Answered(Duration::from_millis(4)),
+            5,
+        );
+
+        // Act
+        let fault = Fault::attribute(ConnectionKind::WiFi, window.compute_segment());
+
+        // Assert
+        assert_eq!(fault, Fault::Undetermined(Unmeasurable::TooFewPings));
+    }
+
+    #[test]
+    fn judges_a_very_lossy_link_on_its_losses_even_without_recent_answers() {
+        // Arrange
+        let mut window = GatewayWindow::default();
+        window.record_second(GatewayEcho::Answered(Duration::from_millis(4)));
+        record(&mut window, GatewayEcho::Lost, 20);
+
+        // Act
+        let fault = Fault::attribute(ConnectionKind::WiFi, window.compute_segment());
+
+        // Assert
+        assert_eq!(fault, Fault::LocalLink(LocalProblem::Loss));
     }
 
     #[test]
@@ -205,32 +301,12 @@ mod tests {
     }
 
     #[test]
-    fn measures_the_gateway_from_its_answers() {
-        // Arrange
-        let mut window = GatewayWindow::default();
-        let round_trip = Duration::from_millis(3);
-
-        // Act
-        window.record_second(GatewayEcho::Answered(round_trip));
-        window.record_second(GatewayEcho::Lost);
-
-        // Assert
-        assert_eq!(
-            window.compute_segment(),
-            LocalSegment::Measured {
-                latency: round_trip,
-                loss: None,
-            }
-        );
-    }
-
-    #[test]
-    fn calls_a_silent_gateway_unmeasurable() {
+    fn calls_a_gateway_silent_for_a_minute_unmeasurable() {
         // Arrange
         let mut window = GatewayWindow::default();
 
         // Act
-        window.record_second(GatewayEcho::Lost);
+        record(&mut window, GatewayEcho::Lost, LOSS_WINDOW_SECONDS);
 
         // Assert
         assert_eq!(
@@ -252,5 +328,17 @@ mod tests {
             window.compute_segment(),
             LocalSegment::Unmeasurable(Unmeasurable::NotPermitted)
         );
+    }
+
+    #[test]
+    fn knows_whether_the_gateway_answered_lately() {
+        // Arrange
+        let mut window = GatewayWindow::default();
+        window.record_second(GatewayEcho::Answered(Duration::from_millis(4)));
+        record(&mut window, GatewayEcho::Lost, 5);
+
+        // Act & Assert
+        assert!(window.has_answered_within(6));
+        assert!(!window.has_answered_within(5));
     }
 }

@@ -2,9 +2,9 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use domain::{
-    ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, GatewayWindow, Grade,
-    GradeBounds, Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause,
-    Metric, OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Unmeasurable, Verdict,
+    ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayWindow, Grade, GradeBounds,
+    Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause, Metric,
+    OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Unmeasurable, Verdict,
     compute_median,
 };
 use futures_util::future::{join_all, join3};
@@ -16,6 +16,8 @@ use crate::{Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, VerdictP
 pub const WARM_UP_SAMPLES: u32 = 10;
 /// Reading the connection costs milliseconds of system calls: every 10 seconds, not every tick.
 pub const CONTEXT_REFRESH_SECONDS: u32 = 10;
+/// A box that answered within this time while nothing else does has lost its Internet access.
+const GATEWAY_ANSWER_SECONDS: usize = 5;
 
 /// Messages the single measurement actor reacts to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,7 +189,7 @@ where
         }
         self.seconds_since_context += 1;
         self.record_outcomes(&outcomes);
-        let view = self.compute_view(&outcomes, gateway_echo);
+        let view = self.compute_view(&outcomes);
         self.presenter.present(&view);
     }
 
@@ -201,6 +203,7 @@ where
                 }
                 Some(_) => {
                     self.restart();
+                    self.gateway = GatewayWindow::default();
                     self.measuring_cause = MeasuringCause::NewNetwork;
                     current
                 }
@@ -211,10 +214,11 @@ where
         self.seconds_since_context = 0;
     }
 
-    /// A cellular modem has no box to ping: the problem past it is the mobile network.
+    /// A cellular modem has no box to ping, and a VPN carries the targets past the box: pinging
+    /// it would blame the box or the operator for the tunnel.
     fn find_gateway(&self) -> Option<Ipv4Addr> {
         self.context
-            .filter(|context| context.kind != ConnectionKind::Cellular)
+            .filter(|context| context.kind != ConnectionKind::Cellular && !context.is_vpn)
             .and_then(|context| context.gateway_address)
     }
 
@@ -227,11 +231,14 @@ where
     }
 
     /// Why nothing answers: no network at all, a box cut from the Internet, or no way to tell.
-    fn diagnose_offline(&self, gateway_echo: Option<GatewayEcho>) -> Diagnosis {
-        match (self.context, gateway_echo) {
-            (None, _) => Diagnosis::NoNetwork,
-            (Some(_), Some(GatewayEcho::Answered(_))) => Diagnosis::GatewayWithoutInternet,
-            (Some(_), _) => Diagnosis::NoServerReachable,
+    /// Judged over a few seconds, so one lost ping does not flip the sentence. O(1).
+    fn diagnose_offline(&self) -> Diagnosis {
+        match self.context {
+            None => Diagnosis::NoNetwork,
+            Some(_) if self.gateway.has_answered_within(GATEWAY_ANSWER_SECONDS) => {
+                Diagnosis::GatewayWithoutInternet
+            }
+            Some(_) => Diagnosis::NoServerReachable,
         }
     }
 
@@ -264,11 +271,7 @@ where
     }
 
     /// O(k·n log n) time, O(k·n) space, k targets and n ≤ 15 window samples.
-    fn compute_view(
-        &mut self,
-        outcomes: &[ProbeOutcome],
-        gateway_echo: Option<GatewayEcho>,
-    ) -> VerdictView {
+    fn compute_view(&mut self, outcomes: &[ProbeOutcome]) -> VerdictView {
         let any_reachable = outcomes
             .iter()
             .any(|outcome| *outcome != ProbeOutcome::Unreachable);
@@ -276,7 +279,7 @@ where
             self.restart();
             return VerdictView {
                 verdict: Verdict::Offline,
-                diagnosis: self.diagnose_offline(gateway_echo),
+                diagnosis: self.diagnose_offline(),
                 latency: None,
                 jitter: None,
                 loss: None,
@@ -325,12 +328,9 @@ where
             ),
         ];
         let local = self.compute_local_segment();
-        let kind = self
-            .context
-            .map_or(ConnectionKind::Other, |context| context.kind);
-        let fault = Fault::attribute(kind, local);
+        let fault = Fault::attribute(ConnectionKind::from_context(self.context), local);
         let diagnosis = match verdict {
-            Verdict::Offline => self.diagnose_offline(gateway_echo),
+            Verdict::Offline => self.diagnose_offline(),
             Verdict::Measuring => Diagnosis::Measuring {
                 collected: self.samples_since_restart.min(WARM_UP_SAMPLES),
                 needed: WARM_UP_SAMPLES,
@@ -369,7 +369,6 @@ where
         self.loss = LossWindow::default();
         self.hysteresis = Hysteresis::default();
         self.samples_since_restart = 0;
-        self.gateway = GatewayWindow::default();
         self.measuring_cause = MeasuringCause::FirstMeasures;
         // The way back may be another network: read it at once (every second while offline).
         self.seconds_since_context = CONTEXT_REFRESH_SECONDS;

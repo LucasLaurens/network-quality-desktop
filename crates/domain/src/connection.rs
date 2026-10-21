@@ -99,6 +99,14 @@ pub enum ConnectionKind {
     Other,
 }
 
+impl ConnectionKind {
+    /// `Other` without a default route.
+    #[must_use]
+    pub fn from_context(context: Option<ConnectionContext>) -> Self {
+        context.map_or(Self::Other, |context| context.kind)
+    }
+}
+
 /// A network seen again is the same gateway reached the same way; the Wi-Fi name is only a label.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NetworkIdentity {

@@ -62,7 +62,13 @@ impl PathDisplay {
             label: compose_label(
                 &local_link,
                 match view.local {
-                    LocalSegment::Measured { latency, .. } => latency.format(catalog),
+                    LocalSegment::Measured {
+                        latency: Some(latency),
+                        ..
+                    } => latency.format(catalog),
+                    LocalSegment::Measured { latency: None, .. } => {
+                        catalog.render("path-no-value", None)
+                    }
                     LocalSegment::Unmeasurable(_) => catalog.render("path-unmeasurable", None),
                 },
                 catalog,
@@ -81,7 +87,14 @@ impl PathDisplay {
             label: compose_label(
                 &internet_link,
                 view.latency.map_or_else(
-                    || catalog.render("path-no-value", None),
+                    || {
+                        let key = if view.verdict == Verdict::Offline {
+                            "path-no-answer"
+                        } else {
+                            "path-no-value"
+                        };
+                        catalog.render(key, None)
+                    },
                     |reading| reading.value.format(catalog),
                 ),
                 catalog,
@@ -99,6 +112,7 @@ impl PathDisplay {
         let internet = catalog.render("path-internet", None);
         let description = describe(
             [&computer, &gateway, &internet],
+            [&local.label, &internet_segment.label],
             at_fault.map(|segment| match segment {
                 Segment::Local => (&local_link, &local.fault),
                 Segment::Internet => (&internet_link, &internet_segment.fault),
@@ -165,6 +179,7 @@ fn compose_label(link: &str, value: String, catalog: &TextCatalog) -> String {
 
 fn describe(
     [computer, gateway, internet]: [&String; 3],
+    [local, remote]: [&String; 2],
     fault: Option<(&String, &Option<String>)>,
     catalog: &TextCatalog,
 ) -> String {
@@ -172,6 +187,8 @@ fn describe(
     args.set("computer", computer.clone());
     args.set("gateway", gateway.clone());
     args.set("internet", internet.clone());
+    args.set("local", local.clone());
+    args.set("remote", remote.clone());
     let path = catalog.render("path-description", Some(&args));
     let Some((link, Some(word))) = fault else {
         return path;
@@ -222,9 +239,14 @@ mod tests {
     }
 
     const GOOD_LOCAL: LocalSegment = LocalSegment::Measured {
-        latency: Duration::from_millis(4),
+        latency: Some(Duration::from_millis(4)),
         loss: None,
+        lost: 0,
     };
+
+    fn catalog_computer() -> String {
+        TextCatalog::load().render(COMPUTER_KEY, None)
+    }
 
     #[test]
     fn marks_the_operator_segment_with_a_word() {
@@ -250,17 +272,24 @@ mod tests {
             format!("Opérateur, 180{NBSP}ms")
         );
         assert_eq!(path.internet_segment.fault.as_deref(), Some("en cause"));
-        assert!(path.description.ends_with("Tronçon Opérateur en cause."));
+        assert_eq!(
+            path.description,
+            format!(
+                "Chemin{NBSP}: Ce Mac, Box, Internet. Wi-Fi, 4{NBSP}ms, puis Opérateur, 180{NBSP}ms. Tronçon Opérateur en cause."
+            )
+            .replace("Ce Mac", &catalog_computer())
+        );
     }
 
     #[test]
     fn draws_the_internet_segment_cut_when_only_the_box_answers() {
         // Arrange
-        let view = create_view(
+        let mut view = create_view(
             Diagnosis::GatewayWithoutInternet,
             Verdict::Offline,
             GOOD_LOCAL,
         );
+        view.latency = None;
 
         // Act
         let path = PathDisplay::from_view(&view, &TextCatalog::load()).expect("a path");
@@ -268,6 +297,7 @@ mod tests {
         // Assert
         assert!(path.internet_segment.is_cut);
         assert_eq!(path.internet_segment.fault.as_deref(), Some("coupé"));
+        assert_eq!(path.internet_segment.label, "Opérateur, aucune réponse");
     }
 
     #[test]

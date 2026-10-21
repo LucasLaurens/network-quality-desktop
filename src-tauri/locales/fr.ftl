@@ -24,8 +24,11 @@ cause-local-link = Le réseau local est en cause, avant la box.
 action-local-link = Vérifier le câble ou redémarrer la box.
 cause-operator = L'opérateur est en cause, le Wi-Fi va bien.
 action-operator = Patienter, ou redémarrer la box si cela dure.
+cause-operator-cable = L'opérateur est en cause, le câble va bien.
+cause-operator-local = L'opérateur est en cause, le réseau local va bien.
 cause-mobile-network = Le réseau mobile est en cause, le lien avec le téléphone va bien.
 action-mobile-network = Changer d'endroit ou passer sur un autre réseau.
+cause-mobile-network-modem = Le réseau mobile est en cause.
 cause-undetermined-system = La cause exacte ne peut pas être déterminée sur ce système.
 action-allow-ping = Autoriser le ping (net.ipv4.ping_group_range).
 cause-undetermined-network = La cause exacte ne peut pas être déterminée sur ce réseau.
@@ -58,9 +61,10 @@ link-mobile-network = Réseau mobile
 path-segment = { $link }, { $value }
 path-unmeasurable = non mesurable
 path-no-value = en attente
+path-no-answer = aucune réponse
 path-at-fault = en cause
 path-cut = coupé
-path-description = Chemin : { $computer }, { $gateway }, { $internet }.
+path-description = Chemin : { $computer }, { $gateway }, { $internet }. { $local }, puis { $remote }.
 path-description-fault = Tronçon { $link } { $fault }.
 
 ## Network and connection

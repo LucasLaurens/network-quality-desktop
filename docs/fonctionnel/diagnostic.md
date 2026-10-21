@@ -8,20 +8,20 @@ Le « pourquoi » s'affiche sous l'état, dans le popover. Il se compose de troi
 
 ## Le chemin
 
-Sous le constat, le popover dessine le chemin **Ce Mac → Box → Internet** (« Cet ordinateur » hors macOS, « Téléphone » pour un partage de connexion, « Modem » pour un modem intégré). Chaque tronçon porte son lien et sa latence (« Wi-Fi, 4 ms », « Opérateur, 180 ms »). Le tronçon fautif est marqué du mot **en cause**, ou **coupé** quand la box répond sans Internet : la couleur n'est jamais le seul repère.
+Sous le constat, le popover dessine le chemin **Ce Mac → Box → Internet** (« Cet ordinateur » hors macOS, « Téléphone » pour un partage de connexion, « Modem » pour un modem intégré). Chaque tronçon porte son lien et sa latence (« Wi-Fi, 4 ms », « Opérateur, 180 ms ») ; hors ligne, « aucune réponse » ; un lien non mesurable l'indique. Le tronçon fautif est marqué du mot **en cause**, ou **coupé** quand la box répond sans Internet : la couleur n'est jamais le seul repère.
 
 ## Où est le problème
 
 L'état vient de la mesure de bout en bout (vers Internet). L'app mesure aussi le lien avec la box par un ping, chaque seconde, et s'en sert seulement pour dire où est le problème :
 
-| Lien avec la box                                 | Bout en bout | Constat                                                                              |
-| ------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------ |
-| mauvais (plus de 30 ms ou plus de 1 % de pertes) | mauvais      | le Wi-Fi, le câble ou le lien avec le téléphone est en cause                         |
-| bon                                              | mauvais      | l'opérateur est en cause (le réseau mobile pour un partage de connexion ou un modem) |
-| mauvais                                          | bon          | rien : l'état reste Solide                                                           |
-| non mesurable                                    | mauvais      | la cause exacte ne peut pas être déterminée                                          |
+| Lien avec la box                                                               | Bout en bout | Constat                                                                              |
+| ------------------------------------------------------------------------------ | ------------ | ------------------------------------------------------------------------------------ |
+| mauvais (plus de 30 ms, ou plus de 1 % de pertes avec au moins 2 pings perdus) | mauvais      | le Wi-Fi, le câble ou le lien avec le téléphone est en cause                         |
+| bon                                                                            | mauvais      | l'opérateur est en cause (le réseau mobile pour un partage de connexion ou un modem) |
+| mauvais                                                                        | bon          | rien : l'état reste Solide                                                           |
+| non mesurable                                                                  | mauvais      | la cause exacte ne peut pas être déterminée                                          |
 
-Le lien avec la box n'est pas mesurable quand le système refuse le ping (Linux sans réglage), quand la box ne répond jamais au ping, ou quand aucune box n'est visible (VPN). L'app ne devine pas.
+Le lien avec la box n'est pas mesurable quand le système refuse le ping (Linux sans réglage), quand la box n'a répondu à aucun ping pendant une minute, quand aucune box n'est visible ou sous VPN (les mesures passent par le tunnel), et pendant ses dix premières secondes. L'app ne devine pas.
 
 ## Causes affichées
 
@@ -49,7 +49,9 @@ Le lien avec la box n'est pas mesurable quand le système refuse le ping (Linux 
 
 - « Wi-Fi, signal faible » attend la lecture du signal (ticket Wi-Fi) ; d'ici là, un Wi-Fi lent jusqu'à la box donne « la box répond lentement ».
 - « Redémarrer la box ou vérifier le réseau de l'opérateur. » au lieu de « … l'état du réseau de l'opérateur. », qui dépassait 60 caractères.
-- Les causes « Lien avec le téléphone », « Câble ou autre lien local », « Téléphone sans Internet » et « Rien ne répond » complètent le catalogue pour les connexions qu'il ne couvrait pas.
+- Les causes « Lien avec le téléphone », « Câble ou autre lien local », « Téléphone sans Internet » et « Rien ne répond » complètent le catalogue, avec les variantes de « Opérateur » (câble, autre lien) et de « Réseau mobile » (modem intégré), pour les connexions qu'il ne couvrait pas.
+- Le « lien d'aide » de Linux est une action qui nomme le réglage (`net.ipv4.ping_group_range`) : le dépôt n'est pas public.
+- « La cause exacte ne peut pas être déterminée sur ce réseau. » s'ajoute pour une box muette ou cachée, que « sur ce système » décrirait mal.
 
 Sous chaque mesure proche de son seuil, le popover indique « Proche du seuil ». Chaque jauge est lue par les lecteurs d'écran avec ses seuils, par exemple « Solide sous 100 ms, Dégradée au-delà de 300 ms ».
 

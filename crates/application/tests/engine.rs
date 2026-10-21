@@ -11,7 +11,8 @@ use application::{
 };
 use domain::{
     ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, Grade, LocalProblem,
-    MacAddress, MeasuringCause, Metering, Metric, ProbeOutcome, Target, Unmeasurable, Verdict,
+    LocalSegment, MacAddress, MeasuringCause, Metering, Metric, ProbeOutcome, Target, Unmeasurable,
+    Verdict,
 };
 
 // Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
@@ -817,6 +818,8 @@ async fn run_slow_internet_behind(
         .set_context(Some(create_context(kind, 30)));
     harness.gateway.set_echo(gateway);
     harness.warm_up_with_latency(SLOW).await;
+    // Gateway pings start once the first reading named the gateway: one more second for ten.
+    harness.run_seconds(1).await;
 }
 
 #[tokio::test]
@@ -941,4 +944,72 @@ async fn says_no_network_is_connected_without_any_route() {
 
     // Assert
     assert_eq!(harness.read_last_view().diagnosis, Diagnosis::NoNetwork);
+}
+
+#[tokio::test]
+async fn never_blames_the_box_or_the_operator_for_a_vpn() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.connection.set_context(Some(ConnectionContext {
+        is_vpn: true,
+        ..create_context(ConnectionKind::WiFi, 32)
+    }));
+    harness
+        .gateway
+        .set_echo(GatewayEcho::Answered(Duration::from_millis(3)));
+
+    // Act
+    harness.warm_up_with_latency(SLOW).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::OutOfThreshold {
+            metric: Metric::Latency,
+            fault: Fault::Undetermined(Unmeasurable::NoGateway),
+        }
+    );
+}
+
+#[tokio::test]
+async fn keeps_measuring_the_box_while_the_internet_is_cut() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 33)));
+    harness
+        .gateway
+        .set_echo(GatewayEcho::Answered(Duration::from_millis(3)));
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_every_target(ProbeOutcome::Unreachable);
+
+    // Act
+    harness.run_seconds(6).await;
+
+    // Assert
+    assert!(matches!(
+        harness.read_last_view().local,
+        LocalSegment::Measured { .. }
+    ));
+}
+
+#[tokio::test]
+async fn stays_solid_when_only_the_link_to_the_box_is_slow() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 34)));
+    harness
+        .gateway
+        .set_echo(GatewayEcho::Answered(Duration::from_millis(45)));
+
+    // Act
+    harness.warm_up_with_latency(FAST).await;
+
+    // Assert
+    let view = harness.read_last_view();
+    assert_eq!(view.verdict, Verdict::Graded(Grade::Solid));
+    assert_eq!(view.diagnosis, Diagnosis::Healthy);
 }

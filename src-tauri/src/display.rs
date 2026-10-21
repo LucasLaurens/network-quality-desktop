@@ -166,10 +166,8 @@ impl ConnectionDisplay {
     #[must_use]
     pub fn from_view(view: &VerdictView, catalog: &TextCatalog) -> Self {
         let state = DisplayState::from(view.verdict);
-        let kind = view
-            .context
-            .map_or(ConnectionKind::Other, |context| context.kind);
-        let (cause_key, action_key) = select_cause_keys(view.diagnosis, kind);
+        let (cause_key, action_key) =
+            select_cause_keys(view.diagnosis, ConnectionKind::from_context(view.context));
         Self {
             state,
             state_label: catalog.render(state.to_catalogue_key(), None),
@@ -368,8 +366,15 @@ const fn select_fault_keys(
             ("cause-wifi-slow", Some("action-wifi-slow"))
         }
         (Fault::LocalLink(_), _) => ("cause-local-link", Some("action-local-link")),
-        (Fault::Operator, _) => ("cause-operator", Some("action-operator")),
-        (Fault::MobileNetwork, _) => ("cause-mobile-network", Some("action-mobile-network")),
+        (Fault::Operator, ConnectionKind::WiFi) => ("cause-operator", Some("action-operator")),
+        (Fault::Operator, ConnectionKind::Ethernet) => {
+            ("cause-operator-cable", Some("action-operator"))
+        }
+        (Fault::Operator, _) => ("cause-operator-local", Some("action-operator")),
+        (Fault::MobileNetwork, ConnectionKind::PhoneHotspot) => {
+            ("cause-mobile-network", Some("action-mobile-network"))
+        }
+        (Fault::MobileNetwork, _) => ("cause-mobile-network-modem", Some("action-mobile-network")),
         (Fault::Undetermined(Unmeasurable::NotPermitted), _) => {
             ("cause-undetermined-system", Some("action-allow-ping"))
         }
@@ -850,5 +855,25 @@ mod tests {
         );
         assert_eq!(no_network.cause, "Aucun réseau connecté.");
         assert_eq!(no_network.path, None);
+    }
+
+    #[test]
+    fn names_the_link_that_works_in_the_operator_and_mobile_causes() {
+        // Arrange
+        let catalog = TextCatalog::load();
+
+        // Act
+        let cable = ConnectionDisplay::from_view(
+            &create_fault_view(Fault::Operator, ConnectionKind::Ethernet),
+            &catalog,
+        );
+        let modem = ConnectionDisplay::from_view(
+            &create_fault_view(Fault::MobileNetwork, ConnectionKind::Cellular),
+            &catalog,
+        );
+
+        // Assert
+        assert_eq!(cable.cause, "L'opérateur est en cause, le câble va bien.");
+        assert_eq!(modem.cause, "Le réseau mobile est en cause.");
     }
 }
