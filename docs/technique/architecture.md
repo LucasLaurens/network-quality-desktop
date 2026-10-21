@@ -11,7 +11,12 @@ Le cœur est en Rust, organisé en workspace Cargo de quatre crates. Le sens des
 | `infrastructure`            | Adaptateurs par OS, stockage, clients HTTP. Seul endroit où l'`unsafe` est permis (FFI native).   | `domain`, `application`                               |
 | `app` (dossier `src-tauri`) | Shell Tauri : assemble les adaptateurs et expose des commandes typées au front.                   | les trois autres, au fur et à mesure qu'elles servent |
 
-État actuel : `domain`, `application` et `infrastructure` sont vides et `app` ne dépend encore d'aucune d'elles ; `app` expose une seule commande, `read_app_info`.
+État actuel :
+
+- `domain` : niveaux, seuils, fenêtre de latence, médiane, hystérésis, verdict.
+- `application` : moteur de mesure (acteur sur un canal tokio, seule dépendance d'exécution de cette crate), ports `LatencyProbe`, `Clock`, `VerdictPresenter`. Les faux en mémoire ne sont compilés que pour les tests (feature `test-support`).
+- `infrastructure` : sonde ICMP et horloge système.
+- `app` : icône de barre système (avec un menu minimal « Quitter »), horloge à 1 Hz, commande `read_app_info`.
 
 ## Front
 
