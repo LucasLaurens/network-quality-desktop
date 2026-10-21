@@ -82,6 +82,7 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   quitRequests = 0
   nameRevealRequests = 0
   private isWindowModeReadFailing = false
+  private historyNotice: string | null = null
   private listeners: ((display: ConnectionDisplay) => void)[] = []
   private isHoldingReads = false
   private heldReads: (() => void)[] = []
@@ -151,6 +152,14 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   quitApp(): Promise<void> {
     this.quitRequests += 1
     return Promise.resolve()
+  }
+
+  readHistoryNotice(): Promise<string | null> {
+    return Promise.resolve(this.historyNotice)
+  }
+
+  setHistoryNotice(notice: string): void {
+    this.historyNotice = notice
   }
 
   revealNetworkName(): Promise<void> {

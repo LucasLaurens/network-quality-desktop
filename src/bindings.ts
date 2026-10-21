@@ -28,6 +28,8 @@ export const commands = {
 	 *  where it can be given once the question was answered.
 	 */
 	revealNetworkName: () => __TAURI_INVOKE<void>("reveal_network_name"),
+	/**  Why the history is not what it was, if something happened to it at launch. */
+	readHistoryNotice: () => __TAURI_INVOKE<string | null>("read_history_notice"),
 };
 
 /** Events */

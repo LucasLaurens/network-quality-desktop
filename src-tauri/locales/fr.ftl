@@ -98,6 +98,11 @@ connection-limited = { $connection }, connexion limitée
 
 menu-quit = Quitter
 
+## History
+
+history-set-aside = L'historique était illisible : il a été mis de côté ({ $file }) et un nouvel historique commence.
+history-not-saved = L'historique ne peut pas être enregistré sur ce disque : il sera perdu à la fermeture.
+
 ## Window mode, when the desktop shows no tray icon
 
 tray-hint-message = Ce bureau n'affiche pas les icônes de la barre système : l'app reste ouverte dans une fenêtre. L'extension AppIndicator fait apparaître la pastille.

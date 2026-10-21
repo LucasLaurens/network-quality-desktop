@@ -4,8 +4,8 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use application::test_support::{
-    InMemoryConnection, InMemoryGateway, InMemoryNetwork, InMemoryVerdictPresenter, InMemoryWifi,
-    ManualClock,
+    InMemoryConnection, InMemoryGateway, InMemoryHistoryRecorder, InMemoryNetwork,
+    InMemoryVerdictPresenter, InMemoryWifi, MANUAL_CLOCK_EPOCH, ManualClock,
 };
 use application::{
     CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, MeasurementEngine, VerdictView,
@@ -33,6 +33,7 @@ struct Harness {
     connection: InMemoryConnection,
     gateway: InMemoryGateway,
     wifi: InMemoryWifi,
+    history: InMemoryHistoryRecorder,
     engine: MeasurementEngine<
         InMemoryNetwork,
         ManualClock,
@@ -40,6 +41,7 @@ struct Harness {
         InMemoryConnection,
         InMemoryGateway,
         InMemoryWifi,
+        InMemoryHistoryRecorder,
     >,
 }
 
@@ -50,6 +52,7 @@ fn create_harness() -> Harness {
     let connection = InMemoryConnection::default();
     let gateway = InMemoryGateway::default();
     let wifi = InMemoryWifi::default();
+    let history = InMemoryHistoryRecorder::default();
     let targets = vec![Target::parse(FIRST_TARGET), Target::parse(SECOND_TARGET)];
     let engine = MeasurementEngine::new(
         EnginePorts {
@@ -59,6 +62,7 @@ fn create_harness() -> Harness {
             context_reader: connection.clone(),
             gateway_probe: gateway.clone(),
             wifi_reader: wifi.clone(),
+            history_recorder: history.clone(),
         },
         targets,
     );
@@ -69,6 +73,7 @@ fn create_harness() -> Harness {
         connection,
         gateway,
         wifi,
+        history,
         engine,
     }
 }
@@ -1083,4 +1088,68 @@ async fn ignores_a_weak_wifi_while_a_cable_carries_the_traffic() {
             fault: Fault::LocalLink(LocalProblem::Latency),
         }
     );
+}
+
+// History
+
+#[tokio::test]
+async fn hands_each_finished_minute_to_the_history() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 40)));
+    harness.set_latency(FAST);
+
+    // Act
+    harness.run_seconds(61).await;
+
+    // Assert
+    let minutes = harness.history.list_saved_minutes();
+    assert_eq!(minutes.len(), 1);
+    assert_eq!(minutes[0].1, MANUAL_CLOCK_EPOCH);
+    // The clock moves before each tick: the first minute holds seconds 1 to 59, two targets.
+    assert_eq!(minutes[0].2.probes_sent, 118);
+}
+
+#[tokio::test]
+async fn writes_the_minute_in_progress_when_asked_to_flush() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 41)));
+    harness.set_latency(FAST);
+    harness.run_seconds(5).await;
+    let (answer, answered) = std::sync::mpsc::sync_channel(1);
+
+    // Act
+    harness.engine.handle(EngineMessage::Flush(answer)).await;
+
+    // Assert
+    assert_eq!(harness.history.list_saved_minutes().len(), 1);
+    assert!(answered.recv().is_ok());
+}
+
+#[tokio::test]
+async fn answers_with_the_last_hour_second_by_second() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 42)));
+    harness.set_latency(FAST);
+    harness.run_seconds(3).await;
+    let (answer, answered) = tokio::sync::oneshot::channel();
+
+    // Act
+    harness
+        .engine
+        .handle(EngineMessage::ReadLastHour(answer))
+        .await;
+
+    // Assert
+    let points = answered.await.expect("an answer");
+    assert_eq!(points.len(), 3);
+    assert_eq!(points[0].latency, Some(FAST));
 }

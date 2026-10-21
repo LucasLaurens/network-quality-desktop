@@ -2,9 +2,12 @@ use std::future::Future;
 
 use std::net::Ipv4Addr;
 
-use domain::{ConnectionContext, GatewayEcho, ProbeOutcome, Target, Timestamp, WifiLink};
+use domain::{
+    Aggregate, ConnectionContext, GatewayEcho, Granularity, ProbeOutcome, Target, Timestamp,
+    WifiLink,
+};
 
-use crate::VerdictView;
+use crate::{HistoryCommand, HistoryEvent, NetworkKey, RepositoryError, VerdictView};
 
 /// Sends one probe to a target and says whether it answered, was lost, or is unreachable.
 pub trait LatencyProbe {
@@ -35,6 +38,77 @@ pub trait NetworkChangeWatcher {
 /// Monotonic time source, replaced by a manual clock in tests.
 pub trait Clock {
     fn read_now(&self) -> Timestamp;
+    /// Wall-clock seconds since 1970 UTC: the history is dated with them.
+    fn read_utc_seconds(&self) -> i64;
+}
+
+/// Hands history writes to their own thread: recording never blocks the measurement.
+pub trait HistoryRecorder {
+    fn record(&self, command: HistoryCommand);
+}
+
+/// Where minutes, hours and events are kept. Every write is atomic.
+pub trait MeasurementRepository {
+    /// Adds to the minute already kept for that start, if any.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed; nothing was written.
+    fn add_minute(
+        &mut self,
+        network: &NetworkKey,
+        start: i64,
+        aggregate: &Aggregate,
+    ) -> Result<(), RepositoryError>;
+
+    /// Replaces the hour kept for that start, if any.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed; nothing was written.
+    fn save_hour(
+        &mut self,
+        network: &NetworkKey,
+        start: i64,
+        aggregate: &Aggregate,
+    ) -> Result<(), RepositoryError>;
+
+    /// The rows starting in `[from, to)`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn list_aggregates(
+        &self,
+        network: &NetworkKey,
+        granularity: Granularity,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(i64, Aggregate)>, RepositoryError>;
+
+    /// The hours before `before` that have minutes but no hour row yet.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn list_unmerged_hours(&self, before: i64) -> Result<Vec<(NetworkKey, i64)>, RepositoryError>;
+
+    /// # Errors
+    ///
+    /// The storage failed; nothing was deleted.
+    fn purge_minutes_before(&mut self, utc: i64) -> Result<(), RepositoryError>;
+
+    /// # Errors
+    ///
+    /// The storage failed; nothing was written.
+    fn record_event(&mut self, event: &HistoryEvent) -> Result<(), RepositoryError>;
+
+    /// The events in `[from, to)`, oldest first.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError>;
 }
 
 /// Says whether the desktop can show a tray icon: some Linux sessions cannot.

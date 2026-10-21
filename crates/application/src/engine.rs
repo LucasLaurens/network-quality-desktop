@@ -1,17 +1,19 @@
 use std::net::Ipv4Addr;
+use std::sync::mpsc::SyncSender;
 use std::time::Duration;
 
 use domain::{
     ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayWindow, Grade, GradeBounds,
     Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause, Metric,
-    OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Unmeasurable, Verdict, WifiLink,
-    compute_median,
+    OfflineDetector, ProbeOutcome, Scalable, SecondPoint, Target, Thresholds, Unmeasurable,
+    Verdict, WifiLink, compute_median,
 };
 use futures_util::future::{join, join_all, join3};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, VerdictPresenter, WifiReader,
+    Clock, ConnectionContextReader, GatewayProbe, HistoryRecorder, HistoryTracker, LatencyProbe,
+    MeasuredSecond, VerdictPresenter, WifiReader,
 };
 
 /// Seconds with an answer needed before the first verdict.
@@ -22,13 +24,17 @@ pub const CONTEXT_REFRESH_SECONDS: u32 = 10;
 const GATEWAY_ANSWER_SECONDS: usize = 5;
 
 /// Messages the single measurement actor reacts to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum EngineMessage {
     /// One second elapsed: probe every target and recompute the verdict.
     Tick,
     /// The system reports an interface or address change: read the connection at the next tick.
     /// A burst of events within one second costs a single reading.
     NetworkChanged,
+    /// Closing or going to sleep: write the minute in progress, then answer.
+    Flush(SyncSender<()>),
+    /// The last hour, second by second, for the one-hour chart.
+    ReadLastHour(oneshot::Sender<Vec<SecondPoint>>),
 }
 
 /// One metric as shown to the user: its value, its grade and whether it is close to getting worse.
@@ -70,7 +76,9 @@ pub struct VerdictView {
 }
 
 /// Owns every piece of measurement state; nothing else mutates it.
-pub struct MeasurementEngine<P, C, V, R, G, W> {
+pub struct MeasurementEngine<P, C, V, R, G, W, H> {
+    history_recorder: H,
+    history: HistoryTracker,
     probe: P,
     clock: C,
     presenter: V,
@@ -97,7 +105,8 @@ pub struct MeasurementEngine<P, C, V, R, G, W> {
 }
 
 /// The ports the engine talks to, gathered so the constructor stays readable.
-pub struct EnginePorts<P, C, V, R, G, W> {
+pub struct EnginePorts<P, C, V, R, G, W, H> {
+    pub history_recorder: H,
     pub probe: P,
     pub clock: C,
     pub presenter: V,
@@ -106,8 +115,9 @@ pub struct EnginePorts<P, C, V, R, G, W> {
     pub wifi_reader: W,
 }
 
-impl<P, C, V, R, G, W> MeasurementEngine<P, C, V, R, G, W>
+impl<P, C, V, R, G, W, H> MeasurementEngine<P, C, V, R, G, W, H>
 where
+    H: HistoryRecorder,
     P: LatencyProbe,
     C: Clock,
     V: VerdictPresenter,
@@ -116,8 +126,9 @@ where
     W: WifiReader,
 {
     #[must_use]
-    pub fn new(ports: EnginePorts<P, C, V, R, G, W>, targets: Vec<Target>) -> Self {
+    pub fn new(ports: EnginePorts<P, C, V, R, G, W, H>, targets: Vec<Target>) -> Self {
         let EnginePorts {
+            history_recorder,
             probe,
             clock,
             presenter,
@@ -127,6 +138,8 @@ where
         } = ports;
         let jitter = vec![LatencyWindow::default(); targets.len()];
         Self {
+            history_recorder,
+            history: HistoryTracker::default(),
             probe,
             clock,
             presenter,
@@ -157,6 +170,11 @@ where
         match message {
             EngineMessage::Tick => self.measure_one_second().await,
             EngineMessage::NetworkChanged => self.seconds_since_context = CONTEXT_REFRESH_SECONDS,
+            EngineMessage::Flush(answer) => self.history.flush(answer, &self.history_recorder),
+            EngineMessage::ReadLastHour(answer) => {
+                // The asker may have given up waiting: nothing to do then.
+                let _ = answer.send(self.history.list_last_hour());
+            }
         }
     }
 
@@ -208,8 +226,9 @@ where
             self.wifi = wifi;
         }
         self.seconds_since_context += 1;
-        self.record_outcomes(&outcomes);
+        let (latency, probes_lost) = self.record_outcomes(&outcomes);
         let view = self.compute_view(&outcomes);
+        self.record_history(latency, probes_lost, &view);
         self.presenter.present(&view);
     }
 
@@ -263,7 +282,8 @@ where
     }
 
     /// O(k log k) time, O(k) space for k targets.
-    fn record_outcomes(&mut self, outcomes: &[ProbeOutcome]) {
+    /// Returns the second's median latency and its lost probes.
+    fn record_outcomes(&mut self, outcomes: &[ProbeOutcome]) -> (Option<Duration>, u32) {
         let round_trips: Vec<Option<Duration>> = outcomes
             .iter()
             .map(|outcome| match outcome {
@@ -288,6 +308,28 @@ where
         if median.is_some() {
             self.samples_since_restart = self.samples_since_restart.saturating_add(1);
         }
+        (median, lost)
+    }
+
+    /// The Wi-Fi name labels the network only when Wi-Fi carries the traffic. O(1).
+    fn record_history(&mut self, latency: Option<Duration>, probes_lost: u32, view: &VerdictView) {
+        let name = self
+            .wifi
+            .as_ref()
+            .filter(|_| {
+                self.context
+                    .is_some_and(|context| context.is_carried_by_wifi())
+            })
+            .and_then(|link| link.name.clone());
+        let second = MeasuredSecond {
+            utc: self.clock.read_utc_seconds(),
+            latency,
+            probes_sent: u32::try_from(self.targets.len()).unwrap_or(u32::MAX),
+            probes_lost,
+            verdict: view.verdict,
+        };
+        self.history
+            .record_second(&second, self.context, name, &self.history_recorder);
     }
 
     /// O(k·n log n) time, O(k·n) space, k targets and n ≤ 15 window samples.
