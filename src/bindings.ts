@@ -216,6 +216,7 @@ export type SettingsForm = {
 	appearance: AppearanceChoice,
 	/**  The address typed for the user's own server; `None` for the public servers. */
 	ownServer: string | null,
+	notifiesOnDegradation: boolean,
 };
 
 export type StateLabelDisplay = {

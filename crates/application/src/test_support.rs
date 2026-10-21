@@ -14,7 +14,7 @@ use domain::{
 
 use crate::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryCommand, HistoryEvent, HistoryReader,
-    HistoryRecorder, LatencyProbe, MeasurementRepository, NetworkKey, RepositoryError,
+    HistoryRecorder, LatencyProbe, MeasurementRepository, NetworkKey, Notifier, RepositoryError,
     SettingsRepository, VerdictPresenter, VerdictView, WifiReader,
 };
 
@@ -392,6 +392,31 @@ impl SettingsRepository for InMemorySettingsRepository {
     fn save_settings(&mut self, settings: &Settings) -> Result<(), RepositoryError> {
         self.0 = *settings;
         Ok(())
+    }
+}
+
+/// Keeps every degradation announced, in order.
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryNotifier {
+    notified: Arc<Mutex<Vec<VerdictView>>>,
+}
+
+impl InMemoryNotifier {
+    #[must_use]
+    pub fn list_notified(&self) -> Vec<VerdictView> {
+        self.notified
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl Notifier for InMemoryNotifier {
+    fn notify_degradation(&self, view: &VerdictView) {
+        self.notified
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(view.clone());
     }
 }
 

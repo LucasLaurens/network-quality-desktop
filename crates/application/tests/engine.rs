@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use application::test_support::{
     InMemoryConnection, InMemoryGateway, InMemoryHistoryRecorder, InMemoryNetwork,
-    InMemoryVerdictPresenter, InMemoryWifi, MANUAL_CLOCK_EPOCH, ManualClock,
+    InMemoryNotifier, InMemoryVerdictPresenter, InMemoryWifi, MANUAL_CLOCK_EPOCH, ManualClock,
 };
 use application::{
     CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, EventKind, MeasurementEngine, VerdictView,
@@ -34,6 +34,7 @@ struct Harness {
     gateway: InMemoryGateway,
     wifi: InMemoryWifi,
     history: InMemoryHistoryRecorder,
+    notifier: InMemoryNotifier,
     engine: MeasurementEngine<
         InMemoryNetwork,
         ManualClock,
@@ -42,6 +43,7 @@ struct Harness {
         InMemoryGateway,
         InMemoryWifi,
         InMemoryHistoryRecorder,
+        InMemoryNotifier,
     >,
 }
 
@@ -53,6 +55,7 @@ fn create_harness() -> Harness {
     let gateway = InMemoryGateway::default();
     let wifi = InMemoryWifi::default();
     let history = InMemoryHistoryRecorder::default();
+    let notifier = InMemoryNotifier::default();
     let targets = vec![Target::parse(FIRST_TARGET), Target::parse(SECOND_TARGET)];
     let engine = MeasurementEngine::new(
         EnginePorts {
@@ -63,6 +66,7 @@ fn create_harness() -> Harness {
             gateway_probe: gateway.clone(),
             wifi_reader: wifi.clone(),
             history_recorder: history.clone(),
+            notifier: notifier.clone(),
         },
         targets,
     );
@@ -74,6 +78,7 @@ fn create_harness() -> Harness {
         gateway,
         wifi,
         history,
+        notifier,
         engine,
     }
 }
@@ -1437,6 +1442,7 @@ async fn discards_the_probes_that_waited_through_a_sleep() {
             gateway_probe: InMemoryGateway::default(),
             wifi_reader: InMemoryWifi::default(),
             history_recorder: InMemoryHistoryRecorder::default(),
+            notifier: InMemoryNotifier::default(),
         },
         vec![Target::parse(FIRST_TARGET)],
     );
@@ -1583,4 +1589,70 @@ async fn keeps_measuring_when_the_servers_stay_the_same() {
         harness.read_presented_verdict(),
         Verdict::Graded(Grade::Solid)
     );
+}
+
+// Notifications
+
+#[tokio::test]
+async fn notifies_once_when_the_connection_gets_durably_worse() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_latency(SLOW);
+
+    // Act
+    harness.run_seconds(15).await;
+
+    // Assert
+    let verdicts: Vec<Verdict> = harness
+        .notifier
+        .list_notified()
+        .iter()
+        .map(|view| view.verdict)
+        .collect();
+    assert_eq!(verdicts, vec![Verdict::Graded(Grade::Unstable)]);
+}
+
+#[tokio::test]
+async fn never_notifies_an_improvement() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(SLOW).await;
+    harness.set_latency(FAST);
+
+    // Act
+    // 15 s for the slow samples to leave the p90 window, then 30 s of improvement.
+    harness.run_seconds(50).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Solid)
+    );
+    assert!(harness.notifier.list_notified().is_empty());
+}
+
+#[tokio::test]
+async fn stays_silent_when_notifications_are_turned_off() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .engine
+        .handle(EngineMessage::SettingsChanged(Settings {
+            notifies_on_degradation: false,
+            ..create_settings(MeasurementServers::Custom(Target::parse(FIRST_TARGET)))
+        }))
+        .await;
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_latency(SLOW);
+
+    // Act
+    harness.run_seconds(15).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Unstable)
+    );
+    assert!(harness.notifier.list_notified().is_empty());
 }

@@ -317,7 +317,7 @@ impl SettingsRepository for SqliteMeasurementRepository {
     fn read_settings(&self) -> Result<Settings, RepositoryError> {
         self.connection
             .query_row(
-                "SELECT autostart, theme, ping_target FROM settings WHERE id = 1",
+                "SELECT autostart, theme, ping_target, notify FROM settings WHERE id = 1",
                 [],
                 |row| {
                     let ping_target: Option<String> = row.get(2)?;
@@ -329,6 +329,7 @@ impl SettingsRepository for SqliteMeasurementRepository {
                             .as_deref()
                             .and_then(Target::try_parse)
                             .map_or(MeasurementServers::Default, MeasurementServers::Custom),
+                        notifies_on_degradation: row.get(3)?,
                     })
                 },
             )
@@ -343,11 +344,13 @@ impl SettingsRepository for SqliteMeasurementRepository {
             .map(|target| target.address().to_string());
         self.write(|transaction| {
             transaction.execute(
-                "UPDATE settings SET autostart = ?1, theme = ?2, ping_target = ?3 WHERE id = 1",
+                "UPDATE settings SET autostart = ?1, theme = ?2, ping_target = ?3, notify = ?4 \
+                 WHERE id = 1",
                 params![
                     settings.launch_at_login,
                     to_theme_text(settings.appearance),
-                    ping_target
+                    ping_target,
+                    settings.notifies_on_degradation
                 ],
             )?;
             Ok(())

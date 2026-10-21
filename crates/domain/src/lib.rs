@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod connection;
+mod degradation;
 mod diagnosis;
 mod grade;
 mod history;
@@ -22,6 +23,7 @@ pub use connection::{
     ConnectionContext, ConnectionKind, Gateway, InterfaceSnapshot, MacAddress, Medium, Metering,
     NetworkIdentity,
 };
+pub use degradation::DegradationWatch;
 pub use diagnosis::{Diagnosis, MeasuringCause, Metric};
 pub use grade::{Grade, GradeBounds, Scalable, Thresholds};
 pub use history::{

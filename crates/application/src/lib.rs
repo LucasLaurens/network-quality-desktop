@@ -26,8 +26,8 @@ pub use history::{
 };
 pub use ports::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryReader, HistoryRecorder, LatencyProbe,
-    MeasurementRepository, NetworkChangeWatcher, PowerEvent, PowerEventSource, SettingsRepository,
-    TrayHost, VerdictPresenter, WifiReader,
+    MeasurementRepository, NetworkChangeWatcher, Notifier, PowerEvent, PowerEventSource,
+    SettingsRepository, TrayHost, VerdictPresenter, WifiReader,
 };
 pub use settings::can_measure_against;
 pub use targets::{list_default_targets, list_targets};

@@ -14,6 +14,7 @@ mod settings_effects;
 mod settings_form;
 mod settings_store;
 mod shell_mode;
+mod shell_notifier;
 mod shell_presenter;
 mod text_catalog;
 mod tray_icon;
@@ -90,6 +91,7 @@ pub fn run() {
             show_dashboard(app);
         }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_positioner::init());
     #[cfg(target_os = "macos")]
     let app = app.menu(app_menu::build_app_menu);
@@ -189,6 +191,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
             gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
             wifi_reader: SystemWifiReader,
             history_recorder: stores.recorder,
+            notifier: shell_notifier::ShellNotifier::new(app.clone(), TextCatalog::load()),
         },
         list_targets(settings.servers),
     );
@@ -199,6 +202,13 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     });
     SystemPowerEventSource.watch(move |event| engine_inbox.relay_power_event(event));
     keep_measuring_in_background();
+    // The engine starts with the defaults: the saved notification choice reaches it first.
+    if sender
+        .try_send(EngineMessage::SettingsChanged(settings))
+        .is_err()
+    {
+        eprintln!("The saved settings could not reach the measurement engine");
+    }
     tauri::async_runtime::spawn(engine.run(inbox, urgent));
     tauri::async_runtime::spawn(send_ticks(sender));
     Ok(())

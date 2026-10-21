@@ -37,6 +37,8 @@ pub struct Settings {
     pub launch_at_login: bool,
     pub appearance: Appearance,
     pub servers: MeasurementServers,
+    /// A system notification when the connection gets durably worse.
+    pub notifies_on_degradation: bool,
 }
 
 impl Default for Settings {
@@ -45,6 +47,7 @@ impl Default for Settings {
             launch_at_login: true,
             appearance: Appearance::default(),
             servers: MeasurementServers::default(),
+            notifies_on_degradation: true,
         }
     }
 }
@@ -62,5 +65,6 @@ mod tests {
         assert!(settings.launch_at_login);
         assert_eq!(settings.appearance, Appearance::System);
         assert_eq!(settings.servers, MeasurementServers::Default);
+        assert!(settings.notifies_on_degradation);
     }
 }

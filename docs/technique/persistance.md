@@ -53,7 +53,7 @@ Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; l
 
 ## Réglages
 
-- La ligne typée `settings` (id 1, créée par la première migration) garde `autostart`, `theme` (`system`, `light`, `dark`) et `ping_target` (adresse IP du serveur personnalisé, `NULL` pour les serveurs publics). Une adresse illisible relue retombe sur les serveurs publics.
+- La ligne typée `settings` (id 1, créée par la première migration) garde `autostart`, `theme` (`system`, `light`, `dark`), `notify` et `ping_target` (adresse IP du serveur personnalisé, `NULL` pour les serveurs publics). Une adresse illisible relue retombe sur les serveurs publics.
 - Le port `SettingsRepository` (`read_settings`, `save_settings`, une transaction) est servi par une connexion d'écriture de plus, ouverte après l'écrivain (`SqliteMeasurementRepository::open_alongside`) : une écriture rare, qui attend l'écrivain au plus `BUSY_TIMEOUT`. Suite de contrat : `check_settings_contract`, sur le faux en mémoire et sur SQLite.
 
 ## Contrat

@@ -437,6 +437,7 @@ fn reads_back_what_was_saved(repository: &mut impl SettingsRepository) {
         launch_at_login: false,
         appearance: Appearance::Dark,
         servers: MeasurementServers::Custom(Target::parse("2001:db8::7")),
+        notifies_on_degradation: false,
     };
 
     // Act
