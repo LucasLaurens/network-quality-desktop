@@ -151,7 +151,7 @@ const fn to_profile_key(profile: TestProfile) -> &'static str {
     clippy::cast_precision_loss,
     reason = "a line's rate fits a double exactly enough to show"
 )]
-fn format_bitrate(rate: Bitrate, catalog: &TextCatalog) -> String {
+pub fn format_bitrate(rate: Bitrate, catalog: &TextCatalog) -> String {
     let megabits = rate.to_bits_per_second() as f64 / BITS_PER_MEGABIT;
     let value = if megabits < DECIMAL_BELOW_MEGABITS {
         format!("{megabits:.1}").replace('.', ",")
@@ -168,7 +168,7 @@ fn format_bitrate(rate: Bitrate, catalog: &TextCatalog) -> String {
     clippy::cast_precision_loss,
     reason = "a test moves a few hundred megabytes at most"
 )]
-fn format_megabytes(bytes: u64, catalog: &TextCatalog) -> String {
+pub fn format_megabytes(bytes: u64, catalog: &TextCatalog) -> String {
     let mut args = FluentArgs::new();
     args.set(
         "value",

@@ -3,8 +3,8 @@ use std::future::Future;
 use std::net::Ipv4Addr;
 
 use domain::{
-    Aggregate, ConnectionContext, Direction, GatewayEcho, Granularity, ProbeOutcome, Settings,
-    Target, Timestamp, Transfer, WifiLink,
+    Aggregate, BoxLine, ByteCounters, ConnectionContext, Direction, GatewayEcho, Granularity,
+    ProbeOutcome, Settings, Target, Timestamp, Transfer, WifiLink,
 };
 
 use crate::{
@@ -174,6 +174,17 @@ pub trait HistoryReader {
         from: i64,
         to: i64,
     ) -> Result<Vec<ThroughputRecord>, RepositoryError>;
+}
+
+/// Reads the byte counters of the interface carrying the default route; `None` without one.
+pub trait TrafficCounterReader {
+    fn read_counters(&self) -> Option<ByteCounters>;
+}
+
+/// Asks the box about its line, read only; `None` when it does not answer (`UPnP` off, no such
+/// service, another router in front).
+pub trait AccessTechnologyDetector {
+    fn read_box_line(&self) -> impl Future<Output = Option<BoxLine>> + Send;
 }
 
 /// Reads the history row by row, oldest first, for an export that never holds it whole. Each

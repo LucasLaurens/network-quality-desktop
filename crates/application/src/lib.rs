@@ -1,6 +1,7 @@
 //! Use cases and the ports (traits) that infrastructure adapters implement.
 #![forbid(unsafe_code)]
 
+mod access;
 mod dashboard;
 mod engine;
 mod export;
@@ -14,6 +15,7 @@ mod targets;
 pub mod test_support;
 mod throughput;
 
+pub use access::{LineReading, detect_access};
 pub use dashboard::{
     DayOverview, Evolution, NetworkStay, NetworkSummary, Outage, OutageEnd, Period, SUMMARY_DAYS,
     list_network_summaries, read_day_overview, read_evolution,
@@ -31,9 +33,10 @@ pub use history::{
     MINUTE_RETENTION, MeasuredSecond, NetworkKey, RepositoryError, ThroughputRecord,
 };
 pub use ports::{
-    Clock, ConnectionContextReader, GatewayProbe, HistoryReader, HistoryRecorder, HistoryStream,
-    LatencyProbe, MeasurementRepository, NetworkChangeWatcher, Notifier, PowerEvent,
-    PowerEventSource, SettingsRepository, ThroughputProbe, TrayHost, VerdictPresenter, WifiReader,
+    AccessTechnologyDetector, Clock, ConnectionContextReader, GatewayProbe, HistoryReader,
+    HistoryRecorder, HistoryStream, LatencyProbe, MeasurementRepository, NetworkChangeWatcher,
+    Notifier, PowerEvent, PowerEventSource, SettingsRepository, ThroughputProbe,
+    TrafficCounterReader, TrayHost, VerdictPresenter, WifiReader,
 };
 pub use settings::can_measure_against;
 pub use targets::{list_default_targets, list_targets};

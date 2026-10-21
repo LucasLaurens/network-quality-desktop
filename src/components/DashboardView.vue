@@ -9,6 +9,7 @@ import DashboardState from './DashboardState.vue'
 import EvolutionChart from './EvolutionChart.vue'
 import NetworksTable from './NetworksTable.vue'
 import SegmentedControl from './SegmentedControl.vue'
+import TechnicalDetails from './TechnicalDetails.vue'
 import ThroughputSection from './ThroughputSection.vue'
 
 type ChartMetric = 'latency' | 'jitter' | 'loss'
@@ -125,6 +126,7 @@ onUnmounted(() => {
       </div>
       <ThroughputSection @open-settings="emit('openSettings')" />
     </section>
+    <TechnicalDetails />
   </div>
 </template>
 

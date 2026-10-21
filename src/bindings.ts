@@ -96,6 +96,17 @@ export const commands = {
 	 *  The sentence shown under the button when the erase did not finish.
 	 */
 	eraseHistory: () => typedError<string, string>(__TAURI_INVOKE("erase_history")),
+	/**  The connection, its Wi-Fi and the traffic seen: quick, read again while the details are open. */
+	readTechnicalDetails: () => __TAURI_INVOKE<TechnicalDetails>("read_technical_details"),
+	/**
+	 *  What carries the line: the box asked over `UPnP` (a few seconds at most), then the estimate
+	 *  from this network's throughput tests and the latency at rest.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The history could not be read.
+	 */
+	readLineDetails: () => typedError<LineDetails, string>(__TAURI_INVOKE("read_line_details")),
 };
 
 /** Events */
@@ -136,6 +147,16 @@ export type DashboardSummaryDisplay = {
 	networks: NetworkRowDisplay[],
 };
 
+export type DetailRow = {
+	label: string,
+	value: string,
+};
+
+export type DetailSection = {
+	title: string,
+	rows: DetailRow[],
+};
+
 export type DisplayState = "solid" | "unstable" | "degraded" | "offline" | "measuring";
 
 export type EvolutionDisplay = {
@@ -165,6 +186,12 @@ export type Gauge = {
 	unstableFrom: number | null,
 	degradedAbove: number | null,
 	label: string,
+};
+
+export type LineDetails = {
+	section: DetailSection,
+	/**  Why some values are missing or how far to trust them. */
+	note: string,
 };
 
 export type MetricDisplay = {
@@ -272,6 +299,11 @@ export type StateShares = {
 	unstable: number | null,
 	degraded: number | null,
 	offline: number | null,
+};
+
+export type TechnicalDetails = {
+	/**  The connection, the Wi-Fi when it carries the traffic, the traffic seen. */
+	sections: DetailSection[],
 };
 
 /**  What a click on a test gives: its row, or the warning to accept first where data counts. */

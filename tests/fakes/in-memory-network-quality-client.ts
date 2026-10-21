@@ -5,7 +5,9 @@ import type {
   DashboardSummaryDisplay,
   DisplayState,
   EvolutionDisplay,
+  DetailSection,
   ExportPeriodChoice,
+  LineDetails,
   MetricDisplay,
   NetworkRowDisplay,
   OverviewDisplay,
@@ -15,6 +17,7 @@ import type {
   SegmentDisplay,
   SeriesDisplay,
   SettingsForm,
+  TechnicalDetails,
   ThroughputOutcome,
   ThroughputPanel,
   ThroughputRow,
@@ -82,6 +85,13 @@ export function createWindowModeTexts(): WindowModeTexts {
     linkLabel: faker.lorem.words(3),
     dismissLabel: faker.word.verb(),
     quitLabel: faker.word.verb(),
+  }
+}
+
+export function createDetailSection(): DetailSection {
+  return {
+    title: faker.word.words(2),
+    rows: Array.from({ length: 2 }, () => ({ label: faker.word.noun(), value: faker.word.words(3) })),
   }
 }
 
@@ -187,6 +197,10 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   readonly exportConfirmation = faker.lorem.sentence()
   readonly eraseConfirmation = faker.lorem.sentence()
   erases = 0
+  technicalDetailsReads = 0
+  lineDetailsReads = 0
+  technicalDetails: TechnicalDetails = { sections: [createDetailSection(), createDetailSection()] }
+  readonly lineDetails: LineDetails = { section: createDetailSection(), note: faker.lorem.sentence() }
   /** Empty while exports and erases succeed. */
   private dataRefusal = ''
   private throughputPanel = createThroughputPanel()
@@ -418,6 +432,16 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   /** Every export and erase is refused with `refusal`. */
   refuseDataActions(refusal: string): void {
     this.dataRefusal = refusal
+  }
+
+  readTechnicalDetails(): Promise<TechnicalDetails> {
+    this.technicalDetailsReads += 1
+    return Promise.resolve(this.technicalDetails)
+  }
+
+  readLineDetails(): Promise<LineDetails> {
+    this.lineDetailsReads += 1
+    return Promise.resolve(this.lineDetails)
   }
 
   readNextThroughputRow(): ThroughputRow {

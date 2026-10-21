@@ -3,10 +3,10 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 
-use application::ConnectionContextReader;
+use application::{ConnectionContextReader, TrafficCounterReader};
 
 use crate::metering;
-use domain::{ConnectionContext, Gateway, InterfaceSnapshot, MacAddress, Medium};
+use domain::{ByteCounters, ConnectionContext, Gateway, InterfaceSnapshot, MacAddress, Medium};
 use netdev::Interface;
 use netdev::interface::types::InterfaceType;
 
@@ -56,6 +56,27 @@ impl ConnectionContextReader for NetdevContextReader {
                 None
             }
         }
+    }
+}
+
+/// The counters of the interface measured, the same one as the context's. Blocking: a few system
+/// calls. O(i) for i interfaces.
+impl TrafficCounterReader for NetdevContextReader {
+    fn read_counters(&self) -> Option<ByteCounters> {
+        let source = find_source_address(self.route_reference)?;
+        let mut interface = netdev::get_interfaces()
+            .into_iter()
+            .find(|interface| !interface.is_loopback() && owns_address(interface, source))?;
+        // Windows leaves the counters out of the listing.
+        if let Err(error) = interface.update_stats() {
+            eprintln!("Reading the traffic counters failed: {error}");
+        }
+        let stats = interface.stats?;
+        Some(ByteCounters {
+            interface: interface.index,
+            received: stats.rx_bytes,
+            sent: stats.tx_bytes,
+        })
     }
 }
 
@@ -160,6 +181,24 @@ mod tests {
         interface.name = name.to_owned();
         interface.if_type = if_type;
         interface
+    }
+
+    // Needs a default route: `cargo test -p infrastructure -- --ignored`.
+    #[test]
+    #[ignore = "reads the real interface"]
+    fn reads_growing_counters_on_the_measured_interface() {
+        // Arrange
+        let reader = NetdevContextReader::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)));
+        let first = reader.read_counters().expect("counters");
+        let _ =
+            UdpSocket::bind("0.0.0.0:0").and_then(|socket| socket.send_to(&[0; 512], "1.1.1.1:53"));
+
+        // Act
+        let second = reader.read_counters().expect("counters");
+
+        // Assert
+        assert_eq!(second.interface, first.interface);
+        assert!(second.sent >= first.sent);
     }
 
     #[test]

@@ -5,9 +5,13 @@ use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Manager, State};
 
-use application::{Clock, can_measure_against, list_network_summaries, read_day_overview};
+use application::{
+    Clock, can_measure_against, detect_access, list_network_summaries, read_day_overview,
+};
 use domain::TestProfile;
-use infrastructure::{LocationRequest, SystemClock, request_location_permission};
+use infrastructure::{
+    LocationRequest, SystemClock, UpnpAccessDetector, request_location_permission,
+};
 
 use crate::create_latency_probe;
 use crate::dashboard_display::{
@@ -23,11 +27,13 @@ use crate::settings_store::SettingsStore;
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
 use crate::shell_presenter::ConnectionStore;
 use crate::shell_presenter::DisplayStore;
+use crate::technical_details::{LineDetails, TechnicalDetails};
 use crate::text_catalog::TextCatalog;
 use crate::throughput_display::{
     ProfileChoice, ThroughputOutcome, ThroughputPanel, ThroughputRow, compose_warning,
 };
 use crate::throughput_lab::{LabRefusal, ThroughputLab};
+use crate::traffic_store::TrafficStore;
 use crate::windows::{POPOVER_WINDOW, report_failure, show_dashboard};
 
 /// Identity of the running build, shown in the window footer.
@@ -416,6 +422,47 @@ pub async fn erase_history(
     } else {
         Err(catalog.render("history-not-erased", None))
     }
+}
+
+/// The connection, its Wi-Fi and the traffic seen: quick, read again while the details are open.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn read_technical_details(
+    connection: State<'_, ConnectionStore>,
+    traffic: State<'_, TrafficStore>,
+    catalog: State<'_, TextCatalog>,
+) -> TechnicalDetails {
+    let (current, peak) = traffic.read();
+    TechnicalDetails::compose(&connection.read_all(), current, peak, &catalog)
+}
+
+/// What carries the line: the box asked over `UPnP` (a few seconds at most), then the estimate
+/// from this network's throughput tests and the latency at rest.
+///
+/// # Errors
+///
+/// The history could not be read.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_line_details(
+    connection: State<'_, ConnectionStore>,
+    inbox: State<'_, EngineInbox>,
+    history: State<'_, DashboardHistory>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<LineDetails, String> {
+    let network = inbox.read_live().await.network;
+    let now = SystemClock::start().read_utc_seconds();
+    let tests = history
+        .read(|reader| reader.list_throughput_tests(0, now + 1))
+        .map_err(|error| error.0)?;
+    let latency = connection.read_all().latency;
+    let line = detect_access(&UpnpAccessDetector, &tests, network.as_ref(), latency).await;
+    Ok(LineDetails::compose(&line, &catalog))
 }
 
 #[cfg(test)]

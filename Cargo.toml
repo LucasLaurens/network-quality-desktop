@@ -49,6 +49,8 @@ objc2-io-kit = { version = "=0.3.2", default-features = false, features = ["std"
 dbus = "=0.9.12"
 # HTTP for the throughput tests: rustls with the ring provider, the system's certificates.
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "http2"] }
+# UPnP, read only: the box's line, never a port mapping.
+rupnp = { version = "=3.0.0", default-features = false }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 unic-langid = { version = "0.9", features = ["macros"] }

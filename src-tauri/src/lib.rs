@@ -17,9 +17,11 @@ mod settings_store;
 mod shell_mode;
 mod shell_notifier;
 mod shell_presenter;
+mod technical_details;
 mod text_catalog;
 mod throughput_display;
 mod throughput_lab;
+mod traffic_store;
 mod tray_icon;
 mod tray_menu;
 mod windows;
@@ -82,7 +84,9 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_throughput_panel,
             commands::run_throughput_test,
             commands::export_history,
-            commands::erase_history
+            commands::erase_history,
+            commands::read_technical_details,
+            commands::read_line_details
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -186,6 +190,9 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         .address();
     let connection_store = ConnectionStore::default();
     app.manage(connection_store.clone());
+    app.manage(traffic_store::TrafficStore::start(
+        NetdevContextReader::new(route_reference),
+    ));
     app.manage(throughput_lab::ThroughputLab::create());
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
     let (urgent_sender, urgent) = mpsc::channel(engine_inbox::URGENT_CAPACITY);

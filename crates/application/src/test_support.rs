@@ -8,15 +8,16 @@ use std::time::Duration;
 use std::net::Ipv4Addr;
 
 use domain::{
-    Aggregate, ConnectionContext, Direction, GatewayEcho, Granularity, ProbeOutcome, Settings,
-    Target, Timestamp, Transfer, WifiLink,
+    Aggregate, BoxLine, ConnectionContext, Direction, GatewayEcho, Granularity, ProbeOutcome,
+    Settings, Target, Timestamp, Transfer, WifiLink,
 };
 
 use crate::{
-    Clock, ConnectionContextReader, GatewayProbe, HistoryCommand, HistoryEvent, HistoryReader,
-    HistoryRecorder, HistoryStream, LatencyProbe, MeasurementRepository, NetworkKey, Notifier,
-    RepositoryError, SettingsRepository, ThroughputFailure, ThroughputProbe, ThroughputRecord,
-    VerdictPresenter, VerdictView, WifiReader,
+    AccessTechnologyDetector, Clock, ConnectionContextReader, GatewayProbe, HistoryCommand,
+    HistoryEvent, HistoryReader, HistoryRecorder, HistoryStream, LatencyProbe,
+    MeasurementRepository, NetworkKey, Notifier, RepositoryError, SettingsRepository,
+    ThroughputFailure, ThroughputProbe, ThroughputRecord, VerdictPresenter, VerdictView,
+    WifiReader,
 };
 
 /// The manual clock's wall-clock start: an arbitrary UTC second, on an hour boundary.
@@ -470,6 +471,23 @@ impl HistoryStream for InMemoryMeasurementRepository {
             .iter()
             .rev()
             .try_for_each(visit)
+    }
+}
+
+/// A box that answers with the line it was given, or not at all.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct InMemoryAccessDetector(Option<BoxLine>);
+
+impl InMemoryAccessDetector {
+    #[must_use]
+    pub const fn answering(line: BoxLine) -> Self {
+        Self(Some(line))
+    }
+}
+
+impl AccessTechnologyDetector for InMemoryAccessDetector {
+    fn read_box_line(&self) -> impl Future<Output = Option<BoxLine>> + Send {
+        std::future::ready(self.0)
     }
 }
 
