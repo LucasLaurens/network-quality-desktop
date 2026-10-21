@@ -1,16 +1,19 @@
 use std::time::Duration;
 
 use domain::{
-    Diagnosis, Grade, GradeBounds, Hysteresis, LatencyWindow, LossRate, LossWindow, Metric,
-    OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Verdict, compute_median,
+    ConnectionContext, Diagnosis, Grade, GradeBounds, Hysteresis, LatencyWindow, LossRate,
+    LossWindow, Metric, OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Verdict,
+    compute_median,
 };
-use futures_util::future::join_all;
+use futures_util::future::{join, join_all};
 use tokio::sync::mpsc;
 
-use crate::{Clock, LatencyProbe, VerdictPresenter};
+use crate::{Clock, ConnectionContextReader, LatencyProbe, VerdictPresenter};
 
 /// Seconds with an answer needed before the first verdict.
 pub const WARM_UP_SAMPLES: u32 = 10;
+/// Reading the connection costs milliseconds of system calls: every 10 seconds, not every tick.
+pub const CONTEXT_REFRESH_SECONDS: u32 = 10;
 
 /// Messages the single measurement actor reacts to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,13 +52,18 @@ pub struct VerdictView {
     pub latency: Option<MetricReading<Duration>>,
     pub jitter: Option<MetricReading<Duration>>,
     pub loss: Option<MetricReading<LossRate>>,
+    /// `None` while no default route exists, or before the first read.
+    pub context: Option<ConnectionContext>,
 }
 
 /// Owns every piece of measurement state; nothing else mutates it.
-pub struct MeasurementEngine<P, C, V> {
+pub struct MeasurementEngine<P, C, V, R> {
     probe: P,
     clock: C,
     presenter: V,
+    context_reader: R,
+    context: Option<ConnectionContext>,
+    seconds_since_context: u32,
     targets: Vec<Target>,
     thresholds: Thresholds,
     latency: LatencyWindow,
@@ -67,14 +75,20 @@ pub struct MeasurementEngine<P, C, V> {
     samples_since_restart: u32,
 }
 
-impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> {
+impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
+    MeasurementEngine<P, C, V, R>
+{
     #[must_use]
-    pub fn new(probe: P, clock: C, presenter: V, targets: Vec<Target>) -> Self {
+    pub fn new(probe: P, clock: C, presenter: V, context_reader: R, targets: Vec<Target>) -> Self {
         let jitter = vec![LatencyWindow::default(); targets.len()];
         Self {
             probe,
             clock,
             presenter,
+            context_reader,
+            context: None,
+            // Due at once: the first tick reads the connection.
+            seconds_since_context: CONTEXT_REFRESH_SECONDS,
             targets,
             thresholds: Thresholds::for_video_calls(),
             latency: LatencyWindow::default(),
@@ -102,12 +116,28 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
     }
 
     async fn measure_one_second(&mut self) {
-        let outcomes = join_all(
-            self.targets
-                .iter()
-                .map(|target| self.probe.send_probe(*target)),
+        let is_context_due = self.seconds_since_context >= CONTEXT_REFRESH_SECONDS;
+        // The context is read alongside the probes, so a slow read never delays the measurement.
+        let (outcomes, context) = join(
+            join_all(
+                self.targets
+                    .iter()
+                    .map(|target| self.probe.send_probe(*target)),
+            ),
+            async {
+                if is_context_due {
+                    Some(self.context_reader.read_context().await)
+                } else {
+                    None
+                }
+            },
         )
         .await;
+        if let Some(context) = context {
+            self.context = context;
+            self.seconds_since_context = 0;
+        }
+        self.seconds_since_context += 1;
         self.record_outcomes(&outcomes);
         let view = self.compute_view(&outcomes);
         self.presenter.present(&view);
@@ -154,6 +184,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
                 latency: None,
                 jitter: None,
                 loss: None,
+                context: self.context,
             };
         }
         let thresholds = self.thresholds;
@@ -210,6 +241,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
             latency,
             jitter,
             loss,
+            context: self.context,
         }
     }
 
@@ -233,6 +265,8 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
         self.loss = LossWindow::default();
         self.hysteresis = Hysteresis::default();
         self.samples_since_restart = 0;
+        // The way back may be another network: read it at once (every second while offline).
+        self.seconds_since_context = CONTEXT_REFRESH_SECONDS;
     }
 }
 

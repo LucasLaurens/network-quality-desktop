@@ -10,6 +10,7 @@ const NBSP = ' '
 const scenarios: Record<string, ConnectionDisplay> = {
   degraded: createConnectionDisplay({
     openDashboardLabel: 'Ouvrir le tableau de bord',
+    network: { label: 'Réseau Wi-Fi', connection: 'Wi-Fi, via un VPN' },
     state: 'unstable',
     stateLabel: 'Instable',
     cause: 'La connexion ne tient pas les seuils de la visio.',
@@ -55,6 +56,7 @@ const scenarios: Record<string, ConnectionDisplay> = {
   }),
   offline: createConnectionDisplay({
     openDashboardLabel: 'Ouvrir le tableau de bord',
+    network: { label: 'Réseau Wi-Fi', connection: 'Wi-Fi' },
     state: 'offline',
     stateLabel: 'Hors ligne',
     cause: 'Aucun serveur ne répond.',

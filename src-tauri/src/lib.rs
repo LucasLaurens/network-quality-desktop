@@ -16,7 +16,8 @@ use application::{EngineMessage, MeasurementEngine, list_default_targets};
 use display::ConnectionDisplay;
 use domain::Verdict;
 use infrastructure::{
-    FallbackLatencyProbe, IcmpEchoSender, SystemClock, SystemTrayHost, TcpConnectionOpener,
+    FallbackLatencyProbe, IcmpEchoSender, NetdevContextReader, SystemClock, SystemTrayHost,
+    TcpConnectionOpener,
 };
 use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
@@ -122,12 +123,18 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     if mode == ShellMode::Window {
         show_dashboard(app);
     }
+    let targets = list_default_targets();
+    let route_reference = targets
+        .first()
+        .expect("the default targets are listed")
+        .address();
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
     let engine = MeasurementEngine::new(
         FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener),
         SystemClock::start(),
         ShellPresenter::new(app.clone(), tray, menu, catalog, store),
-        list_default_targets(),
+        NetdevContextReader::new(route_reference),
+        targets,
     );
     tauri::async_runtime::spawn(engine.run(inbox));
     tauri::async_runtime::spawn(send_ticks(sender));

@@ -2,9 +2,14 @@
 
 use std::time::Duration;
 
-use application::test_support::{InMemoryNetwork, InMemoryVerdictPresenter, ManualClock};
-use application::{EngineMessage, MeasurementEngine, VerdictView};
-use domain::{Diagnosis, Grade, Metric, ProbeOutcome, Target, Verdict};
+use application::test_support::{
+    InMemoryConnection, InMemoryNetwork, InMemoryVerdictPresenter, ManualClock,
+};
+use application::{CONTEXT_REFRESH_SECONDS, EngineMessage, MeasurementEngine, VerdictView};
+use domain::{
+    ConnectionContext, ConnectionKind, Diagnosis, Grade, MacAddress, Metric, ProbeOutcome, Target,
+    Verdict,
+};
 
 // Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
 const FIRST_TARGET: &str = "192.0.2.1";
@@ -20,19 +25,33 @@ struct Harness {
     network: InMemoryNetwork,
     clock: ManualClock,
     presenter: InMemoryVerdictPresenter,
-    engine: MeasurementEngine<InMemoryNetwork, ManualClock, InMemoryVerdictPresenter>,
+    connection: InMemoryConnection,
+    engine: MeasurementEngine<
+        InMemoryNetwork,
+        ManualClock,
+        InMemoryVerdictPresenter,
+        InMemoryConnection,
+    >,
 }
 
 fn create_harness() -> Harness {
     let network = InMemoryNetwork::default();
     let clock = ManualClock::default();
     let presenter = InMemoryVerdictPresenter::default();
+    let connection = InMemoryConnection::default();
     let targets = vec![Target::parse(FIRST_TARGET), Target::parse(SECOND_TARGET)];
-    let engine = MeasurementEngine::new(network.clone(), clock.clone(), presenter.clone(), targets);
+    let engine = MeasurementEngine::new(
+        network.clone(),
+        clock.clone(),
+        presenter.clone(),
+        connection.clone(),
+        targets,
+    );
     Harness {
         network,
         clock,
         presenter,
+        connection,
         engine,
     }
 }
@@ -555,4 +574,90 @@ async fn gives_each_reading_the_bounds_it_was_graded_against() {
         latency.bounds.find_reference_threshold(latency.value),
         Duration::from_millis(100)
     );
+}
+
+// Connection context
+
+fn create_context(kind: ConnectionKind, last_octet: u8) -> ConnectionContext {
+    ConnectionContext {
+        kind,
+        is_vpn: false,
+        gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, last_octet]),
+    }
+}
+
+#[tokio::test]
+async fn presents_the_connection_from_the_first_second() {
+    // Arrange
+    let mut harness = create_harness();
+    let context = create_context(ConnectionKind::WiFi, 1);
+    harness.connection.set_context(Some(context));
+    harness.set_latency(FAST);
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(harness.read_last_view().context, Some(context));
+}
+
+#[tokio::test]
+async fn reads_the_connection_again_every_ten_seconds() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 1)));
+    harness.set_latency(FAST);
+    harness.run_seconds(1).await;
+    let ethernet = create_context(ConnectionKind::Ethernet, 2);
+    harness.connection.set_context(Some(ethernet));
+    harness.run_seconds(CONTEXT_REFRESH_SECONDS - 1).await;
+    let before_refresh = harness.read_last_view().context;
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_ne!(before_refresh, Some(ethernet));
+    assert_eq!(harness.read_last_view().context, Some(ethernet));
+}
+
+#[tokio::test]
+async fn keeps_the_connection_while_offline() {
+    // Arrange
+    let mut harness = create_harness();
+    let context = create_context(ConnectionKind::Ethernet, 3);
+    harness.connection.set_context(Some(context));
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_every_target(ProbeOutcome::Unreachable);
+
+    // Act
+    harness.run_seconds(5).await;
+
+    // Assert
+    let view = harness.read_last_view();
+    assert_eq!(view.verdict, Verdict::Offline);
+    assert_eq!(view.context, Some(context));
+}
+
+#[tokio::test]
+async fn reads_the_connection_again_right_after_an_outage() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 4)));
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_every_target(ProbeOutcome::Unreachable);
+    harness.run_seconds(5).await;
+    let ethernet = create_context(ConnectionKind::Ethernet, 5);
+    harness.connection.set_context(Some(ethernet));
+    harness.set_latency(FAST);
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(harness.read_last_view().context, Some(ethernet));
 }

@@ -12,6 +12,21 @@ La pastille de la barre des menus montre l'état de la connexion. Chaque état a
 
 Survoler la pastille affiche le nom de l'état (sauf sous Linux). Un clic sur la pastille (macOS et Windows) ouvre le **popover** : l'état, le [diagnostic](diagnostic.md), et les trois mesures avec leur méthode et une jauge qui situe la valeur entre les zones Solide, Instable et Dégradée. Le popover se ferme dès qu'on clique ailleurs, sur un nouveau clic sur la pastille ou avec Échap ; son bouton « Ouvrir le tableau de bord » ouvre la fenêtre principale.
 
+## Réseau et type de connexion
+
+Le popover nomme le réseau à droite de l'état, avec le type de connexion en dessous.
+
+| Type                                | Nom affiché                                             | Comment l'app le reconnaît                                                                                                                                            |
+| ----------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ethernet                            | Réseau Ethernet                                         | type d'interface                                                                                                                                                      |
+| Wi-Fi                               | Réseau Wi-Fi                                            | type d'interface                                                                                                                                                      |
+| Modem cellulaire                    | Réseau mobile                                           | modem intégré à l'ordinateur                                                                                                                                          |
+| Partage de connexion d'un téléphone | Partage de connexion                                    | au moins deux indices indépendants : adressage habituel des téléphones, nom d'interface de téléphone (USB), adresse de passerelle aléatoire ; jamais l'adressage seul |
+| VPN                                 | Réseau via un VPN, ou le nom de la connexion en dessous | la mesure passe par le VPN ; le type affiché est « Wi-Fi, via un VPN » quand la connexion physique est connue, sinon « VPN »                                          |
+| Autre                               | Réseau non reconnu                                      | connexion d'un type inconnu, ou lien PPP (DSL, clé 3G)                                                                                                                |
+
+Un réseau est reconnu par l'adresse MAC de sa passerelle et son type ; le nom du Wi-Fi n'est qu'un libellé et remplacera le nom générique avec le ticket Wi-Fi. Le contexte est relu toutes les 10 secondes.
+
 ## Menu de la pastille
 
 Un clic droit sur la pastille (macOS et Windows) ouvre un menu : l'état, le constat, « Ouvrir le tableau de bord » et « Quitter ». L'état et le constat se mettent à jour quand la connexion change. Sous Linux, ce même menu remplace le popover : la barre système n'y transmet pas le clic.
