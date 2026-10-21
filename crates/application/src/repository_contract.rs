@@ -3,9 +3,14 @@
 
 use std::time::Duration;
 
-use domain::{Aggregate, ConnectionKind, CountedState, Granularity, MacAddress, SecondSample};
+use domain::{
+    Aggregate, Appearance, ConnectionKind, CountedState, Granularity, MacAddress,
+    MeasurementServers, SecondSample, Settings, Target,
+};
 
-use crate::{EventKind, HistoryEvent, HistoryReader, MeasurementRepository, NetworkKey};
+use crate::{
+    EventKind, HistoryEvent, HistoryReader, MeasurementRepository, NetworkKey, SettingsRepository,
+};
 
 const HOUR: i64 = 3600;
 const MINUTE: i64 = 60;
@@ -405,4 +410,61 @@ fn keeps_old_minutes_whose_hour_is_not_kept(
             .len(),
         1
     );
+}
+
+/// Runs every settings check on fresh repositories made by `create`.
+///
+/// # Panics
+///
+/// When the repository breaks the contract.
+pub fn check_settings_contract<R: SettingsRepository>(create: impl Fn() -> R) {
+    reads_the_defaults_before_any_save(&create());
+    reads_back_what_was_saved(&mut create());
+    goes_back_to_the_public_servers(&mut create());
+}
+
+fn reads_the_defaults_before_any_save(repository: &impl SettingsRepository) {
+    // Act
+    let settings = repository.read_settings().expect("settings");
+
+    // Assert
+    assert_eq!(settings, Settings::default());
+}
+
+fn reads_back_what_was_saved(repository: &mut impl SettingsRepository) {
+    // Arrange
+    let saved = Settings {
+        launch_at_login: false,
+        appearance: Appearance::Dark,
+        servers: MeasurementServers::Custom(Target::parse("2001:db8::7")),
+    };
+
+    // Act
+    repository.save_settings(&saved).expect("a save");
+
+    // Assert
+    assert_eq!(repository.read_settings().expect("settings"), saved);
+}
+
+fn goes_back_to_the_public_servers(repository: &mut impl SettingsRepository) {
+    // Arrange
+    repository
+        .save_settings(&Settings {
+            servers: MeasurementServers::Custom(Target::parse("192.0.2.9")),
+            ..Settings::default()
+        })
+        .expect("a custom server");
+
+    // Act
+    repository
+        .save_settings(&Settings {
+            appearance: Appearance::Light,
+            ..Settings::default()
+        })
+        .expect("the public servers");
+
+    // Assert
+    let settings = repository.read_settings().expect("settings");
+    assert_eq!(settings.servers, MeasurementServers::Default);
+    assert_eq!(settings.appearance, Appearance::Light);
 }

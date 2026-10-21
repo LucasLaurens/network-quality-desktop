@@ -346,6 +346,10 @@ const fn select_cause_keys(
             cause: MeasuringCause::Wake,
             ..
         } => ("cause-wake", None),
+        Diagnosis::Measuring {
+            cause: MeasuringCause::NewServers,
+            ..
+        } => ("cause-new-servers", None),
         Diagnosis::NoNetwork => ("cause-no-network", Some("action-no-network")),
         Diagnosis::GatewayWithoutInternet if matches!(kind, ConnectionKind::PhoneHotspot) => (
             "cause-phone-without-internet",

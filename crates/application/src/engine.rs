@@ -5,15 +5,15 @@ use std::time::Duration;
 use domain::{
     ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayWindow, Grade, GradeBounds,
     Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause, Metric,
-    OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Unmeasurable, Verdict, WifiLink,
-    compute_median,
+    OfflineDetector, ProbeOutcome, Scalable, Settings, Target, Thresholds, Unmeasurable, Verdict,
+    WifiLink, compute_median,
 };
 use futures_util::future::{join, join_all, join3};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryRecorder, HistoryTracker, LatencyProbe,
-    LiveHistory, MeasuredSecond, VerdictPresenter, WifiReader,
+    LiveHistory, MeasuredSecond, VerdictPresenter, WifiReader, list_targets,
 };
 
 /// Seconds with an answer needed before the first verdict.
@@ -59,6 +59,8 @@ pub enum EngineMessage {
     Sleep(SyncSender<()>),
     /// The system woke up: measure again from scratch.
     Wake,
+    /// The user saved the settings: other servers mean measuring again from scratch.
+    SettingsChanged(Settings),
 }
 
 /// One metric as shown to the user: its value, its grade and whether it is close to getting worse.
@@ -209,6 +211,7 @@ where
                     .record_sleep(utc, answer, &self.history_recorder);
                 self.wakefulness = Wakefulness::Asleep { since: utc };
             }
+            EngineMessage::SettingsChanged(settings) => self.apply_settings(settings),
             // Already awake: the gap between two ticks came first, and was handled then.
             EngineMessage::Wake => {
                 if matches!(self.wakefulness, Wakefulness::Asleep { .. }) {
@@ -504,6 +507,17 @@ where
             .ok()
             .filter(|count| *count > 0)?;
         Some(jitters.iter().sum::<Duration>() / count)
+    }
+
+    /// Only the servers matter to the measurement. O(k) for k targets.
+    fn apply_settings(&mut self, settings: Settings) {
+        let targets = list_targets(settings.servers);
+        if targets == self.targets {
+            return;
+        }
+        self.jitter = vec![LatencyWindow::default(); targets.len()];
+        self.targets = targets;
+        self.restart_for(MeasuringCause::NewServers);
     }
 
     const fn compose_measuring_diagnosis(&self) -> Diagnosis {

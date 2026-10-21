@@ -477,7 +477,7 @@ fn render_value(key: &str, value: String, catalog: &TextCatalog) -> String {
 }
 
 /// "14 h 05" in the user's time zone. O(1).
-fn format_time_of_day(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
+pub fn format_time_of_day(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
     let seconds = (utc + offset).rem_euclid(SECONDS_PER_DAY);
     let mut args = FluentArgs::new();
     args.set("hours", (seconds / SECONDS_PER_HOUR).to_string());

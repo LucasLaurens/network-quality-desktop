@@ -17,6 +17,8 @@ pub enum MeasuringCause {
     NewNetwork,
     /// Back from sleep: the connection may have changed while the computer slept.
     Wake,
+    /// The user picked other servers: what was measured against the old ones says nothing.
+    NewServers,
 }
 
 /// Why the connection is in its current state: the « pourquoi » shown under the state.

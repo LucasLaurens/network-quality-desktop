@@ -51,6 +51,11 @@ Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; l
 - Les calculs sont des fonctions de la couche application (`dashboard.rs`) : `read_evolution` (seaux de largeur fixe, vides là où rien n'a été mesuré, changements de réseau, couverture), `read_day_overview` (journée, coupures, pire minute, arrivée sur le réseau courant), `list_network_summaries` (30 jours par réseau, le plus fiable). Les périodes de 7 et 30 jours lisent les heures closes puis les minutes de l'heure en cours. La dernière heure lit les minutes écrites avant le début de la mémoire, puis la mémoire, sans compter deux fois la minute où la mémoire commence.
 - Deux événements `network_changed` successifs du même type, dont l'un n'a pas de MAC (lue plus tard) et dont les noms ne diffèrent pas, ne sont pas un changement (`NetworkKey::is_likely_same`). Le regroupement par réseau suit l'identité stockée (`is_same_identity`).
 
+## Réglages
+
+- La ligne typée `settings` (id 1, créée par la première migration) garde `autostart`, `theme` (`system`, `light`, `dark`) et `ping_target` (adresse IP du serveur personnalisé, `NULL` pour les serveurs publics). Une adresse illisible relue retombe sur les serveurs publics.
+- Le port `SettingsRepository` (`read_settings`, `save_settings`, une transaction) est servi par une connexion d'écriture de plus, ouverte après l'écrivain (`SqliteMeasurementRepository::open_alongside`) : une écriture rare, qui attend l'écrivain au plus `BUSY_TIMEOUT`. Suite de contrat : `check_settings_contract`, sur le faux en mémoire et sur SQLite.
+
 ## Contrat
 
 Les ports `MeasurementRepository` et `HistoryReader` ont deux implémentations : `InMemoryMeasurementRepository` (faux pour les tests) et `SqliteMeasurementRepository`. Une seule suite, `application::repository_contract::check_contract`, tourne sur les deux (SQLite en mémoire) : ajout et fusion d'une minute, remplacement d'une heure, plage triée, réseaux séparés, heures ouvertes, purge, minutes d'une heure non conservée gardées, événements triés, libellé appris plus tard ou par un événement et jamais effacé, réseaux sans MAC regroupés par type, lignes de tous les réseaux d'une plage.

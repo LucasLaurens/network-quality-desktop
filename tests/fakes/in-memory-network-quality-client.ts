@@ -12,6 +12,7 @@ import type {
   PeriodChoice,
   SegmentDisplay,
   SeriesDisplay,
+  SettingsForm,
   WindowModeTexts,
 } from '../../src/bindings'
 import type { NetworkQualityClient } from '../../src/services/network-quality-client'
@@ -159,6 +160,13 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private dashboardSummary = createDashboardSummary()
   private evolution = createEvolutionDisplay()
   readonly evolutionRequests: PeriodChoice[] = []
+  readonly savedForms: SettingsForm[] = []
+  private settings: SettingsForm = { launchAtLogin: true, appearance: 'system', ownServer: null }
+  /** Empty while saves are accepted. */
+  private settingsRefusal = ''
+  private readonly confirmation = faker.lorem.sentence()
+  private isHoldingSaves = false
+  private heldSaves: (() => void)[] = []
 
   constructor(
     private readonly appInfo: AppInfo = { name: faker.word.noun(), version: faker.system.semver() },
@@ -260,6 +268,51 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   setEvolution(evolution: EvolutionDisplay): void {
     this.evolution = evolution
+  }
+
+  readSettings(): Promise<SettingsForm> {
+    return Promise.resolve({ ...this.settings })
+  }
+
+  /** Every save is refused with `refusal` until `acceptSettings`. */
+  refuseSettings(refusal: string): void {
+    this.settingsRefusal = refusal
+  }
+
+  acceptSettings(): void {
+    this.settingsRefusal = ''
+  }
+
+  saveSettings(form: SettingsForm): Promise<string> {
+    this.savedForms.push({ ...form })
+    const answer = (): Promise<string> => {
+      if (this.settingsRefusal !== '') return Promise.reject(new Error(this.settingsRefusal))
+      this.settings = { ...form }
+      return Promise.resolve(this.confirmation)
+    }
+    if (!this.isHoldingSaves) return answer()
+    return new Promise((resolve, reject) => {
+      this.heldSaves.push(() => {
+        answer().then(resolve, reject)
+      })
+    })
+  }
+
+  /** Saves wait until `releaseSaves`, as a server probe would. */
+  holdSaves(): void {
+    this.isHoldingSaves = true
+  }
+
+  releaseSaves(): void {
+    this.isHoldingSaves = false
+    this.heldSaves.forEach((release) => {
+      release()
+    })
+    this.heldSaves = []
+  }
+
+  readConfirmation(): string {
+    return this.confirmation
   }
 
   pushDisplay(display: ConnectionDisplay): void {
