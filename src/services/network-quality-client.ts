@@ -15,6 +15,8 @@ export interface NetworkQualityClient {
   quitApp(): Promise<void>
   /** Asks for the permission that reveals the Wi-Fi name, or opens the system settings. */
   revealNetworkName(): Promise<void>
+  /** Why the history is not what it was, if something happened to it at launch. */
+  readHistoryNotice(): Promise<string | null>
 }
 
 export const NETWORK_QUALITY_CLIENT_KEY: InjectionKey<NetworkQualityClient> = Symbol('NetworkQualityClient')

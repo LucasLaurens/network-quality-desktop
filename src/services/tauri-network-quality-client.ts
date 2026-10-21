@@ -40,4 +40,8 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
   revealNetworkName(): Promise<void> {
     return commands.revealNetworkName()
   }
+
+  readHistoryNotice(): Promise<string | null> {
+    return commands.readHistoryNotice()
+  }
 }

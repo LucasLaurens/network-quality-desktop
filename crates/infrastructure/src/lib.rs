@@ -2,6 +2,7 @@
 //! The only crate allowed to contain `unsafe` code, for native FFI.
 
 mod fallback_latency_probe;
+mod history;
 mod icmp_echo_sender;
 mod icmp_gateway_probe;
 mod interface_change_watcher;
@@ -13,6 +14,7 @@ mod tcp_connection_opener;
 mod wifi;
 
 pub use fallback_latency_probe::{ConnectionOpener, EchoResult, EchoSender, FallbackLatencyProbe};
+pub use history::{OpenedHistory, SqliteHistoryRecorder, SqliteMeasurementRepository};
 pub use icmp_echo_sender::IcmpEchoSender;
 pub use icmp_gateway_probe::IcmpGatewayProbe;
 pub use interface_change_watcher::InterfaceChangeWatcher;

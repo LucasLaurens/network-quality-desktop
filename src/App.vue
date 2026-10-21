@@ -10,6 +10,7 @@ const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
 
 const version = ref('…')
+const historyNotice = ref<string | null>(null)
 const windowMode = ref<WindowModeTexts | null>(null)
 const isTrayHintVisible = ref(false)
 
@@ -47,6 +48,14 @@ const loadWindowMode = async (): Promise<void> => {
   }
 }
 
+const loadHistoryNotice = async (): Promise<void> => {
+  try {
+    historyNotice.value = await client.readHistoryNotice()
+  } catch (error) {
+    console.error('Reading the history notice failed', error)
+  }
+}
+
 const loadVersion = async (): Promise<void> => {
   try {
     version.value = (await client.readAppInfo()).version
@@ -57,7 +66,7 @@ const loadVersion = async (): Promise<void> => {
 }
 
 onMounted(async () => {
-  await Promise.all([loadWindowMode(), loadVersion()])
+  await Promise.all([loadWindowMode(), loadHistoryNotice(), loadVersion()])
 })
 </script>
 
@@ -74,6 +83,7 @@ onMounted(async () => {
         </button>
       </div>
     </aside>
+    <p v-if="historyNotice" class="hint" data-history-notice>{{ historyNotice }}</p>
     <h1>Qualité de connexion</h1>
     <p class="empty">La mesure de la connexion arrive dans une prochaine version.</p>
     <footer class="foot">
