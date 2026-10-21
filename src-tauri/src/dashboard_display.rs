@@ -2,19 +2,21 @@
 
 use std::time::Duration;
 
-use application::{DayOverview, Evolution, NetworkSummary, OutageEnd, Period};
-use domain::{Aggregate, CountedState, LossRate, Metric, Thresholds};
+use application::{
+    DayOverview, Evolution, NetworkKey, NetworkStay, NetworkSummary, OutageEnd, Period,
+};
+use domain::{
+    Aggregate, CountedState, LossRate, Metric, SECONDS_PER_DAY, SECONDS_PER_HOUR,
+    SECONDS_PER_MINUTE, Thresholds,
+};
 use fluent_bundle::FluentArgs;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::display::{DisplayState, Displayable, to_name_key};
-use crate::network_display::select_kind_keys;
+use crate::display::{DisplayState, Displayable, to_lower_name_key};
+use crate::network_display::select_stored_network_keys;
 use crate::text_catalog::TextCatalog;
 
-const SECONDS_PER_MINUTE: i64 = 60;
-const SECONDS_PER_HOUR: i64 = 3600;
-const SECONDS_PER_DAY: i64 = 86_400;
 /// Days from 0000-03-01 to 1970-01-01, for the civil calendar below.
 const DAYS_TO_EPOCH: i64 = 719_468;
 const DAYS_PER_ERA: i64 = 146_097;
@@ -143,13 +145,12 @@ impl DashboardSummaryDisplay {
     pub fn compose(
         overview: &DayOverview,
         summaries: &[NetworkSummary],
-        has_network: bool,
         now: i64,
         offset: i64,
         catalog: &TextCatalog,
     ) -> Self {
         Self {
-            overview: OverviewDisplay::compose(overview, has_network, now, offset, catalog),
+            overview: OverviewDisplay::compose(overview, now, offset, catalog),
             networks: summaries
                 .iter()
                 .map(|summary| NetworkRowDisplay::compose(summary, catalog))
@@ -161,15 +162,9 @@ impl DashboardSummaryDisplay {
 impl OverviewDisplay {
     /// O(o) for o outages.
     #[must_use]
-    pub fn compose(
-        overview: &DayOverview,
-        has_network: bool,
-        now: i64,
-        offset: i64,
-        catalog: &TextCatalog,
-    ) -> Self {
+    pub fn compose(overview: &DayOverview, now: i64, offset: i64, catalog: &TextCatalog) -> Self {
         let seconds = overview.today.seconds;
-        let has_measures = seconds.count_total() > 0;
+        let has_measures = overview.today.count_measured_seconds() > 0;
         Self {
             today: if has_measures {
                 render_value(
@@ -186,10 +181,10 @@ impl OverviewDisplay {
             } else {
                 catalog.render("today-not-enough", None)
             },
-            on_network_since: match (has_network, overview.on_network_since) {
-                (false, _) => catalog.render("since-no-network", None),
-                (true, None) => catalog.render("since-beyond", None),
-                (true, Some(since)) => format_duration(now - since, catalog),
+            on_network_since: match overview.network_stay {
+                NetworkStay::NoNetwork => catalog.render("since-no-network", None),
+                NetworkStay::BeyondHistory => catalog.render("since-beyond", None),
+                NetworkStay::Since(since) => format_duration(now - since, catalog),
             },
         }
     }
@@ -199,7 +194,7 @@ impl NetworkRowDisplay {
     /// O(B), B = 24 histogram buckets.
     #[must_use]
     pub fn compose(summary: &NetworkSummary, catalog: &TextCatalog) -> Self {
-        let (name_key, connection_key) = select_kind_keys(summary.network.kind, false);
+        let (_, connection_key) = select_stored_network_keys(summary.network.kind);
         let seconds = summary.aggregate.seconds;
         let total = seconds.count_total();
         let share = |state: CountedState| {
@@ -217,11 +212,7 @@ impl NetworkRowDisplay {
         args.set("degraded", percent(CountedState::Degraded));
         args.set("offline", percent(CountedState::Offline));
         Self {
-            label: summary
-                .network
-                .name
-                .clone()
-                .unwrap_or_else(|| catalog.render(name_key, None)),
+            label: compose_network_name(&summary.network, catalog),
             connection: catalog.render(connection_key, None),
             shares: StateShares {
                 solid: share(CountedState::Solid),
@@ -259,7 +250,7 @@ impl EvolutionDisplay {
             i64::try_from(evolution.buckets.len()).unwrap_or(i64::MAX) * evolution.bucket_seconds;
         let states: Vec<Option<DisplayState>> = aggregates
             .iter()
-            .map(|aggregate| aggregate.seconds.find_dominant().map(DisplayState::from))
+            .map(|aggregate| aggregate.compute_dominant_state().map(DisplayState::from))
             .collect();
         Self {
             times: evolution
@@ -306,16 +297,8 @@ impl EvolutionDisplay {
                 .network_changes
                 .iter()
                 .map(|event| {
-                    let (name_key, _) = select_kind_keys(event.network.kind, false);
                     let mut args = FluentArgs::new();
-                    args.set(
-                        "network",
-                        event
-                            .network
-                            .name
-                            .clone()
-                            .unwrap_or_else(|| catalog.render(name_key, None)),
-                    );
+                    args.set("network", compose_network_name(&event.network, catalog));
                     NetworkChangeDisplay {
                         position: compute_fraction(event.utc - first, span),
                         label: catalog.render("chart-network-change", Some(&args)),
@@ -336,7 +319,8 @@ impl EvolutionDisplay {
             .collect(),
             coverage: render_value(
                 "chart-coverage",
-                format!("{:.0}", evolution.coverage * 100.0),
+                // Rounded down, as every share: 100 % only for a fully measured period.
+                format!("{:.0}", (evolution.coverage * 100.0).floor()),
                 catalog,
             ),
         }
@@ -448,8 +432,8 @@ fn describe_worst_minute(
     let mut args = FluentArgs::new();
     args.set("time", format_time_of_day(*start, offset, catalog));
     let metric = minute
-        .find_worst_metric(&Thresholds::for_video_calls())
-        .filter(|_| minute.seconds.find_dominant() != Some(CountedState::Offline));
+        .compute_worst_metric(&Thresholds::for_video_calls())
+        .filter(|_| minute.compute_dominant_state() != Some(CountedState::Offline));
     let value = match metric {
         Some(Metric::Latency) => minute
             .compute_latency_p90()
@@ -462,15 +446,21 @@ fn describe_worst_minute(
     };
     match metric.zip(value) {
         Some((metric, value)) => {
-            args.set(
-                "metric",
-                catalog.render(&format!("{}-lower", to_name_key(metric)), None),
-            );
+            args.set("metric", catalog.render(to_lower_name_key(metric), None));
             args.set("value", value);
             catalog.render("worst-moment", Some(&args))
         }
         None => catalog.render("worst-outage", Some(&args)),
     }
+}
+
+/// The Wi-Fi name kept in the history, a generic name otherwise. O(1).
+fn compose_network_name(network: &NetworkKey, catalog: &TextCatalog) -> String {
+    let (name_key, _) = select_stored_network_keys(network.kind);
+    network
+        .name
+        .clone()
+        .unwrap_or_else(|| catalog.render(name_key, None))
 }
 
 fn format_or_unknown<T: Displayable>(value: Option<T>, catalog: &TextCatalog) -> String {
@@ -517,8 +507,9 @@ fn format_date_hour(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
 const fn convert_days_to_month_day(days: i64) -> (i64, i64) {
     let shifted = days + DAYS_TO_EPOCH;
     let day_of_era = shifted.rem_euclid(DAYS_PER_ERA);
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year_of_era = (day_of_era - day_of_era / 1460 + day_of_era / 36_524
+        - day_of_era / (DAYS_PER_ERA - 1))
+        / 365;
     let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     // Months counted from March, so that February comes last.
     let month_from_march = (5 * day_of_year + 2) / 153;
@@ -597,7 +588,7 @@ mod tests {
             today,
             outages: Vec::new(),
             worst_minute: None,
-            on_network_since: None,
+            network_stay: NetworkStay::NoNetwork,
         }
     }
 
@@ -610,7 +601,7 @@ mod tests {
     }
 
     /// `~` marks a no-break space.
-    fn spaced(text: &str) -> String {
+    fn insert_no_break_spaces(text: &str) -> String {
         text.replace('~', &NBSP.to_string())
     }
 
@@ -638,8 +629,8 @@ mod tests {
         let leap_day = convert_days_to_month_day(19_782);
 
         // Assert
-        assert_eq!(time, spaced("14~h~05"));
-        assert_eq!(date, spaced("15/11, 0~h"));
+        assert_eq!(time, insert_no_break_spaces("14~h~05"));
+        assert_eq!(date, insert_no_break_spaces("15/11, 0~h"));
         assert_eq!(leap_day, (2, 29));
     }
 
@@ -663,7 +654,7 @@ mod tests {
         // Assert
         assert_eq!(
             durations,
-            ["42~s", "12~min", "3~h", "3~h 12~min", "2~j 5~h"].map(spaced)
+            ["42~s", "12~min", "3~h", "3~h 12~min", "2~j 5~h"].map(insert_no_break_spaces)
         );
     }
 
@@ -676,21 +667,19 @@ mod tests {
         today.merge(&worst);
         let overview = DayOverview {
             worst_minute: Some((MIDNIGHT + 11 * 3600 + 20 * 60, worst)),
-            on_network_since: Some(MIDNIGHT),
+            network_stay: NetworkStay::Since(MIDNIGHT),
             ..create_overview(today)
         };
 
         // Act
-        let display = OverviewDisplay::compose(
-            &overview,
-            true,
-            MIDNIGHT + 3 * 3600 + 12 * 60,
-            PARIS,
-            &catalog,
-        );
+        let display =
+            OverviewDisplay::compose(&overview, MIDNIGHT + 3 * 3600 + 12 * 60, PARIS, &catalog);
 
         // Assert
-        assert_eq!(display.today, spaced("Solide 90~% du temps"));
+        assert_eq!(
+            display.today,
+            insert_no_break_spaces("Solide 90~% du temps")
+        );
         // The histogram keeps the upper edge of the bucket holding the p90.
         let p90 = worst
             .compute_latency_p90()
@@ -698,9 +687,12 @@ mod tests {
             .format(&catalog);
         assert_eq!(
             display.worst_moment,
-            spaced(&format!("12~h~20, latence {p90}"))
+            insert_no_break_spaces(&format!("12~h~20, latence {p90}"))
         );
-        assert_eq!(display.on_network_since, spaced("3~h 12~min"));
+        assert_eq!(
+            display.on_network_since,
+            insert_no_break_spaces("3~h 12~min")
+        );
         assert_eq!(display.outages, "Aucune");
     }
 
@@ -712,7 +704,6 @@ mod tests {
         // Act
         let display = OverviewDisplay::compose(
             &create_overview(Aggregate::default()),
-            false,
             MIDNIGHT,
             PARIS,
             &catalog,
@@ -771,7 +762,7 @@ mod tests {
                 "2, la plus longue 40~s",
                 "En cours depuis 1~min"
             ]
-            .map(spaced)
+            .map(insert_no_break_spaces)
         );
     }
 
@@ -792,7 +783,7 @@ mod tests {
         let described = describe_worst_minute(Some(&(MIDNIGHT, offline)), PARIS, &catalog);
 
         // Assert
-        assert_eq!(described, spaced("1~h~00, coupure"));
+        assert_eq!(described, insert_no_break_spaces("1~h~00, coupure"));
     }
 
     #[test]
@@ -815,12 +806,12 @@ mod tests {
         assert_eq!(row.label, "Réseau Ethernet");
         assert_eq!(row.connection, "Ethernet");
         assert!((row.shares.solid - 75.0).abs() < 1e-9);
-        assert_eq!(row.solid_label, spaced("75~% Solide"));
+        assert_eq!(row.solid_label, insert_no_break_spaces("75~% Solide"));
         assert_eq!(
             row.shares_label,
-            spaced("75~% Solide, 25~% Instable, 0~% Dégradée, 0~% Hors ligne")
+            insert_no_break_spaces("75~% Solide, 25~% Instable, 0~% Dégradée, 0~% Hors ligne")
         );
-        assert_eq!(row.loss, spaced("0~%"));
+        assert_eq!(row.loss, insert_no_break_spaces("0~%"));
     }
 
     #[test]
@@ -854,15 +845,21 @@ mod tests {
         assert_eq!(display.latency.values[1], None);
         assert!(display.latency.values[2].is_some_and(|value| value >= 150.0));
         assert_eq!(display.states[2], Some(DisplayState::Unstable));
-        assert_eq!(display.latency.unstable_label, spaced("Instable 100~ms"));
+        assert_eq!(
+            display.latency.unstable_label,
+            insert_no_break_spaces("Instable 100~ms")
+        );
         assert!((display.loss.degraded_above - 5.0).abs() < 1e-9);
         assert!((display.network_changes[0].position - 0.5).abs() < 1e-9);
         assert_eq!(
             display.network_changes[0].label,
-            spaced("Changement de réseau~: Box")
+            insert_no_break_spaces("Changement de réseau~: Box")
         );
-        assert_eq!(display.coverage, spaced("Mesuré 50~% de la période"));
-        assert_eq!(display.times[0], spaced("1~h~00"));
+        assert_eq!(
+            display.coverage,
+            insert_no_break_spaces("Mesuré 50~% de la période")
+        );
+        assert_eq!(display.times[0], insert_no_break_spaces("1~h~00"));
         assert!(!display.is_empty);
         assert_eq!(display.state_labels[3].label, "Hors ligne");
     }

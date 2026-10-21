@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use application::test_support::InMemoryMeasurementRepository;
 use application::{
-    EventKind, HistoryEvent, LiveHistory, MeasurementRepository, NetworkKey, OutageEnd, Period,
-    list_network_summaries, read_day_overview, read_evolution,
+    EventKind, HistoryEvent, LiveHistory, MeasurementRepository, NetworkKey, NetworkStay,
+    OutageEnd, Period, list_network_summaries, read_day_overview, read_evolution,
 };
 use domain::{Aggregate, ConnectionKind, CountedState, MacAddress, SecondPoint, SecondSample};
 
@@ -94,7 +94,7 @@ fn charts_a_day_from_minutes_and_leaves_the_unmeasured_buckets_empty() {
     let measured: Vec<i64> = evolution
         .buckets
         .iter()
-        .filter(|(_, aggregate)| aggregate.seconds.count_total() > 0)
+        .filter(|(_, aggregate)| aggregate.count_measured_seconds() > 0)
         .map(|(start, _)| *start)
         .collect();
     assert_eq!(measured, vec![minute]);
@@ -260,6 +260,79 @@ fn marks_a_change_of_network_but_not_a_restart_on_the_same_one() {
 }
 
 #[test]
+fn marks_a_move_between_two_named_networks_even_before_the_gateway_is_read() {
+    // Arrange
+    let mut repository = InMemoryMeasurementRepository::default();
+    let home = create_network(16, "Box");
+    let office_unresolved = NetworkKey {
+        gateway: None,
+        ..create_network(17, "Bureau")
+    };
+    let now = MIDNIGHT + 12 * HOUR;
+    for event in [
+        create_event(now - 3 * HOUR, &home, EventKind::NetworkChanged),
+        create_event(now - HOUR, &office_unresolved, EventKind::NetworkChanged),
+    ] {
+        record_event(&mut repository, &event);
+    }
+
+    // Act
+    let evolution = read_evolution(
+        &repository,
+        &create_live(Some(office_unresolved)),
+        Period::Day,
+        now,
+    )
+    .expect("an evolution");
+
+    // Assert
+    assert_eq!(evolution.network_changes.len(), 1);
+}
+
+#[test]
+fn counts_an_outage_that_began_before_midnight_and_ended_after() {
+    // Arrange
+    let mut repository = InMemoryMeasurementRepository::default();
+    let home = create_network(18, "Box");
+    for (utc, kind) in [
+        (MIDNIGHT - 30, EventKind::OfflineStarted),
+        (MIDNIGHT + 90, EventKind::OfflineEnded),
+    ] {
+        record_event(&mut repository, &create_event(utc, &home, kind));
+    }
+
+    // Act
+    let overview = read_day_overview(
+        &repository,
+        &create_live(Some(home)),
+        MIDNIGHT,
+        MIDNIGHT + HOUR,
+    )
+    .expect("an overview");
+
+    // Assert
+    let outages: Vec<(i64, OutageEnd)> = overview
+        .outages
+        .iter()
+        .map(|outage| (outage.start, outage.end))
+        .collect();
+    assert_eq!(outages, vec![(MIDNIGHT - 30, OutageEnd::At(MIDNIGHT + 90))]);
+}
+
+#[test]
+fn says_when_no_network_is_in_use() {
+    // Arrange
+    let repository = InMemoryMeasurementRepository::default();
+
+    // Act
+    let overview = read_day_overview(&repository, &create_live(None), MIDNIGHT, MIDNIGHT + HOUR)
+        .expect("an overview");
+
+    // Assert
+    assert_eq!(overview.network_stay, NetworkStay::NoNetwork);
+}
+
+#[test]
 fn sums_the_day_since_local_midnight_only() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
@@ -420,7 +493,7 @@ fn says_since_when_the_computer_is_on_the_current_network() {
         .expect("an overview");
 
     // Assert
-    assert_eq!(overview.on_network_since, Some(now - 5 * HOUR));
+    assert_eq!(overview.network_stay, NetworkStay::Since(now - 5 * HOUR));
 }
 
 #[test]
@@ -462,7 +535,7 @@ fn sums_each_network_over_30_days_and_names_the_most_reliable() {
         .map(|summary| {
             (
                 summary.network.name.as_deref(),
-                summary.aggregate.seconds.count_total(),
+                summary.aggregate.count_measured_seconds(),
                 summary.is_current,
                 summary.is_most_reliable,
             )

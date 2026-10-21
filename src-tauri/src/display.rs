@@ -220,11 +220,19 @@ impl Displayable for LossRate {
     }
 }
 
-pub const fn to_name_key(metric: Metric) -> &'static str {
+const fn to_name_key(metric: Metric) -> &'static str {
     match metric {
         Metric::Latency => "metric-latency",
         Metric::Jitter => "metric-jitter",
         Metric::Loss => "metric-loss",
+    }
+}
+
+pub const fn to_lower_name_key(metric: Metric) -> &'static str {
+    match metric {
+        Metric::Latency => "metric-latency-lower",
+        Metric::Jitter => "metric-jitter-lower",
+        Metric::Loss => "metric-loss-lower",
     }
 }
 

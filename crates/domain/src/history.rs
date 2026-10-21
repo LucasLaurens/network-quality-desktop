@@ -12,8 +12,9 @@ const FIRST_EDGE: Duration = Duration::from_millis(1);
 const LAST_EDGE: Duration = Duration::from_secs(2);
 /// Log-spaced buckets between the first and the last edge.
 const INNER_BUCKETS: f64 = 22.0;
-const SECONDS_PER_MINUTE: i64 = 60;
-const SECONDS_PER_HOUR: i64 = 3600;
+pub const SECONDS_PER_MINUTE: i64 = 60;
+pub const SECONDS_PER_HOUR: i64 = 3600;
+pub const SECONDS_PER_DAY: i64 = 86_400;
 /// The ring keeps one point per second for the last hour.
 pub const RING_SECONDS: usize = 3600;
 
@@ -158,7 +159,7 @@ impl StateSeconds {
     /// The state that lasted longest, the worse one on a tie; `None` without counted seconds.
     /// O(1).
     #[must_use]
-    pub fn find_dominant(&self) -> Option<CountedState> {
+    pub fn compute_dominant(&self) -> Option<CountedState> {
         [
             CountedState::Solid,
             CountedState::Unstable,
@@ -206,6 +207,18 @@ impl Aggregate {
         *counter = counter.saturating_add(1);
     }
 
+    /// The seconds counted in a state; measuring seconds are not. O(1).
+    #[must_use]
+    pub const fn count_measured_seconds(&self) -> u32 {
+        self.seconds.count_total()
+    }
+
+    /// The state that lasted longest, the worse one on a tie. O(1).
+    #[must_use]
+    pub fn compute_dominant_state(&self) -> Option<CountedState> {
+        self.seconds.compute_dominant()
+    }
+
     /// The 90th percentile of latency, as the live gauge. O(B).
     #[must_use]
     pub fn compute_latency_p90(&self) -> Option<Duration> {
@@ -232,7 +245,7 @@ impl Aggregate {
     /// The metric furthest beyond its Instable threshold, relative to it; `None` without any
     /// measure. O(B).
     #[must_use]
-    pub fn find_worst_metric(&self, thresholds: &Thresholds) -> Option<Metric> {
+    pub fn compute_worst_metric(&self, thresholds: &Thresholds) -> Option<Metric> {
         let ratios = [
             (
                 Metric::Latency,
@@ -500,9 +513,9 @@ mod tests {
         };
 
         // Act & Assert
-        assert_eq!(mostly_solid.find_dominant(), Some(CountedState::Solid));
-        assert_eq!(tie.find_dominant(), Some(CountedState::Degraded));
-        assert_eq!(StateSeconds::default().find_dominant(), None);
+        assert_eq!(mostly_solid.compute_dominant(), Some(CountedState::Solid));
+        assert_eq!(tie.compute_dominant(), Some(CountedState::Degraded));
+        assert_eq!(StateSeconds::default().compute_dominant(), None);
         assert_eq!(tie.count_total(), 60);
     }
 
@@ -544,12 +557,12 @@ mod tests {
         });
 
         // Act
-        let worst = aggregate.find_worst_metric(&Thresholds::for_video_calls());
+        let worst = aggregate.compute_worst_metric(&Thresholds::for_video_calls());
 
         // Assert
         assert_eq!(worst, Some(Metric::Loss));
         assert_eq!(
-            Aggregate::default().find_worst_metric(&Thresholds::for_video_calls()),
+            Aggregate::default().compute_worst_metric(&Thresholds::for_video_calls()),
             None
         );
     }

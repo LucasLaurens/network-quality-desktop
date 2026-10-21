@@ -4,16 +4,22 @@
 use std::cmp::Reverse;
 use std::collections::HashMap;
 
-use domain::{Aggregate, ConnectionKind, CountedState, Granularity, MacAddress};
+use domain::{
+    Aggregate, ConnectionKind, CountedState, Granularity, MacAddress, SECONDS_PER_DAY,
+    SECONDS_PER_HOUR, SECONDS_PER_MINUTE,
+};
 
 use crate::{EventKind, HistoryEvent, HistoryReader, LiveHistory, NetworkKey, RepositoryError};
 
-const SECONDS_PER_DAY: i64 = 86_400;
 /// How far back the network table and the events go.
 pub const SUMMARY_DAYS: i64 = 30;
 const SUMMARY_SECONDS: i64 = SUMMARY_DAYS * SECONDS_PER_DAY;
 /// A network measured for less than an hour is listed, but never compared with the others.
-const COMPARABLE_SECONDS: u32 = 3600;
+const COMPARABLE_SECONDS: i64 = SECONDS_PER_HOUR;
+/// How hard a second is on a call, by state: a cut is worse than a degraded line.
+const UNSTABLE_WEIGHT: u64 = 1;
+const DEGRADED_WEIGHT: u64 = 2;
+const OFFLINE_WEIGHT: u64 = 3;
 
 /// The periods the evolution chart offers, each ending now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,7 +34,7 @@ impl Period {
     #[must_use]
     pub const fn to_seconds(self) -> i64 {
         match self {
-            Self::Hour => 3600,
+            Self::Hour => SECONDS_PER_HOUR,
             Self::Day => SECONDS_PER_DAY,
             Self::Week => 7 * SECONDS_PER_DAY,
             Self::Month => SUMMARY_SECONDS,
@@ -40,10 +46,10 @@ impl Period {
     #[must_use]
     pub const fn to_bucket_seconds(self) -> i64 {
         match self {
-            Self::Hour => 60,
-            Self::Day => 600,
-            Self::Week => 3600,
-            Self::Month => 3 * 3600,
+            Self::Hour => SECONDS_PER_MINUTE,
+            Self::Day => 10 * SECONDS_PER_MINUTE,
+            Self::Week => SECONDS_PER_HOUR,
+            Self::Month => 3 * SECONDS_PER_HOUR,
         }
     }
 }
@@ -74,6 +80,15 @@ pub struct Outage {
     pub end: OutageEnd,
 }
 
+/// How long the computer has been on the current network, as far as 30 days of history tell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetworkStay {
+    NoNetwork,
+    /// Joined before the oldest event kept.
+    BeyondHistory,
+    Since(i64),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DayOverview {
     /// Every network's minutes since local midnight, added up.
@@ -82,8 +97,7 @@ pub struct DayOverview {
     pub outages: Vec<Outage>,
     /// The minute of the day hardest on calls; `None` when every minute was solid.
     pub worst_minute: Option<(i64, Aggregate)>,
-    /// When the computer joined the current network, as far as 30 days of history tell.
-    pub on_network_since: Option<i64>,
+    pub network_stay: NetworkStay,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -122,11 +136,11 @@ pub fn read_evolution(
                     minute + Granularity::Minute.to_seconds()
                 }
             });
-            for (_, start, aggregate) in
-                reader.list_all_aggregates(Granularity::Minute, from, memory_start)?
-            {
-                buckets.merge(start, &aggregate);
-            }
+            buckets.merge_all(reader.list_all_aggregates(
+                Granularity::Minute,
+                from,
+                memory_start,
+            )?);
             for point in live
                 .last_hour
                 .iter()
@@ -138,23 +152,15 @@ pub fn read_evolution(
             }
         }
         Period::Day => {
-            for (_, start, aggregate) in
-                reader.list_all_aggregates(Granularity::Minute, from, now)?
-            {
-                buckets.merge(start, &aggregate);
-            }
+            buckets.merge_all(reader.list_all_aggregates(Granularity::Minute, from, now)?);
         }
-        Period::Week | Period::Month => {
-            for (_, start, aggregate) in list_rows_until_now(reader, from, now)? {
-                buckets.merge(start, &aggregate);
-            }
-        }
+        Period::Week | Period::Month => buckets.merge_all(list_rows_until_now(reader, from, now)?),
     }
     let events = reader.list_events(now - SUMMARY_SECONDS, now)?;
     let measured: u32 = buckets
         .aggregates
         .iter()
-        .map(|aggregate| aggregate.seconds.count_total())
+        .map(Aggregate::count_measured_seconds)
         .sum();
     #[expect(
         clippy::cast_precision_loss,
@@ -164,7 +170,7 @@ pub fn read_evolution(
     Ok(Evolution {
         buckets: buckets.into_list(),
         bucket_seconds: width,
-        network_changes: find_network_changes(&events, from),
+        network_changes: select_network_changes(&events, from),
         coverage,
     })
 }
@@ -208,10 +214,13 @@ pub fn read_day_overview(
             })
             .collect(),
         worst_minute,
-        on_network_since: live
+        network_stay: live
             .network
             .as_ref()
-            .and_then(|network| find_network_start(&events, network)),
+            .map_or(NetworkStay::NoNetwork, |network| {
+                compute_network_start(&events, network)
+                    .map_or(NetworkStay::BeyondHistory, NetworkStay::Since)
+            }),
     })
 }
 
@@ -245,8 +254,8 @@ pub fn list_network_summaries(
             });
         summaries[index].aggregate.merge(&aggregate);
     }
-    summaries.retain(|summary| summary.aggregate.seconds.count_total() > 0);
-    summaries.sort_by_key(|summary| Reverse(summary.aggregate.seconds.count_total()));
+    summaries.retain(|summary| summary.aggregate.count_measured_seconds() > 0);
+    summaries.sort_by_key(|summary| Reverse(summary.aggregate.count_measured_seconds()));
     mark_most_reliable(&mut summaries);
     Ok(summaries)
 }
@@ -264,7 +273,7 @@ fn list_rows_until_now(
 }
 
 /// O(e).
-fn find_network_changes(events: &[HistoryEvent], from: i64) -> Vec<HistoryEvent> {
+fn select_network_changes(events: &[HistoryEvent], from: i64) -> Vec<HistoryEvent> {
     let mut previous: Option<&NetworkKey> = None;
     let mut changes = Vec::new();
     for event in events
@@ -320,7 +329,7 @@ fn list_outages(events: &[HistoryEvent], is_offline: bool) -> Vec<Outage> {
 }
 
 /// The earliest of the latest run of arrivals on `network`. O(e).
-fn find_network_start(events: &[HistoryEvent], network: &NetworkKey) -> Option<i64> {
+fn compute_network_start(events: &[HistoryEvent], network: &NetworkKey) -> Option<i64> {
     let mut since = None;
     for event in events
         .iter()
@@ -338,14 +347,18 @@ fn find_network_start(events: &[HistoryEvent], network: &NetworkKey) -> Option<i
 /// Seconds weighted by how hard they are on a call. O(1).
 fn compute_hardship(aggregate: &Aggregate) -> u64 {
     let seconds = aggregate.seconds;
-    u64::from(seconds.unstable) + 2 * u64::from(seconds.degraded) + 3 * u64::from(seconds.offline)
+    UNSTABLE_WEIGHT * u64::from(seconds.unstable)
+        + DEGRADED_WEIGHT * u64::from(seconds.degraded)
+        + OFFLINE_WEIGHT * u64::from(seconds.offline)
 }
 
 /// The highest share of solid seconds, compared without floats; the more measured wins a tie.
 /// O(k).
 fn mark_most_reliable(summaries: &mut [NetworkSummary]) {
     let comparable: Vec<usize> = (0..summaries.len())
-        .filter(|index| summaries[*index].aggregate.seconds.count_total() >= COMPARABLE_SECONDS)
+        .filter(|index| {
+            i64::from(summaries[*index].aggregate.count_measured_seconds()) >= COMPARABLE_SECONDS
+        })
         .collect();
     if comparable.len() < 2 {
         return;
@@ -391,9 +404,12 @@ impl Buckets {
         self.aggregates.get_mut(index)
     }
 
-    fn merge(&mut self, start: i64, aggregate: &Aggregate) {
-        if let Some(bucket) = self.find_mut(start) {
-            bucket.merge(aggregate);
+    /// Rows outside the buckets are left out. O(r).
+    fn merge_all(&mut self, rows: Vec<(NetworkKey, i64, Aggregate)>) {
+        for (_, start, aggregate) in rows {
+            if let Some(bucket) = self.find_mut(start) {
+                bucket.merge(&aggregate);
+            }
         }
     }
 

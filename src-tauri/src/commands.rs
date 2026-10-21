@@ -167,12 +167,7 @@ pub async fn read_dashboard_summary(
             let overview = read_day_overview(reader, &live, compute_day_start(now, offset), now)?;
             let summaries = list_network_summaries(reader, &live, now)?;
             Ok(DashboardSummaryDisplay::compose(
-                &overview,
-                &summaries,
-                live.network.is_some(),
-                now,
-                offset,
-                &catalog,
+                &overview, &summaries, now, offset, &catalog,
             ))
         })
         .map_err(|error: application::RepositoryError| error.0)

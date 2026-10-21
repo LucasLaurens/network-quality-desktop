@@ -30,12 +30,16 @@ impl NetworkKey {
         self.gateway == other.gateway && self.kind == other.kind
     }
 
-    /// Same kind, and no gateway that tells them apart: a MAC read late is not a new network.
-    /// O(1).
+    /// Same kind, and neither a gateway nor a name that tells them apart: a MAC read late is not
+    /// a new network, two Wi-Fi names are. O(length of the names).
     #[must_use]
     pub fn is_likely_same(&self, other: &Self) -> bool {
+        let agree = |first: Option<&str>, second: Option<&str>| {
+            first.is_none() || second.is_none() || first == second
+        };
         self.kind == other.kind
             && (self.gateway == other.gateway || self.gateway.is_none() || other.gateway.is_none())
+            && agree(self.name.as_deref(), other.name.as_deref())
     }
 }
 

@@ -11,7 +11,7 @@ import SegmentedControl from './SegmentedControl.vue'
 
 type ChartMetric = 'latency' | 'jitter' | 'loss'
 
-/** The shortest chart bucket: refreshing faster would redraw the same points. */
+/** Half the shortest chart point (one minute): a finished minute shows within 30 s. */
 const REFRESH_EVERY_MS = 30_000
 
 const METRICS = [

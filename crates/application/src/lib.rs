@@ -12,7 +12,7 @@ mod targets;
 pub mod test_support;
 
 pub use dashboard::{
-    DayOverview, Evolution, NetworkSummary, Outage, OutageEnd, Period, SUMMARY_DAYS,
+    DayOverview, Evolution, NetworkStay, NetworkSummary, Outage, OutageEnd, Period, SUMMARY_DAYS,
     list_network_summaries, read_day_overview, read_evolution,
 };
 pub use engine::{

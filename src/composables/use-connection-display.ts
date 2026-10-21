@@ -5,7 +5,8 @@ import type { NetworkQualityClient } from '../services/network-quality-client'
 /** The latest display, kept current for as long as the component is mounted. */
 export function useConnectionDisplay(client: NetworkQualityClient): Ref<ConnectionDisplay | null> {
   const display = ref<ConnectionDisplay | null>(null)
-  let stopListening: (() => void) | null = null
+  // Nothing to stop until the subscription is made.
+  let stopListening = (): void => undefined
   let unmounted = false
 
   onMounted(async () => {
@@ -25,7 +26,7 @@ export function useConnectionDisplay(client: NetworkQualityClient): Ref<Connecti
 
   onUnmounted(() => {
     unmounted = true
-    stopListening?.()
+    stopListening()
   })
 
   return display

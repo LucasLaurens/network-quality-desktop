@@ -77,6 +77,11 @@ pub const fn select_kind_keys(kind: ConnectionKind, is_vpn: bool) -> (&'static s
     }
 }
 
+/// The keys for a network read from the history, which keeps no VPN flag. O(1).
+pub const fn select_stored_network_keys(kind: ConnectionKind) -> (&'static str, &'static str) {
+    select_kind_keys(kind, false)
+}
+
 /// `None` when the system gave none of the three values. O(1).
 fn describe_wifi(link: &WifiLink, catalog: &TextCatalog) -> Option<String> {
     let render = |key: &str, value: String| {

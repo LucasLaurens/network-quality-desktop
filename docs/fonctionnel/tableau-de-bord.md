@@ -32,9 +32,9 @@ Une courbe par mesure (latence p90, gigue moyenne, perte) sur 1 h, 24 h, 7 j ou 
 
 - Les seuils Instable et Dégradée sont tracés et nommés à gauche de la courbe.
 - Là où rien n'a été mesuré (app fermée, veille), la courbe s'interrompt : aucun trait ne relie les deux bords du trou.
-- Un changement de réseau est marqué d'un trait vertical avec le nom du nouveau réseau. Un redémarrage sur le même réseau n'en est pas un.
+- Un changement de réseau est marqué d'un trait vertical avec le nom du nouveau réseau. Un redémarrage sur le même réseau n'en est pas un ; deux Wi-Fi de noms différents restent deux réseaux, même avant que l'adresse de la box soit lue.
 - La bande sous la courbe montre l'état qui a duré le plus longtemps dans chaque point (le pire en cas d'égalité) ; gris clair quand rien n'a été mesuré.
-- Sous la bande, la part de la période réellement mesurée (« Mesuré 62 % de la période »).
+- Sous la bande, la part de la période réellement mesurée, arrondie vers le bas (« Mesuré 62 % de la période »).
 - Survoler la courbe, ou la parcourir au clavier (flèches gauche et droite), affiche l'heure, la valeur et l'état du point. « Voir les valeurs » ouvre le tableau des points mesurés.
 - Changer de mesure ne relit pas l'historique ; changer de période, si. Le tout se rafraîchit toutes les 30 secondes.
 
