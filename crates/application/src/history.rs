@@ -48,6 +48,8 @@ pub enum EventKind {
     NetworkChanged,
     OfflineStarted,
     OfflineEnded,
+    Sleep,
+    Wake,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,15 +216,12 @@ impl HistoryTracker {
         let state = to_counted_state(second.verdict);
         let is_offline = state == Some(CountedState::Offline);
         if is_offline != self.was_offline {
-            recorder.record(HistoryCommand::RecordEvent(HistoryEvent {
-                utc: second.utc,
-                network: self.network.clone(),
-                kind: if is_offline {
-                    EventKind::OfflineStarted
-                } else {
-                    EventKind::OfflineEnded
-                },
-            }));
+            let kind = if is_offline {
+                EventKind::OfflineStarted
+            } else {
+                EventKind::OfflineEnded
+            };
+            self.record_event(second.utc, kind, recorder);
             self.was_offline = is_offline;
         }
         let sample = SecondSample {
@@ -255,6 +254,36 @@ impl HistoryTracker {
     pub fn flush(&mut self, answer: SyncSender<()>, recorder: &impl HistoryRecorder) {
         self.save_current_minute(recorder);
         recorder.record(HistoryCommand::Flush(answer));
+    }
+
+    /// Closes an outage in progress (nothing is measured while asleep), notes the sleep, then
+    /// writes the minute in progress and answers `answer`. O(1).
+    pub fn record_sleep(
+        &mut self,
+        utc: i64,
+        answer: SyncSender<()>,
+        recorder: &impl HistoryRecorder,
+    ) {
+        if self.was_offline {
+            self.record_event(utc, EventKind::OfflineEnded, recorder);
+            self.was_offline = false;
+        }
+        self.record_event(utc, EventKind::Sleep, recorder);
+        self.flush(answer, recorder);
+    }
+
+    /// No jitter is measured across the sleep. O(1).
+    pub fn record_wake(&mut self, utc: i64, recorder: &impl HistoryRecorder) {
+        self.previous = None;
+        self.record_event(utc, EventKind::Wake, recorder);
+    }
+
+    fn record_event(&self, utc: i64, kind: EventKind, recorder: &impl HistoryRecorder) {
+        recorder.record(HistoryCommand::RecordEvent(HistoryEvent {
+            utc,
+            network: self.network.clone(),
+            kind,
+        }));
     }
 
     /// The last hour, second by second, oldest first. O(n) for n ≤ 3 600.

@@ -20,6 +20,7 @@ tokio.workspace = true
 unic-langid.workspace = true
 tauri-plugin-opener.workspace = true
 tauri-plugin-positioner.workspace = true
+tauri-plugin-single-instance.workspace = true
 tauri-specta.workspace = true
 
 [dev-dependencies]

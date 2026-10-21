@@ -35,6 +35,19 @@ pub trait NetworkChangeWatcher {
     fn watch(self, on_change: impl FnMut() + Send + 'static);
 }
 
+/// What the system says about sleep.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PowerEvent {
+    WillSleep,
+    DidWake,
+}
+
+/// Reports sleep and wake for the life of the app. The system may sleep as soon as the call for
+/// `WillSleep` returns: `on_event` returns once the event is handled, within the system's delay.
+pub trait PowerEventSource {
+    fn watch(self, on_event: impl Fn(PowerEvent) + Send + Sync + 'static);
+}
+
 /// Monotonic time source, replaced by a manual clock in tests.
 pub trait Clock {
     fn read_now(&self) -> Timestamp;

@@ -423,6 +423,8 @@ const fn to_event_text(kind: EventKind) -> &'static str {
         EventKind::NetworkChanged => "network_changed",
         EventKind::OfflineStarted => "offline_started",
         EventKind::OfflineEnded => "offline_ended",
+        EventKind::Sleep => "sleep",
+        EventKind::Wake => "wake",
     }
 }
 
@@ -430,6 +432,8 @@ fn from_event_text(text: &str) -> EventKind {
     match text {
         "offline_started" => EventKind::OfflineStarted,
         "offline_ended" => EventKind::OfflineEnded,
+        "sleep" => EventKind::Sleep,
+        "wake" => EventKind::Wake,
         _ => EventKind::NetworkChanged,
     }
 }

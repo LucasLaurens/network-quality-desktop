@@ -1,6 +1,6 @@
 # Plateformes
 
-Adaptateurs par système, permissions et barre système. La veille et le réveil s'y ajouteront avec leur ticket.
+Adaptateurs par système, permissions, barre système, veille et tâche de fond.
 
 ## Windows : manifeste de l'application
 
@@ -33,6 +33,29 @@ La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le gr
 - Demande de permission : commande `reveal_network_name`, exécutée sur le fil principal (CoreLocation répond par la boucle principale). macOS montre sa demande tant qu'elle n'a pas reçu de réponse, puis l'app ouvre les réglages de localisation ; Windows ouvre directement `ms-settings:privacy-location`.
 - `make dev` : le binaire tourne hors d'un `.app`, sans `Info.plist` ; sous macOS, le nom suit l'autorisation de localisation du terminal qui a lancé l'app (non vérifié). Les valeurs radio restent lisibles. L'autorisation de l'app elle-même se vérifie sur l'app empaquetée (`make build`).
 
+## Veille et réveil
+
+Port `PowerEventSource` (`crates/infrastructure/src/power/`). Chaque adaptateur écoute sur son propre fil ou sa propre file, ne fait que transmettre l'avis, et attend la réponse du moteur (`EngineInbox::relay_power_event`, 1,5 s au plus) avant de laisser la veille se faire. L'event loop Tauri n'est jamais touchée.
+
+| Système | Avis                                                                                                                   | Délai avant la veille                                      |
+| ------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| macOS   | IOKit `IORegisterForSystemPower` (`objc2-io-kit`) sur une file dispatch dédiée ; `IOAllowPowerChange` après l'écriture | jusqu'à 30 s ; la veille d'inactivité n'est jamais refusée |
+| Windows | `PowerRegisterSuspendResumeNotification` en mode callback, sans fenêtre ; réveil par `PBT_APMRESUMEAUTOMATIC` seul     | environ 2 s, sans prolongation possible                    |
+| Linux   | signal logind `PrepareForSleep` (crate `dbus`, bus système) avec un verrou `delay`, repris après chaque réveil         | 5 s par défaut (`InhibitDelayMaxUSec`)                     |
+
+Points laissés ouverts par la recherche (#19), tranchés :
+
+- **`objc2-io-kit`** (0.3.2) couvre `IORegisterForSystemPower`, `IOAllowPowerChange` et `IONotificationPortSetDispatchQueue` (features `libc`, `dispatch2`, `pwr_mgt`) : une file dispatch remplace le fil à run loop prévu, sans FFI maison.
+- **Windows** : la fonction est dans la crate `windows` 0.62.2 sous les features `Win32_System_Power` et `Win32_UI_WindowsAndMessaging`. Comportement en **Modern Standby** : non vérifiable sans machine qui le gère ; le filet du trou de mesure couvre un avis absent ou tardif (matrice de tests manuels).
+- **Linux** : ni `zbus` ni `logind-zbus`. La crate `dbus`, déjà utilisée pour la barre système, NetworkManager et le Wi-Fi, suffit ; `zbus` n'arrive que par `tauri-plugin-single-instance`. Sans logind (pas de systemd, conteneur), l'adaptateur le note dans le journal et le filet prend le relais.
+- **Filet** : plus de 10 s d'heure murale entre deux ticks, ou pendant les sondes d'un tick, valent un réveil (voir [Mesure](mesure.md#moteur)). Il couvre aussi l'hibernation et une coupure de courant.
+
+## Tâche de fond et App Nap
+
+- macOS : `keep_measuring_in_background` déclare au lancement une activité `NSActivityUserInitiatedAllowingIdleSystemSleep` (`NSProcessInfo`), pour toute la vie de l'app : App Nap ne peut plus espacer les ticks quand aucune fenêtre n'est visible, et le Mac peut toujours se mettre en veille quand il est inactif.
+- Mesure, binaire de développement lancé depuis un terminal, sans fenêtre visible, 6 à 7 min : 60 ticks par minute avec ou sans l'activité, environ 11 à 12 s de CPU pour 400 s (build debug). Hors LaunchServices, App Nap ne s'est pas déclenché : la comparaison ne vaut que pour l'app empaquetée lancée par le Finder, à mesurer à la main (bundle release, `open -g`, ticks par minute lus dans l'historique).
+- Windows et Linux n'ont pas d'équivalent à App Nap pour une app de bureau.
+
 ## Icône de barre système
 
 - L'icône est dessinée en Rust (`src-tauri/src/tray_icon.rs`), une forme par état (cinq, Hors ligne compris), avec les couleurs claires des tokens. Elle a été vérifiée lisible sur barre claire et sombre ; le gris de Hors ligne y est plus discret ; elle n'est pas redessinée quand le thème change.
@@ -40,6 +63,8 @@ La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le gr
 - Le popover est ancré à l'icône par le plugin positioner : centré sous l'icône sous macOS, au-dessus sous Windows (barre des tâches en bas). Sous Linux, Tauri ne transmet pas le clic sur l'icône : il n'y a pas de popover (`HAS_POPOVER`), le menu s'ouvre à tout clic.
 - Fermer le tableau de bord ne quitte jamais l'app (`ShellMode::choose_close_action`) : il est masqué en mode barre système, réduit en mode fenêtre. On quitte par le menu, ou en mode fenêtre par le bouton « Quitter » du tableau de bord (commande `quit_app`).
 - Sous macOS, l'app n'a pas d'icône dans le Dock (politique d'activation `Accessory`) : c'est une app de barre des menus, le tableau de bord s'ouvre depuis la pastille.
+- Sous macOS, le menu d'application de Tauri par défaut est remplacé (`src-tauri/src/app_menu.rs`) : Édition et Fenêtre seulement, pour garder ⌘C, ⌘V, ⌘W et ⌘M dans le tableau de bord, sans « Quitter » ni ⌘Q.
+- Une seule instance (`tauri-plugin-single-instance`, enregistré en premier) : un second lancement ouvre le tableau de bord de l'app déjà lancée et s'arrête, sans jamais ouvrir le fichier d'historique une seconde fois.
 - La fenêtre popover est déclarée avec `create: false` et construite au lancement seulement sous macOS et Windows : sous Linux, elle ne servirait à rien.
 
 ## Bureaux sans barre système

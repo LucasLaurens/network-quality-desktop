@@ -40,7 +40,8 @@ Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; l
 - Au démarrage du fil : les heures qui ont des minutes mais pas de ligne heure, avant l'heure courante, sont terminées.
 - Changement de réseau : la minute en cours part sous l'ancien réseau, un événement `network_changed` est noté. Le même réseau relu sans sa MAC ou sans son nom garde ceux appris avant (`complete_with`). Coupure : `offline_started` puis `offline_ended`. Sans route, les secondes comptent pour le dernier réseau vu ; avant le premier réseau vu, sous « aucun réseau » (type `other`, sans MAC).
 - La gigue d'une seconde n'est comptée que si la seconde précédente est mesurée : pas d'écart calculé à travers une veille ou un tick sauté. L'heure UTC d'un tick est lue avant les sondes : deux ticks ne tombent jamais dans la même seconde.
-- Fermeture : `RunEvent::Exit` envoie `EngineMessage::Flush` ; l'app attend au plus 2 s en tout, envoi compris (boîte pleine, fil arrêté), que le fil confirme l'écriture de la minute en cours. Veille et réveil s'y ajouteront avec leur ticket.
+- Fermeture : `RunEvent::Exit` envoie `EngineMessage::Flush` ; l'app attend au plus 2 s en tout, envoi compris (boîte pleine, fil arrêté), que le fil confirme l'écriture de la minute en cours.
+- Veille : `EngineMessage::Sleep` ferme une coupure en cours (`offline_ended`), note `sleep`, écrit la minute en cours puis répond ; l'avis de veille attend au plus 1,5 s (`SLEEP_TIMEOUT`, sous les 2 s de Windows). Réveil : `wake` est noté, et la gigue ne se calcule pas à travers la veille.
 - La dernière heure et le réseau courant se lisent par `EngineMessage::ReadLiveHistory` (`LiveHistory`).
 
 ## Lecture

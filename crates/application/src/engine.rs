@@ -22,6 +22,9 @@ pub const WARM_UP_SAMPLES: u32 = 10;
 pub const CONTEXT_REFRESH_SECONDS: u32 = 10;
 /// A box that answered within this time while nothing else does has lost its Internet access.
 const GATEWAY_ANSWER_SECONDS: usize = 5;
+/// A wall-clock jump this long between two ticks, or during one, means the computer slept: a
+/// slow tick lasts a probe timeout, never this long.
+pub const WAKE_GAP_SECONDS: i64 = 10;
 
 /// Messages the single measurement actor reacts to.
 #[derive(Debug)]
@@ -35,6 +38,10 @@ pub enum EngineMessage {
     Flush(SyncSender<()>),
     /// The last hour and the current network, for the dashboard.
     ReadLiveHistory(oneshot::Sender<LiveHistory>),
+    /// The system is about to sleep: write the minute in progress, answer, then measure nothing.
+    Sleep(SyncSender<()>),
+    /// The system woke up: measure again from scratch.
+    Wake,
 }
 
 /// One metric as shown to the user: its value, its grade and whether it is close to getting worse.
@@ -102,6 +109,10 @@ pub struct MeasurementEngine<P, C, V, R, G, W, H> {
     hysteresis: Hysteresis,
     samples_since_restart: u32,
     measuring_cause: MeasuringCause,
+    /// When the sleep notice came; ticks measure nothing until the wake.
+    asleep_since: Option<i64>,
+    /// The wall clock at the previous tick, to notice a sleep the system did not announce.
+    last_tick_utc: Option<i64>,
 }
 
 /// The ports the engine talks to, gathered so the constructor stays readable.
@@ -161,6 +172,8 @@ where
             hysteresis: Hysteresis::default(),
             samples_since_restart: 0,
             measuring_cause: MeasuringCause::FirstMeasures,
+            asleep_since: None,
+            last_tick_utc: None,
         }
     }
 
@@ -175,6 +188,16 @@ where
                 // The asker may have given up waiting: nothing to do then.
                 let _ = answer.send(self.history.read_live());
             }
+            EngineMessage::Sleep(answer) => {
+                let utc = self.clock.read_utc_seconds();
+                self.history
+                    .record_sleep(utc, answer, &self.history_recorder);
+                self.asleep_since = Some(utc);
+            }
+            EngineMessage::Wake => {
+                let utc = self.clock.read_utc_seconds();
+                self.wake(utc);
+            }
         }
     }
 
@@ -188,6 +211,19 @@ where
     async fn measure_one_second(&mut self) {
         // Read before the probes: they may take a second, and two ticks must not share one.
         let utc = self.clock.read_utc_seconds();
+        if let Some(since) = self.asleep_since {
+            // A wake notice can be lost: past the gap, the computer is awake anyway.
+            if utc - since <= WAKE_GAP_SECONDS {
+                return;
+            }
+            self.wake(utc);
+        } else if self
+            .last_tick_utc
+            .is_some_and(|last| utc - last > WAKE_GAP_SECONDS)
+        {
+            self.wake(utc);
+        }
+        self.last_tick_utc = Some(utc);
         let is_context_due = self.seconds_since_context >= CONTEXT_REFRESH_SECONDS;
         let gateway = self.find_gateway();
         // The context and the gateway are read alongside the probes: none delays the others.
@@ -220,6 +256,13 @@ where
             },
         )
         .await;
+        let after = self.clock.read_utc_seconds();
+        if after - utc > WAKE_GAP_SECONDS {
+            // These answers waited through a sleep: they describe nothing.
+            self.wake(after);
+            self.last_tick_utc = Some(after);
+            return;
+        }
         if let Some(echo) = gateway_echo {
             self.gateway.record_second(echo);
         }
@@ -440,6 +483,30 @@ where
             .ok()
             .filter(|count| *count > 0)?;
         Some(jitters.iter().sum::<Duration>() / count)
+    }
+
+    /// Measures again from scratch, reads the connection at once and says so right away. O(1).
+    fn wake(&mut self, utc: i64) {
+        self.asleep_since = None;
+        self.restart();
+        self.gateway = GatewayWindow::default();
+        self.offline = OfflineDetector::default();
+        self.measuring_cause = MeasuringCause::Wake;
+        self.history.record_wake(utc, &self.history_recorder);
+        self.presenter.present(&VerdictView {
+            verdict: Verdict::Measuring,
+            diagnosis: Diagnosis::Measuring {
+                collected: 0,
+                needed: WARM_UP_SAMPLES,
+                cause: MeasuringCause::Wake,
+            },
+            latency: None,
+            jitter: None,
+            loss: None,
+            context: self.context,
+            local: self.compute_local_segment(),
+            wifi: self.wifi.clone(),
+        });
     }
 
     /// After an outage the history no longer describes the connection: measure again from scratch.

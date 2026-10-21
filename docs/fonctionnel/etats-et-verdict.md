@@ -2,13 +2,13 @@
 
 La pastille de la barre des menus montre l'état de la connexion. Chaque état a une forme et une couleur, pour rester lisible sans distinguer les couleurs.
 
-| État            | Forme                 | Quand                                                                                                                   |
-| --------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Solide          | disque plein vert     | les trois mesures sont bonnes                                                                                           |
-| Instable        | demi-disque ambre     | la pire mesure est dans la zone intermédiaire                                                                           |
-| Dégradée        | triangle rouge        | la pire mesure dépasse son seuil haut                                                                                   |
-| Hors ligne      | anneau barré gris     | aucun serveur ne répond, ni au ping ni en TCP, pendant 5 secondes                                                       |
-| Mesure en cours | anneau pointillé bleu | au démarrage, au retour de connexion et quand un autre réseau prend le relais, tant que 10 mesures n'ont pas été reçues |
+| État            | Forme                 | Quand                                                                                                                              |
+| --------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Solide          | disque plein vert     | les trois mesures sont bonnes                                                                                                      |
+| Instable        | demi-disque ambre     | la pire mesure est dans la zone intermédiaire                                                                                      |
+| Dégradée        | triangle rouge        | la pire mesure dépasse son seuil haut                                                                                              |
+| Hors ligne      | anneau barré gris     | aucun serveur ne répond, ni au ping ni en TCP, pendant 5 secondes                                                                  |
+| Mesure en cours | anneau pointillé bleu | au démarrage, au retour de connexion, au réveil et quand un autre réseau prend le relais, tant que 10 mesures n'ont pas été reçues |
 
 Survoler la pastille affiche le nom de l'état (sauf sous Linux). Un clic sur la pastille (macOS et Windows) ouvre le **popover** : l'état, le [diagnostic](diagnostic.md) avec le chemin Ce Mac → Box → Internet et le tronçon en cause, et les trois mesures avec leur méthode et une jauge qui situe la valeur entre les zones Solide, Instable et Dégradée. Le popover se ferme dès qu'on clique ailleurs, sur un nouveau clic sur la pastille ou avec Échap ; son bouton « Ouvrir le tableau de bord » ouvre la fenêtre principale.
 
@@ -44,6 +44,12 @@ Les entrées « Réglages » et « Tests de débit » s'ajouteront au menu avec 
 Certains bureaux n'affichent pas les icônes de la barre système (GNOME sans l'extension AppIndicator). L'app le détecte au lancement et passe en **mode fenêtre** : le tableau de bord s'ouvre au lancement, reste dans la barre des tâches et se réduit au lieu de se fermer ; on quitte par son bouton « Quitter ». Une note discrète explique pourquoi et mène à la page de l'extension ; « Masquer » la fait disparaître pour les lancements suivants.
 
 L'ouverture automatique à l'ouverture de session arrivera avec le réglage « Lancer à l'ouverture de session ».
+
+## Tâche de fond, veille et réveil
+
+L'app tourne en tâche de fond : fermer le tableau de bord le cache sans arrêter la mesure, et sous macOS elle n'a pas d'icône dans le Dock. On ne la quitte que par « Quitter » dans le menu de la pastille (ou le bouton du mode fenêtre) : ⌘Q dans le tableau de bord ne fait rien. Relancer l'app alors qu'elle tourne déjà ouvre simplement son tableau de bord.
+
+Avant la mise en veille, l'app écrit la minute en cours puis ne mesure plus rien. Une coupure en cours s'arrête là : la veille n'est pas comptée comme une coupure. Au réveil, elle affiche « Retour de veille, premières mesures en cours. » et repart de zéro. Si le système ne prévient pas, l'app s'en aperçoit d'elle-même : plus de 10 secondes écoulées entre deux mesures valent un réveil, et des réponses qui ont attendu pendant la veille sont écartées.
 
 ## Les trois mesures
 

@@ -312,7 +312,13 @@ fn list_outages(events: &[HistoryEvent], is_offline: bool) -> Vec<Outage> {
                 });
                 open = None;
             }
-            (EventKind::OfflineEnded | EventKind::NetworkChanged, _) => {}
+            (
+                EventKind::OfflineEnded
+                | EventKind::NetworkChanged
+                | EventKind::Sleep
+                | EventKind::Wake,
+                _,
+            ) => {}
         }
     }
     if let Some(start) = open {

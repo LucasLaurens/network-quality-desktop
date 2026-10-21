@@ -381,6 +381,14 @@ pub struct InMemoryVerdictPresenter {
 
 impl InMemoryVerdictPresenter {
     #[must_use]
+    pub fn count_views(&self) -> usize {
+        self.views
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len()
+    }
+
+    #[must_use]
     pub fn read_last(&self) -> Option<VerdictView> {
         self.views
             .lock()

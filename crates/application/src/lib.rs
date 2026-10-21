@@ -17,7 +17,7 @@ pub use dashboard::{
 };
 pub use engine::{
     CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, MeasurementEngine, MetricReading,
-    VerdictView, WARM_UP_SAMPLES,
+    VerdictView, WAKE_GAP_SECONDS, WARM_UP_SAMPLES,
 };
 pub use history::{
     EventKind, HistoryCommand, HistoryEvent, HistoryTracker, HistoryWriter, LiveHistory,
@@ -25,6 +25,7 @@ pub use history::{
 };
 pub use ports::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryReader, HistoryRecorder, LatencyProbe,
-    MeasurementRepository, NetworkChangeWatcher, TrayHost, VerdictPresenter, WifiReader,
+    MeasurementRepository, NetworkChangeWatcher, PowerEvent, PowerEventSource, TrayHost,
+    VerdictPresenter, WifiReader,
 };
 pub use targets::list_default_targets;

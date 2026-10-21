@@ -29,6 +29,7 @@ tauri = "~2.12.4"
 tauri-build = "~2.7.3"
 tauri-plugin-positioner = { version = "=2.4.0", features = ["tray-icon"] }
 tauri-plugin-opener = "=2.5.5"
+tauri-plugin-single-instance = "=2.5.4"
 netdev = "=0.46.3"
 netwatcher = "=0.8.0"
 rusqlite = { version = "=0.40.2", features = ["bundled"] }
@@ -40,7 +41,8 @@ windows = "=0.62.2"
 objc2 = "=0.6.5"
 objc2-core-wlan = { version = "=0.3.2", default-features = false, features = ["std", "CWChannel", "CWInterface", "CWWiFiClient", "CoreWLANTypes"] }
 objc2-core-location = { version = "=0.3.2", default-features = false, features = ["std", "CLLocationManager"] }
-objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSString", "NSProcessInfo"] }
+objc2-io-kit = { version = "=0.3.2", default-features = false, features = ["std", "libc", "dispatch2", "pwr_mgt"] }
 # Already linked by tao on Linux: reusing it adds no native dependency.
 dbus = "=0.9.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }

@@ -1,17 +1,14 @@
-//! Where the history lives (the file, and the last hour in the engine), how the dashboard reads
-//! it, and what the user is told when it cannot be used as is.
+//! Where the history file lives, how the dashboard reads it, and what the user is told when it
+//! cannot be used as is.
 
 use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 
-use application::{
-    EngineMessage, HistoryEvent, HistoryReader, LiveHistory, NetworkKey, RepositoryError,
-};
+use application::{HistoryEvent, HistoryReader, NetworkKey, RepositoryError};
 use domain::{Aggregate, Granularity};
 use fluent_bundle::FluentArgs;
 use infrastructure::{SqliteHistoryRecorder, SqliteMeasurementRepository, SystemClock};
 use tauri::{AppHandle, Manager};
-use tokio::sync::{mpsc, oneshot};
 
 use crate::text_catalog::TextCatalog;
 
@@ -19,25 +16,6 @@ const HISTORY_FILE: &str = "history.sqlite3";
 
 /// Shown in the dashboard when the history was set aside or cannot be kept on disk.
 pub struct HistoryNotice(pub Option<String>);
-
-/// The measurement actor's inbox, for messages that come from outside its clock.
-pub struct EngineInbox(pub mpsc::Sender<EngineMessage>);
-
-impl EngineInbox {
-    /// The last hour and the current network; empty when the engine is gone.
-    pub async fn read_live(&self) -> LiveHistory {
-        let (answer, answered) = oneshot::channel();
-        if self
-            .0
-            .send(EngineMessage::ReadLiveHistory(answer))
-            .await
-            .is_err()
-        {
-            return LiveHistory::default();
-        }
-        answered.await.unwrap_or_default()
-    }
-}
 
 /// The dashboard's own connection to the history file, beside the writer's.
 pub struct DashboardHistory(Mutex<Box<dyn HistoryReader + Send>>);
