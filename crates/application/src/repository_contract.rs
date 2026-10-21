@@ -53,6 +53,39 @@ pub fn check_contract<R: MeasurementRepository + HistoryReader>(create: impl Fn(
     learns_a_name_from_an_event(&mut create());
     groups_networks_without_a_readable_gateway_by_kind(&mut create());
     lists_the_rows_of_every_network_in_range(&mut create());
+    keeps_every_kind_of_event(&mut create());
+}
+
+fn keeps_every_kind_of_event(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+    // Arrange
+    let network = create_network(22, Some("Box"));
+    let kinds = [
+        EventKind::NetworkChanged,
+        EventKind::OfflineStarted,
+        EventKind::OfflineEnded,
+        EventKind::Sleep,
+        EventKind::Wake,
+    ];
+
+    // Act
+    for (offset, kind) in (0..).zip(kinds) {
+        repository
+            .record_event(&HistoryEvent {
+                utc: SOME_HOUR + offset,
+                network: network.clone(),
+                kind,
+            })
+            .expect("an event");
+    }
+
+    // Assert
+    let read: Vec<EventKind> = repository
+        .list_events(SOME_HOUR, SOME_HOUR + MINUTE)
+        .expect("events")
+        .iter()
+        .map(|event| event.kind)
+        .collect();
+    assert_eq!(read, kinds);
 }
 
 fn lists_the_rows_of_every_network_in_range(

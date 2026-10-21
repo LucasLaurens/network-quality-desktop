@@ -38,6 +38,7 @@ cause-undetermined-network = La cause exacte ne peut pas être déterminée sur 
 cause-recovering = La connexion s'améliore, confirmation en cours.
 cause-measuring = Premières mesures en cours.
 cause-new-network = Nouveau réseau, premières mesures en cours.
+cause-wake = Retour de veille, premières mesures en cours.
 cause-no-server = Aucun serveur ne répond.
 cause-no-network = Aucun réseau connecté.
 action-no-network = Se connecter à un Wi-Fi ou brancher un câble.
@@ -97,6 +98,16 @@ connection-limited = { $connection }, connexion limitée
 ## Menu
 
 menu-quit = Quitter
+menu-edit = Édition
+menu-undo = Annuler
+menu-redo = Rétablir
+menu-cut = Couper
+menu-copy = Copier
+menu-paste = Coller
+menu-select-all = Tout sélectionner
+menu-window = Fenêtre
+menu-minimize = Réduire
+menu-close-window = Fermer la fenêtre
 
 ## History
 

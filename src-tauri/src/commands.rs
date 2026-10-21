@@ -11,7 +11,8 @@ use crate::dashboard_display::{
     DashboardSummaryDisplay, EvolutionDisplay, PeriodChoice, compute_day_start,
 };
 use crate::display::ConnectionDisplay;
-use crate::history_store::{DashboardHistory, EngineInbox, HistoryNotice};
+use crate::engine_inbox::EngineInbox;
+use crate::history_store::{DashboardHistory, HistoryNotice};
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
 use crate::shell_presenter::DisplayStore;
 use crate::text_catalog::TextCatalog;

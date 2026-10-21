@@ -27,7 +27,9 @@ Le code est en anglais, l'interface et la documentation en français. Chaque con
 | Granularité            | `Granularity`       | Minute ou heure                                                                            |
 | Histogramme de latence | `LatencyHistogram`  | 24 tranches additionnables, d'où les percentiles de toute période                          |
 | Dernière heure         | `SecondRing`        | Une mesure par seconde sur une heure, en mémoire                                           |
-| Événement              | `HistoryEvent`      | Changement de réseau, début ou fin de coupure                                              |
+| Événement              | `HistoryEvent`      | Changement de réseau, début ou fin de coupure, mise en veille, réveil                      |
+| Veille, réveil         | `PowerEvent`        | Avis du système avant la mise en veille et après le réveil                                 |
+| Trou de mesure         | `WAKE_GAP_SECONDS`  | Plus de 10 s d'heure murale entre deux ticks ou pendant un tick : traité comme un réveil   |
 | Mémoire vive           | `LiveHistory`       | Dernière heure en mémoire et réseau courant, lus auprès du moteur                          |
 | Période                | `Period`            | 1 h, 24 h, 7 j ou 30 j : l'étendue d'une courbe et la largeur de ses points                |
 | Évolution              | `Evolution`         | Les points d'une période, ses changements de réseau et sa couverture                       |

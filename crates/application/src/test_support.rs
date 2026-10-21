@@ -126,6 +126,13 @@ impl ManualClock {
     pub fn advance(&self, by: Duration) {
         *self.now.lock().unwrap_or_else(PoisonError::into_inner) += by;
     }
+
+    /// Moves the wall clock back, as a time server can. The monotonic time cannot go back, so
+    /// both are moved by the same amount: tests only rely on the wall clock here.
+    pub fn set_back(&self, by: Duration) {
+        let mut now = self.now.lock().unwrap_or_else(PoisonError::into_inner);
+        *now = now.saturating_sub(by);
+    }
 }
 
 impl Clock for ManualClock {
@@ -380,6 +387,14 @@ pub struct InMemoryVerdictPresenter {
 }
 
 impl InMemoryVerdictPresenter {
+    #[must_use]
+    pub fn count_views(&self) -> usize {
+        self.views
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len()
+    }
+
     #[must_use]
     pub fn read_last(&self) -> Option<VerdictView> {
         self.views

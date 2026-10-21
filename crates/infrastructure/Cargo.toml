@@ -25,6 +25,7 @@ objc2.workspace = true
 objc2-core-wlan.workspace = true
 objc2-core-location.workspace = true
 objc2-foundation.workspace = true
+objc2-io-kit.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true, features = [
@@ -32,6 +33,8 @@ windows = { workspace = true, features = [
     "Networking_Connectivity",
     "Win32_Foundation",
     "Win32_NetworkManagement_WiFi",
+    "Win32_System_Power",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]
