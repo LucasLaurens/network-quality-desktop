@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use domain::{
-    Grade, GradeBounds, Hysteresis, LatencyWindow, LossRate, LossWindow, OfflineDetector,
-    ProbeOutcome, Scalable, Target, Thresholds, Verdict, compute_median,
+    Diagnosis, Grade, GradeBounds, Hysteresis, LatencyWindow, LossRate, LossWindow, Metric,
+    OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Verdict, compute_median,
 };
 use futures_util::future::join_all;
 use tokio::sync::mpsc;
@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use crate::{Clock, LatencyProbe, VerdictPresenter};
 
 /// Seconds with an answer needed before the first verdict.
-const WARM_UP_SAMPLES: u32 = 10;
+pub const WARM_UP_SAMPLES: u32 = 10;
 
 /// Messages the single measurement actor reacts to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +25,8 @@ pub struct MetricReading<T> {
     pub value: T,
     pub grade: Grade,
     pub is_near_next_threshold: bool,
+    /// The thresholds the value was graded against, so presenters never redefine them.
+    pub bounds: GradeBounds<T>,
 }
 
 impl<T: Scalable> MetricReading<T> {
@@ -33,6 +35,7 @@ impl<T: Scalable> MetricReading<T> {
             value,
             grade: bounds.compute_grade(value),
             is_near_next_threshold: bounds.is_near_next_threshold(value),
+            bounds: *bounds,
         }
     }
 }
@@ -41,6 +44,7 @@ impl<T: Scalable> MetricReading<T> {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VerdictView {
     pub verdict: Verdict,
+    pub diagnosis: Diagnosis,
     /// `None` while the metric cannot be computed yet, and while offline.
     pub latency: Option<MetricReading<Duration>>,
     pub jitter: Option<MetricReading<Duration>>,
@@ -146,6 +150,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
             self.restart();
             return VerdictView {
                 verdict: Verdict::Offline,
+                diagnosis: Diagnosis::NoNetwork,
                 latency: None,
                 jitter: None,
                 loss: None,
@@ -177,8 +182,31 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
             }
             _ => Verdict::Measuring,
         };
+        let grades = [
+            (
+                Metric::Latency,
+                latency.map(|reading| (reading.grade, reading.is_near_next_threshold)),
+            ),
+            (
+                Metric::Jitter,
+                jitter.map(|reading| (reading.grade, reading.is_near_next_threshold)),
+            ),
+            (
+                Metric::Loss,
+                loss.map(|reading| (reading.grade, reading.is_near_next_threshold)),
+            ),
+        ];
+        let diagnosis = match verdict {
+            Verdict::Offline => Diagnosis::NoNetwork,
+            Verdict::Measuring => Diagnosis::Measuring {
+                collected: self.samples_since_restart.min(WARM_UP_SAMPLES),
+                needed: WARM_UP_SAMPLES,
+            },
+            Verdict::Graded(displayed) => diagnose_graded(displayed, &grades),
+        };
         VerdictView {
             verdict,
+            diagnosis,
             latency,
             jitter,
             loss,
@@ -205,5 +233,27 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
         self.loss = LossWindow::default();
         self.hysteresis = Hysteresis::default();
         self.samples_since_restart = 0;
+    }
+}
+
+/// Names the metric behind a graded verdict. While Solid, a metric close to (or already past) its
+/// threshold is reported, since the hysteresis may not show it yet. O(1): three metrics.
+fn diagnose_graded(displayed: Grade, grades: &[(Metric, Option<(Grade, bool)>); 3]) -> Diagnosis {
+    let worst = grades
+        .iter()
+        .filter_map(|(metric, reading)| reading.map(|(grade, near)| (grade, near, *metric)))
+        .max_by_key(|(grade, _, metric)| (*grade, std::cmp::Reverse(*metric)));
+    match (displayed, worst) {
+        (Grade::Solid, Some((grade, _, metric))) if grade > Grade::Solid => {
+            Diagnosis::NearThreshold(metric)
+        }
+        (Grade::Solid, _) => grades
+            .iter()
+            .find(|(_, reading)| reading.is_some_and(|(_, near)| near))
+            .map_or(Diagnosis::Healthy, |(metric, _)| {
+                Diagnosis::NearThreshold(*metric)
+            }),
+        (_, Some((_, _, metric))) => Diagnosis::OutOfThreshold(metric),
+        (_, None) => Diagnosis::Healthy,
     }
 }

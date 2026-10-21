@@ -16,7 +16,7 @@ Le cœur est en Rust, organisé en workspace Cargo de quatre crates. Le sens des
 - `domain` : niveaux et seuils, fenêtre de latence (p90, gigue), fenêtre de perte, détection Hors ligne, issue d'une sonde, médiane, hystérésis, verdict.
 - `application` : moteur de mesure (acteur sur un canal tokio, seule dépendance d'exécution de cette crate), ports `LatencyProbe`, `Clock`, `VerdictPresenter`. Les faux en mémoire ne sont compilés que pour les tests (feature `test-support`).
 - `infrastructure` : sonde à repli (écho ICMP, connexion TCP 443) et horloge système.
-- `app` : icône de barre système (avec un menu minimal « Quitter »), horloge à 1 Hz, commande `read_app_info`.
+- `app` : icône de barre système (avec un menu minimal « Quitter »), horloge à 1 Hz, `ShellPresenter` qui met à jour l'icône et publie l'objet d'affichage, fenêtre popover ancrée à l'icône (plugin positioner), commandes `read_app_info`, `read_connection_display`, `open_dashboard`, événement `ConnectionDisplayChanged`.
 
 ## Front
 
@@ -29,3 +29,10 @@ Vue 3 + TypeScript. Le front ne contient aucune règle métier : il affiche ce q
 ## Types partagés
 
 Les types et les signatures des commandes sont générés depuis Rust par `tauri-specta` dans `src/bindings.ts`. Ce fichier ne se modifie jamais à la main : le test Rust `exports_up_to_date_typescript_bindings` le régénère, et la CI échoue s'il diffère de la version commitée (`pnpm bindings:check`).
+
+## Objet d'affichage et textes
+
+- Le moteur produit un `VerdictView` (verdict, `Diagnosis`, trois `MetricReading` avec leurs bornes). `ConnectionDisplay::from_view` (crate `app`) le transforme en objet prêt à afficher : libellé d'état, constat, action, détail chiffré, et pour chaque mesure son nom, sa méthode, sa valeur formatée, sa jauge (positions en fraction) et son indication « Proche du seuil ».
+- Tous ces textes viennent du catalogue Fluent `src-tauri/locales/fr.ftl`, chargé par `TextCatalog`. Les nombres sont formatés à la française (virgule décimale, espace insécable avant l'unité).
+- Le front reçoit cet objet par la commande `read_connection_display` (à l'ouverture) et l'événement `ConnectionDisplayChanged` (à chaque changement), et l'affiche tel quel.
+- La fenêtre popover charge la même page avec `?view=popover`. Elle s'ouvre au clic gauche sur l'icône, se place sous l'icône (macOS) ou au-dessus (Windows), et se masque quand elle perd le focus.

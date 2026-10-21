@@ -18,6 +18,18 @@
         "height": 720,
         "minWidth": 640,
         "minHeight": 480
+      },
+      {
+        "label": "popover",
+        "title": "État de la connexion",
+        "url": "index.html?view=popover",
+        "width": 320,
+        "height": 440,
+        "visible": false,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
       }
     ],
     "security": {

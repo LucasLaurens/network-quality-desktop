@@ -14,7 +14,7 @@ pub enum Grade {
 const NEAR_NEXT_SHARE: f64 = 0.8;
 
 /// Boundaries of one metric: Solid below `unstable_from`, Degraded above `degraded_above`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GradeBounds<T> {
     unstable_from: T,
     degraded_above: T,
@@ -51,6 +51,25 @@ impl<T: Scalable> GradeBounds<T> {
         } else {
             Grade::Degraded
         }
+    }
+
+    /// The boundary worth showing next to the value: the one it crossed, or the next one while Solid. O(1).
+    #[must_use]
+    pub fn find_reference_threshold(&self, value: T) -> T {
+        match self.compute_grade(value) {
+            Grade::Solid | Grade::Unstable => self.unstable_from,
+            Grade::Degraded => self.degraded_above,
+        }
+    }
+
+    #[must_use]
+    pub const fn read_unstable_from(&self) -> T {
+        self.unstable_from
+    }
+
+    #[must_use]
+    pub const fn read_degraded_above(&self) -> T {
+        self.degraded_above
     }
 
     /// True when the value is within 20 % of the boundary that would make it worse. O(1).
