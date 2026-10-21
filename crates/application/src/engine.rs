@@ -1,14 +1,16 @@
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use domain::{
-    ConnectionContext, Diagnosis, Grade, GradeBounds, Hysteresis, LatencyWindow, LossRate,
-    LossWindow, MeasuringCause, Metric, OfflineDetector, ProbeOutcome, Scalable, Target,
-    Thresholds, Verdict, compute_median,
+    ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, GatewayWindow, Grade,
+    GradeBounds, Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause,
+    Metric, OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Unmeasurable, Verdict,
+    compute_median,
 };
-use futures_util::future::{join, join_all};
+use futures_util::future::{join_all, join3};
 use tokio::sync::mpsc;
 
-use crate::{Clock, ConnectionContextReader, LatencyProbe, VerdictPresenter};
+use crate::{Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, VerdictPresenter};
 
 /// Seconds with an answer needed before the first verdict.
 pub const WARM_UP_SAMPLES: u32 = 10;
@@ -57,14 +59,18 @@ pub struct VerdictView {
     pub loss: Option<MetricReading<LossRate>>,
     /// `None` while no default route exists, or before the first read.
     pub context: Option<ConnectionContext>,
+    /// The link to the gateway: only says where a problem lies, never sets the verdict.
+    pub local: LocalSegment,
 }
 
 /// Owns every piece of measurement state; nothing else mutates it.
-pub struct MeasurementEngine<P, C, V, R> {
+pub struct MeasurementEngine<P, C, V, R, G> {
     probe: P,
     clock: C,
     presenter: V,
     context_reader: R,
+    gateway_probe: G,
+    gateway: GatewayWindow,
     context: Option<ConnectionContext>,
     /// The last network seen, kept through a moment without route: switching from one Wi-Fi to
     /// another passes through one.
@@ -82,17 +88,40 @@ pub struct MeasurementEngine<P, C, V, R> {
     measuring_cause: MeasuringCause,
 }
 
-impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
-    MeasurementEngine<P, C, V, R>
+/// The ports the engine talks to, gathered so the constructor stays readable.
+pub struct EnginePorts<P, C, V, R, G> {
+    pub probe: P,
+    pub clock: C,
+    pub presenter: V,
+    pub context_reader: R,
+    pub gateway_probe: G,
+}
+
+impl<P, C, V, R, G> MeasurementEngine<P, C, V, R, G>
+where
+    P: LatencyProbe,
+    C: Clock,
+    V: VerdictPresenter,
+    R: ConnectionContextReader,
+    G: GatewayProbe,
 {
     #[must_use]
-    pub fn new(probe: P, clock: C, presenter: V, context_reader: R, targets: Vec<Target>) -> Self {
+    pub fn new(ports: EnginePorts<P, C, V, R, G>, targets: Vec<Target>) -> Self {
+        let EnginePorts {
+            probe,
+            clock,
+            presenter,
+            context_reader,
+            gateway_probe,
+        } = ports;
         let jitter = vec![LatencyWindow::default(); targets.len()];
         Self {
             probe,
             clock,
             presenter,
             context_reader,
+            gateway_probe,
+            gateway: GatewayWindow::default(),
             context: None,
             last_network: None,
             // Due at once: the first tick reads the connection.
@@ -127,8 +156,9 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
 
     async fn measure_one_second(&mut self) {
         let is_context_due = self.seconds_since_context >= CONTEXT_REFRESH_SECONDS;
-        // The context is read alongside the probes, so a slow read never delays the measurement.
-        let (outcomes, context) = join(
+        let gateway = self.find_gateway();
+        // The context and the gateway are read alongside the probes: none delays the others.
+        let (outcomes, context, gateway_echo) = join3(
             join_all(
                 self.targets
                     .iter()
@@ -141,14 +171,23 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
                     None
                 }
             },
+            async {
+                match gateway {
+                    Some(address) => Some(self.gateway_probe.ping_gateway(address).await),
+                    None => None,
+                }
+            },
         )
         .await;
+        if let Some(echo) = gateway_echo {
+            self.gateway.record_second(echo);
+        }
         if let Some(context) = context {
             self.record_context(context);
         }
         self.seconds_since_context += 1;
         self.record_outcomes(&outcomes);
-        let view = self.compute_view(&outcomes);
+        let view = self.compute_view(&outcomes, gateway_echo);
         self.presenter.present(&view);
     }
 
@@ -170,6 +209,30 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
         }
         self.context = context;
         self.seconds_since_context = 0;
+    }
+
+    /// A cellular modem has no box to ping: the problem past it is the mobile network.
+    fn find_gateway(&self) -> Option<Ipv4Addr> {
+        self.context
+            .filter(|context| context.kind != ConnectionKind::Cellular)
+            .and_then(|context| context.gateway_address)
+    }
+
+    /// O(n log n) for n ≤ 15 samples.
+    fn compute_local_segment(&self) -> LocalSegment {
+        if self.find_gateway().is_none() {
+            return LocalSegment::Unmeasurable(Unmeasurable::NoGateway);
+        }
+        self.gateway.compute_segment()
+    }
+
+    /// Why nothing answers: no network at all, a box cut from the Internet, or no way to tell.
+    fn diagnose_offline(&self, gateway_echo: Option<GatewayEcho>) -> Diagnosis {
+        match (self.context, gateway_echo) {
+            (None, _) => Diagnosis::NoNetwork,
+            (Some(_), Some(GatewayEcho::Answered(_))) => Diagnosis::GatewayWithoutInternet,
+            (Some(_), _) => Diagnosis::NoServerReachable,
+        }
     }
 
     /// O(k log k) time, O(k) space for k targets.
@@ -201,7 +264,11 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
     }
 
     /// O(k·n log n) time, O(k·n) space, k targets and n ≤ 15 window samples.
-    fn compute_view(&mut self, outcomes: &[ProbeOutcome]) -> VerdictView {
+    fn compute_view(
+        &mut self,
+        outcomes: &[ProbeOutcome],
+        gateway_echo: Option<GatewayEcho>,
+    ) -> VerdictView {
         let any_reachable = outcomes
             .iter()
             .any(|outcome| *outcome != ProbeOutcome::Unreachable);
@@ -209,11 +276,12 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
             self.restart();
             return VerdictView {
                 verdict: Verdict::Offline,
-                diagnosis: Diagnosis::NoServerReachable,
+                diagnosis: self.diagnose_offline(gateway_echo),
                 latency: None,
                 jitter: None,
                 loss: None,
                 context: self.context,
+                local: self.compute_local_segment(),
             };
         }
         let thresholds = self.thresholds;
@@ -256,14 +324,19 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
                 loss.map(|reading| (reading.grade, reading.is_near_next_threshold)),
             ),
         ];
+        let local = self.compute_local_segment();
+        let kind = self
+            .context
+            .map_or(ConnectionKind::Other, |context| context.kind);
+        let fault = Fault::attribute(kind, local);
         let diagnosis = match verdict {
-            Verdict::Offline => Diagnosis::NoServerReachable,
+            Verdict::Offline => self.diagnose_offline(gateway_echo),
             Verdict::Measuring => Diagnosis::Measuring {
                 collected: self.samples_since_restart.min(WARM_UP_SAMPLES),
                 needed: WARM_UP_SAMPLES,
                 cause: self.measuring_cause,
             },
-            Verdict::Graded(displayed) => diagnose_graded(displayed, &grades),
+            Verdict::Graded(displayed) => diagnose_graded(displayed, &grades, fault),
         };
         VerdictView {
             verdict,
@@ -272,6 +345,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
             jitter,
             loss,
             context: self.context,
+            local,
         }
     }
 
@@ -295,6 +369,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
         self.loss = LossWindow::default();
         self.hysteresis = Hysteresis::default();
         self.samples_since_restart = 0;
+        self.gateway = GatewayWindow::default();
         self.measuring_cause = MeasuringCause::FirstMeasures;
         // The way back may be another network: read it at once (every second while offline).
         self.seconds_since_context = CONTEXT_REFRESH_SECONDS;
@@ -304,7 +379,11 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
 /// Names the metric behind a graded verdict. While Solid, a metric close to (or already past) its
 /// threshold is reported, since the hysteresis may not show it yet; while a worse state is still
 /// shown with every metric back to Solid, the connection is recovering. O(1): three metrics.
-fn diagnose_graded(displayed: Grade, grades: &[(Metric, Option<(Grade, bool)>); 3]) -> Diagnosis {
+fn diagnose_graded(
+    displayed: Grade,
+    grades: &[(Metric, Option<(Grade, bool)>); 3],
+    fault: Fault,
+) -> Diagnosis {
     let worst = grades
         .iter()
         .filter_map(|(metric, reading)| reading.map(|(grade, near)| (grade, near, *metric)))
@@ -319,7 +398,9 @@ fn diagnose_graded(displayed: Grade, grades: &[(Metric, Option<(Grade, bool)>); 
             .map_or(Diagnosis::Healthy, |(metric, _)| {
                 Diagnosis::NearThreshold(*metric)
             }),
-        (_, Some((grade, _, metric))) if grade > Grade::Solid => Diagnosis::OutOfThreshold(metric),
+        (_, Some((grade, _, metric))) if grade > Grade::Solid => {
+            Diagnosis::OutOfThreshold { metric, fault }
+        }
         // Worse state still shown while every metric is back to Solid: the hysteresis is waiting.
         _ => Diagnosis::Recovering,
     }

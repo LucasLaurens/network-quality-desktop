@@ -4,12 +4,14 @@ use std::time::Duration;
 
 use application::{MetricReading, VerdictView};
 use domain::{
-    ConnectionContext, ConnectionKind, Diagnosis, Grade, LossRate, MeasuringCause, Metric, Verdict,
+    ConnectionContext, ConnectionKind, Diagnosis, Fault, Grade, LocalProblem, LocalSegment,
+    LossRate, MeasuringCause, Metric, Unmeasurable, Verdict,
 };
 use fluent_bundle::FluentArgs;
 use serde::Serialize;
 use specta::Type;
 
+use crate::path_display::PathDisplay;
 use crate::text_catalog::TextCatalog;
 
 /// Right end of each gauge: values beyond it pin the marker to the end.
@@ -136,6 +138,8 @@ pub struct ConnectionDisplay {
     pub open_dashboard_label: String,
     /// `None` without a default route.
     pub network: Option<NetworkDisplay>,
+    /// `None` without a default route.
+    pub path: Option<PathDisplay>,
 }
 
 impl ConnectionDisplay {
@@ -153,6 +157,7 @@ impl ConnectionDisplay {
             jitter: None,
             loss: None,
             context: None,
+            local: LocalSegment::Unmeasurable(Unmeasurable::NoGateway),
         };
         Self::from_view(&view, catalog)
     }
@@ -161,21 +166,10 @@ impl ConnectionDisplay {
     #[must_use]
     pub fn from_view(view: &VerdictView, catalog: &TextCatalog) -> Self {
         let state = DisplayState::from(view.verdict);
-        let (cause_key, action_key) = match view.diagnosis {
-            Diagnosis::Healthy => ("cause-healthy", None),
-            Diagnosis::NearThreshold(_) => ("cause-near-threshold", None),
-            Diagnosis::OutOfThreshold(_) => ("cause-out-of-threshold", None),
-            Diagnosis::Recovering => ("cause-recovering", None),
-            Diagnosis::Measuring {
-                cause: MeasuringCause::FirstMeasures,
-                ..
-            } => ("cause-measuring", None),
-            Diagnosis::Measuring {
-                cause: MeasuringCause::NewNetwork,
-                ..
-            } => ("cause-new-network", None),
-            Diagnosis::NoServerReachable => ("cause-no-server", Some("action-check-connection")),
-        };
+        let kind = view
+            .context
+            .map_or(ConnectionKind::Other, |context| context.kind);
+        let (cause_key, action_key) = select_cause_keys(view.diagnosis, kind);
         Self {
             state,
             state_label: catalog.render(state.to_catalogue_key(), None),
@@ -198,6 +192,7 @@ impl ConnectionDisplay {
                 compose_metric(Metric::Loss, view.loss.as_ref(), LOSS_GAUGE_MAX, catalog),
             ],
             open_dashboard_label: catalog.render("action-open-dashboard", None),
+            path: PathDisplay::from_view(view, catalog),
             network: view
                 .context
                 .map(|context| NetworkDisplay::from_context(&context, catalog)),
@@ -206,7 +201,7 @@ impl ConnectionDisplay {
 }
 
 /// A value that can be printed with its unit and placed on a gauge.
-trait Displayable: domain::Scalable {
+pub trait Displayable: domain::Scalable {
     fn format(self, catalog: &TextCatalog) -> String;
     /// Where the value sits between zero and `max`, capped at 1.
     fn compute_fraction(self, max: Self) -> f64;
@@ -306,7 +301,7 @@ fn compose_detail(view: &VerdictView, catalog: &TextCatalog) -> Option<String> {
             args.set("needed", needed.to_string());
             Some(catalog.render("detail-measuring", Some(&args)))
         }
-        Diagnosis::NearThreshold(metric) | Diagnosis::OutOfThreshold(metric) => {
+        Diagnosis::NearThreshold(metric) | Diagnosis::OutOfThreshold { metric, .. } => {
             let (value, threshold) = match metric {
                 Metric::Latency => describe_reading(view.latency.as_ref(), catalog)?,
                 Metric::Jitter => describe_reading(view.jitter.as_ref(), catalog)?,
@@ -320,7 +315,65 @@ fn compose_detail(view: &VerdictView, catalog: &TextCatalog) -> Option<String> {
         Diagnosis::Healthy
         | Diagnosis::Recovering
         | Diagnosis::Measuring { .. }
+        | Diagnosis::NoNetwork
+        | Diagnosis::GatewayWithoutInternet
         | Diagnosis::NoServerReachable => None,
+    }
+}
+
+/// The catalogue keys of the cause and its action. The link is named by what the user has: a
+/// Wi-Fi, a phone, a cable. O(1).
+const fn select_cause_keys(
+    diagnosis: Diagnosis,
+    kind: ConnectionKind,
+) -> (&'static str, Option<&'static str>) {
+    match diagnosis {
+        Diagnosis::Healthy => ("cause-healthy", None),
+        Diagnosis::NearThreshold(_) => ("cause-near-threshold", None),
+        Diagnosis::OutOfThreshold { fault, .. } => select_fault_keys(fault, kind),
+        Diagnosis::Recovering => ("cause-recovering", None),
+        Diagnosis::Measuring {
+            cause: MeasuringCause::FirstMeasures,
+            ..
+        } => ("cause-measuring", None),
+        Diagnosis::Measuring {
+            cause: MeasuringCause::NewNetwork,
+            ..
+        } => ("cause-new-network", None),
+        Diagnosis::NoNetwork => ("cause-no-network", Some("action-no-network")),
+        Diagnosis::GatewayWithoutInternet if matches!(kind, ConnectionKind::PhoneHotspot) => (
+            "cause-phone-without-internet",
+            Some("action-phone-without-internet"),
+        ),
+        Diagnosis::GatewayWithoutInternet => (
+            "cause-box-without-internet",
+            Some("action-box-without-internet"),
+        ),
+        Diagnosis::NoServerReachable => ("cause-no-server", Some("action-check-connection")),
+    }
+}
+
+const fn select_fault_keys(
+    fault: Fault,
+    kind: ConnectionKind,
+) -> (&'static str, Option<&'static str>) {
+    match (fault, kind) {
+        (Fault::LocalLink(_), ConnectionKind::PhoneHotspot) => {
+            ("cause-phone-link", Some("action-phone-link"))
+        }
+        (Fault::LocalLink(LocalProblem::Loss), ConnectionKind::WiFi) => {
+            ("cause-wifi-losses", Some("action-wifi-losses"))
+        }
+        (Fault::LocalLink(LocalProblem::Latency), ConnectionKind::WiFi) => {
+            ("cause-wifi-slow", Some("action-wifi-slow"))
+        }
+        (Fault::LocalLink(_), _) => ("cause-local-link", Some("action-local-link")),
+        (Fault::Operator, _) => ("cause-operator", Some("action-operator")),
+        (Fault::MobileNetwork, _) => ("cause-mobile-network", Some("action-mobile-network")),
+        (Fault::Undetermined(Unmeasurable::NotPermitted), _) => {
+            ("cause-undetermined-system", Some("action-allow-ping"))
+        }
+        (Fault::Undetermined(_), _) => ("cause-undetermined-network", None),
     }
 }
 
@@ -340,7 +393,8 @@ mod tests {
 
     use application::{MetricReading, VerdictView};
     use domain::{
-        Diagnosis, Grade, GradeBounds, LossRate, Metering, Metric, Scalable, Thresholds, Verdict,
+        Diagnosis, Fault, Grade, GradeBounds, LocalSegment, LossRate, Metering, Metric, Scalable,
+        Thresholds, Unmeasurable, Verdict,
     };
 
     use super::*;
@@ -365,6 +419,7 @@ mod tests {
             jitter: Some(create_reading(Duration::from_millis(4), thresholds.jitter)),
             loss: Some(create_reading(LossRate::from_percent(2.5), thresholds.loss)),
             context: None,
+            local: LocalSegment::Unmeasurable(Unmeasurable::NoGateway),
         }
     }
 
@@ -392,7 +447,10 @@ mod tests {
         // Arrange
         let view = create_view(
             Verdict::Graded(Grade::Unstable),
-            Diagnosis::OutOfThreshold(Metric::Latency),
+            Diagnosis::OutOfThreshold {
+                metric: Metric::Latency,
+                fault: Fault::Operator,
+            },
             Duration::from_millis(180),
         );
 
@@ -441,6 +499,7 @@ mod tests {
             jitter: None,
             loss: None,
             context: None,
+            local: LocalSegment::Unmeasurable(Unmeasurable::NoGateway),
         };
 
         // Act
@@ -460,7 +519,10 @@ mod tests {
         // Arrange
         let view = create_view(
             Verdict::Graded(Grade::Unstable),
-            Diagnosis::OutOfThreshold(Metric::Latency),
+            Diagnosis::OutOfThreshold {
+                metric: Metric::Latency,
+                fault: Fault::Operator,
+            },
             Duration::from_millis(180),
         );
 
@@ -533,6 +595,7 @@ mod tests {
             jitter: None,
             loss: None,
             context: None,
+            local: LocalSegment::Unmeasurable(Unmeasurable::NoGateway),
         };
 
         // Act
@@ -582,6 +645,7 @@ mod tests {
             jitter: None,
             loss: None,
             context: None,
+            local: LocalSegment::Unmeasurable(Unmeasurable::NoGateway),
         };
 
         // Act
@@ -656,7 +720,10 @@ mod tests {
         // Arrange
         let view = create_view(
             Verdict::Graded(Grade::Unstable),
-            Diagnosis::OutOfThreshold(Metric::Loss),
+            Diagnosis::OutOfThreshold {
+                metric: Metric::Loss,
+                fault: Fault::Operator,
+            },
             Duration::from_millis(20),
         );
 
@@ -679,5 +746,109 @@ mod tests {
             display.detail.as_deref(),
             Some(format!("Perte 2,5{NBSP}%, seuil 1{NBSP}%").as_str())
         );
+    }
+
+    fn create_offline_view(diagnosis: Diagnosis, kind: ConnectionKind) -> VerdictView {
+        VerdictView {
+            verdict: Verdict::Offline,
+            diagnosis,
+            latency: None,
+            jitter: None,
+            loss: None,
+            context: Some(create_context(kind, false)),
+            local: LocalSegment::Unmeasurable(Unmeasurable::NoAnswer),
+        }
+    }
+
+    fn create_fault_view(fault: Fault, kind: ConnectionKind) -> VerdictView {
+        let mut view = create_view(
+            Verdict::Graded(Grade::Unstable),
+            Diagnosis::OutOfThreshold {
+                metric: Metric::Latency,
+                fault,
+            },
+            Duration::from_millis(180),
+        );
+        view.context = Some(create_context(kind, false));
+        view
+    }
+
+    #[test]
+    fn names_the_segment_at_fault_in_the_cause() {
+        // Arrange
+        let catalog = TextCatalog::load();
+
+        // Act
+        let operator = ConnectionDisplay::from_view(
+            &create_fault_view(Fault::Operator, ConnectionKind::WiFi),
+            &catalog,
+        );
+        let wifi = ConnectionDisplay::from_view(
+            &create_fault_view(Fault::LocalLink(LocalProblem::Loss), ConnectionKind::WiFi),
+            &catalog,
+        );
+        let phone = ConnectionDisplay::from_view(
+            &create_fault_view(Fault::MobileNetwork, ConnectionKind::PhoneHotspot),
+            &catalog,
+        );
+
+        // Assert
+        assert_eq!(
+            operator.cause,
+            "L'opérateur est en cause, le Wi-Fi va bien."
+        );
+        assert_eq!(
+            wifi.cause,
+            format!("Le Wi-Fi est en cause{NBSP}: des paquets se perdent avant la box.")
+        );
+        assert_eq!(
+            phone.cause,
+            "Le réseau mobile est en cause, le lien avec le téléphone va bien."
+        );
+    }
+
+    #[test]
+    fn suggests_allowing_the_ping_when_the_system_refuses_it() {
+        // Act
+        let display = ConnectionDisplay::from_view(
+            &create_fault_view(
+                Fault::Undetermined(Unmeasurable::NotPermitted),
+                ConnectionKind::WiFi,
+            ),
+            &TextCatalog::load(),
+        );
+
+        // Assert
+        assert_eq!(
+            display.cause,
+            "La cause exacte ne peut pas être déterminée sur ce système."
+        );
+        assert_eq!(
+            display.action.as_deref(),
+            Some("Autoriser le ping (net.ipv4.ping_group_range).")
+        );
+    }
+
+    #[test]
+    fn tells_a_box_without_internet_from_no_network_at_all() {
+        // Arrange
+        let catalog = TextCatalog::load();
+
+        // Act
+        let box_down = ConnectionDisplay::from_view(
+            &create_offline_view(Diagnosis::GatewayWithoutInternet, ConnectionKind::WiFi),
+            &catalog,
+        );
+        let mut no_route = create_offline_view(Diagnosis::NoNetwork, ConnectionKind::WiFi);
+        no_route.context = None;
+        let no_network = ConnectionDisplay::from_view(&no_route, &catalog);
+
+        // Assert
+        assert_eq!(
+            box_down.cause,
+            "La box répond, mais Internet ne répond plus."
+        );
+        assert_eq!(no_network.cause, "Aucun réseau connecté.");
+        assert_eq!(no_network.path, None);
     }
 }

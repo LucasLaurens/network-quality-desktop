@@ -10,6 +10,7 @@ mod latency_window;
 mod loss;
 mod offline;
 mod probe_outcome;
+mod segment;
 mod target;
 mod timestamp;
 mod verdict;
@@ -25,6 +26,10 @@ pub use latency_window::{LatencyWindow, compute_median};
 pub use loss::{LossRate, LossWindow};
 pub use offline::OfflineDetector;
 pub use probe_outcome::ProbeOutcome;
+pub use segment::{
+    Fault, GatewayEcho, GatewayWindow, LOCAL_LATENCY_LIMIT, LOCAL_LOSS_LIMIT, LocalProblem,
+    LocalSegment, Unmeasurable,
+};
 pub use target::Target;
 pub use timestamp::Timestamp;
 pub use verdict::Verdict;

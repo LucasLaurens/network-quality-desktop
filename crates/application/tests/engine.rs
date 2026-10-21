@@ -4,12 +4,14 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use application::test_support::{
-    InMemoryConnection, InMemoryNetwork, InMemoryVerdictPresenter, ManualClock,
+    InMemoryConnection, InMemoryGateway, InMemoryNetwork, InMemoryVerdictPresenter, ManualClock,
 };
-use application::{CONTEXT_REFRESH_SECONDS, EngineMessage, MeasurementEngine, VerdictView};
+use application::{
+    CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, MeasurementEngine, VerdictView,
+};
 use domain::{
-    ConnectionContext, ConnectionKind, Diagnosis, Grade, MacAddress, MeasuringCause, Metering,
-    Metric, ProbeOutcome, Target, Verdict,
+    ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, Grade, LocalProblem,
+    MacAddress, MeasuringCause, Metering, Metric, ProbeOutcome, Target, Unmeasurable, Verdict,
 };
 
 // Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
@@ -27,11 +29,13 @@ struct Harness {
     clock: ManualClock,
     presenter: InMemoryVerdictPresenter,
     connection: InMemoryConnection,
+    gateway: InMemoryGateway,
     engine: MeasurementEngine<
         InMemoryNetwork,
         ManualClock,
         InMemoryVerdictPresenter,
         InMemoryConnection,
+        InMemoryGateway,
     >,
 }
 
@@ -40,12 +44,16 @@ fn create_harness() -> Harness {
     let clock = ManualClock::default();
     let presenter = InMemoryVerdictPresenter::default();
     let connection = InMemoryConnection::default();
+    let gateway = InMemoryGateway::default();
     let targets = vec![Target::parse(FIRST_TARGET), Target::parse(SECOND_TARGET)];
     let engine = MeasurementEngine::new(
-        network.clone(),
-        clock.clone(),
-        presenter.clone(),
-        connection.clone(),
+        EnginePorts {
+            probe: network.clone(),
+            clock: clock.clone(),
+            presenter: presenter.clone(),
+            context_reader: connection.clone(),
+            gateway_probe: gateway.clone(),
+        },
         targets,
     );
     Harness {
@@ -53,6 +61,7 @@ fn create_harness() -> Harness {
         clock,
         presenter,
         connection,
+        gateway,
         engine,
     }
 }
@@ -513,6 +522,9 @@ async fn reports_warm_up_progress_while_measuring() {
 async fn diagnoses_no_reachable_server_while_offline() {
     // Arrange
     let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 20)));
     harness.warm_up_with_latency(FAST).await;
     harness.set_every_target(ProbeOutcome::Unreachable);
 
@@ -537,7 +549,10 @@ async fn names_the_worst_metric_when_out_of_threshold() {
     // Assert
     assert_eq!(
         harness.read_last_view().diagnosis,
-        Diagnosis::OutOfThreshold(Metric::Latency)
+        Diagnosis::OutOfThreshold {
+            metric: Metric::Latency,
+            fault: Fault::Undetermined(Unmeasurable::NoGateway),
+        }
     );
 }
 
@@ -788,4 +803,142 @@ async fn notices_another_box_at_the_same_address_once_its_mac_is_read() {
 
     // Assert
     assert_eq!(harness.read_presented_verdict(), Verdict::Measuring);
+}
+
+// Segment diagnosis
+
+async fn run_slow_internet_behind(
+    harness: &mut Harness,
+    kind: ConnectionKind,
+    gateway: GatewayEcho,
+) {
+    harness
+        .connection
+        .set_context(Some(create_context(kind, 30)));
+    harness.gateway.set_echo(gateway);
+    harness.warm_up_with_latency(SLOW).await;
+}
+
+#[tokio::test]
+async fn blames_the_operator_when_the_box_answers_well() {
+    // Arrange
+    let mut harness = create_harness();
+
+    // Act
+    run_slow_internet_behind(
+        &mut harness,
+        ConnectionKind::WiFi,
+        GatewayEcho::Answered(Duration::from_millis(3)),
+    )
+    .await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::OutOfThreshold {
+            metric: Metric::Latency,
+            fault: Fault::Operator,
+        }
+    );
+}
+
+#[tokio::test]
+async fn blames_the_local_link_when_the_box_answers_slowly() {
+    // Arrange
+    let mut harness = create_harness();
+
+    // Act
+    run_slow_internet_behind(
+        &mut harness,
+        ConnectionKind::WiFi,
+        GatewayEcho::Answered(Duration::from_millis(45)),
+    )
+    .await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::OutOfThreshold {
+            metric: Metric::Latency,
+            fault: Fault::LocalLink(LocalProblem::Latency),
+        }
+    );
+}
+
+#[tokio::test]
+async fn says_the_cause_is_undetermined_when_pings_are_refused() {
+    // Arrange
+    let mut harness = create_harness();
+
+    // Act
+    run_slow_internet_behind(
+        &mut harness,
+        ConnectionKind::WiFi,
+        GatewayEcho::NotPermitted,
+    )
+    .await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::OutOfThreshold {
+            metric: Metric::Latency,
+            fault: Fault::Undetermined(Unmeasurable::NotPermitted),
+        }
+    );
+}
+
+#[tokio::test]
+async fn blames_the_mobile_network_of_a_built_in_modem() {
+    // Arrange
+    let mut harness = create_harness();
+
+    // Act
+    run_slow_internet_behind(&mut harness, ConnectionKind::Cellular, GatewayEcho::Lost).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::OutOfThreshold {
+            metric: Metric::Latency,
+            fault: Fault::MobileNetwork,
+        }
+    );
+}
+
+#[tokio::test]
+async fn says_the_box_lost_internet_when_only_the_box_answers() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 31)));
+    harness
+        .gateway
+        .set_echo(GatewayEcho::Answered(Duration::from_millis(3)));
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_every_target(ProbeOutcome::Unreachable);
+
+    // Act
+    harness.run_seconds(5).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::GatewayWithoutInternet
+    );
+}
+
+#[tokio::test]
+async fn says_no_network_is_connected_without_any_route() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_every_target(ProbeOutcome::Unreachable);
+
+    // Act
+    harness.run_seconds(5).await;
+
+    // Assert
+    assert_eq!(harness.read_last_view().diagnosis, Diagnosis::NoNetwork);
 }

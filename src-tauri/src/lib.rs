@@ -3,6 +3,7 @@
 
 pub mod commands;
 mod display;
+mod path_display;
 mod shell_mode;
 mod shell_presenter;
 mod text_catalog;
@@ -12,12 +13,14 @@ mod windows;
 
 use std::time::Duration;
 
-use application::{EngineMessage, MeasurementEngine, NetworkChangeWatcher, list_default_targets};
+use application::{
+    EngineMessage, EnginePorts, MeasurementEngine, NetworkChangeWatcher, list_default_targets,
+};
 use display::ConnectionDisplay;
 use domain::Verdict;
 use infrastructure::{
-    FallbackLatencyProbe, IcmpEchoSender, InterfaceChangeWatcher, NetdevContextReader, SystemClock,
-    SystemTrayHost, TcpConnectionOpener,
+    FallbackLatencyProbe, IcmpEchoSender, IcmpGatewayProbe, InterfaceChangeWatcher,
+    NetdevContextReader, SystemClock, SystemTrayHost, TcpConnectionOpener,
 };
 use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
@@ -130,10 +133,13 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         .address();
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
     let engine = MeasurementEngine::new(
-        FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener),
-        SystemClock::start(),
-        ShellPresenter::new(app.clone(), tray, menu, catalog, store),
-        NetdevContextReader::new(route_reference),
+        EnginePorts {
+            probe: FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener),
+            clock: SystemClock::start(),
+            presenter: ShellPresenter::new(app.clone(), tray, menu, catalog, store),
+            context_reader: NetdevContextReader::new(route_reference),
+            gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
+        },
         targets,
     );
     let change_sender = sender.clone();

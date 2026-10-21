@@ -32,6 +32,14 @@
 - Connexion limitée (`Metering`) : `Metered` (payante au volume), `Constrained` (données réduites demandées par l'utilisateur), `Unmetered`, `Unknown`. `is_limited` vaut toujours pour un partage de connexion reconnu (macOS dit « libre » pour un partage Android), et pour un modem cellulaire quand le système ne dit rien.
 - Changement de réseau : le port `NetworkChangeWatcher` envoie `EngineMessage::NetworkChanged` ; le moteur relit le contexte au tick suivant (une rafale d'événements dans la même seconde coûte une seule lecture). Il compare au dernier réseau vu, même après un instant sans route (passer d'un Wi-Fi à un autre en traverse un). S'il voit un autre réseau (`is_same_network` : type, VPN, MAC et adresse de la passerelle quand les deux lectures les connaissent), il repart de zéro avec la cause « Nouveau réseau ». Ce qu'on apprend plus tard du même lien ne compte pas : MAC de passerelle enfin résolue, connexion limitée, partage de connexion reconnu grâce à un indice arrivé ensuite. La relecture périodique fait de même sans événement. Quand une lecture du même réseau ne connaît pas la passerelle, celle de la lecture précédente est gardée (`complete_with`) : une autre box à la même adresse IP est reconnue dès que sa MAC se lit.
 
+## Tronçon local et attribution
+
+- Le moteur pinge la passerelle chaque seconde par le port `GatewayProbe` (`IcmpGatewayProbe`, même émetteur ICMP que les cibles), en même temps que les cibles, **sans repli TCP** : une connexion TCP à une box ne dit rien de fiable sur le Wi-Fi. Pas de ping pour un modem cellulaire (pas de box) ni sans adresse de passerelle.
+- `GatewayWindow` (domaine) garde latence p90 sur 15 s et perte sur 60 s, comme le tronçon Internet. Le tronçon local est « non mesurable » (`Unmeasurable`) quand le système refuse le ping, quand la passerelle n'a répondu à aucun ping de la fenêtre (une box réglée pour ignorer le ping ; un lien vraiment coupé couperait aussi Internet), ou sans passerelle visible.
+- Le verdict reste celui du tronçon Internet. Quand il n'est pas Solide, `Fault::attribute` dit où : lien local mauvais (p90 > 30 ms ou perte > 1 %) → lien local ; lien local bon → opérateur, ou réseau mobile en partage de connexion ; modem intégré → réseau mobile ; non mesurable → indéterminé. Un lien local mauvais avec un Internet bon ne change rien.
+- Hors ligne : sans route, « Aucun réseau connecté » ; si la passerelle a répondu à la dernière seconde, « La box répond, mais Internet ne répond plus » ; sinon « Aucun serveur ne répond ».
+- Le chemin du popover (`PathDisplay`) vient du même `VerdictView` : latence de chaque tronçon, tronçon en cause marqué par un mot.
+
 ## Complexité
 
 | Opération                        | Temps                          | Espace                            |

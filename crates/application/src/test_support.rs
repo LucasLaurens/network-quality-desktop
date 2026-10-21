@@ -5,9 +5,13 @@ use std::future::Future;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use domain::{ConnectionContext, ProbeOutcome, Target, Timestamp};
+use std::net::Ipv4Addr;
 
-use crate::{Clock, ConnectionContextReader, LatencyProbe, VerdictPresenter, VerdictView};
+use domain::{ConnectionContext, GatewayEcho, ProbeOutcome, Target, Timestamp};
+
+use crate::{
+    Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, VerdictPresenter, VerdictView,
+};
 
 /// A simulated network: each target gives the outcome set for it; an unknown target is unreachable.
 #[derive(Debug, Clone, Default)]
@@ -52,6 +56,32 @@ impl InMemoryConnection {
 impl ConnectionContextReader for InMemoryConnection {
     fn read_context(&self) -> impl Future<Output = Option<ConnectionContext>> + Send {
         std::future::ready(*self.context.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+}
+
+/// A gateway the test sets to answer, stay silent or be refused; silent until told otherwise.
+#[derive(Debug, Clone)]
+pub struct InMemoryGateway {
+    echo: Arc<Mutex<GatewayEcho>>,
+}
+
+impl Default for InMemoryGateway {
+    fn default() -> Self {
+        Self {
+            echo: Arc::new(Mutex::new(GatewayEcho::Lost)),
+        }
+    }
+}
+
+impl InMemoryGateway {
+    pub fn set_echo(&self, echo: GatewayEcho) {
+        *self.echo.lock().unwrap_or_else(PoisonError::into_inner) = echo;
+    }
+}
+
+impl GatewayProbe for InMemoryGateway {
+    fn ping_gateway(&self, _gateway: Ipv4Addr) -> impl Future<Output = GatewayEcho> + Send {
+        std::future::ready(*self.echo.lock().unwrap_or_else(PoisonError::into_inner))
     }
 }
 

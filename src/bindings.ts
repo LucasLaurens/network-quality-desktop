@@ -48,6 +48,8 @@ export type ConnectionDisplay = {
 	openDashboardLabel: string,
 	/**  `None` without a default route. */
 	network: NetworkDisplay | null,
+	/**  `None` without a default route. */
+	path: PathDisplay | null,
 };
 
 /**  Sent to every window whenever what the popover shows changes. */
@@ -80,6 +82,27 @@ export type MetricDisplay = {
 export type NetworkDisplay = {
 	label: string,
 	connection: string,
+};
+
+export type PathDisplay = {
+	computer: string,
+	gateway: string,
+	internet: string,
+	local: SegmentDisplay,
+	internetSegment: SegmentDisplay,
+	/**  The whole path in one sentence, for screen readers. */
+	description: string,
+};
+
+export type SegmentDisplay = {
+	/**  The link and its latency, e.g. "Wi-Fi, 4 ms". */
+	label: string,
+	/**  "en cause" or "coupé" on the segment where the problem lies. */
+	fault: string | null,
+	/**  `None` while there is nothing to grade: measuring, or not measurable. */
+	state: DisplayState | null,
+	/**  Drawn as broken: the box answers, the Internet does not. */
+	isCut: boolean,
 };
 
 /**
