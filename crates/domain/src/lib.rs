@@ -15,10 +15,10 @@ mod timestamp;
 mod verdict;
 
 pub use connection::{
-    ConnectionContext, ConnectionKind, Gateway, InterfaceSnapshot, MacAddress, Medium,
+    ConnectionContext, ConnectionKind, Gateway, InterfaceSnapshot, MacAddress, Medium, Metering,
     NetworkIdentity,
 };
-pub use diagnosis::{Diagnosis, Metric};
+pub use diagnosis::{Diagnosis, MeasuringCause, Metric};
 pub use grade::{Grade, GradeBounds, Scalable, Thresholds};
 pub use hysteresis::Hysteresis;
 pub use latency_window::{LatencyWindow, compute_median};

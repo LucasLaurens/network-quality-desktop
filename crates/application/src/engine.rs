@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use domain::{
     ConnectionContext, Diagnosis, Grade, GradeBounds, Hysteresis, LatencyWindow, LossRate,
-    LossWindow, Metric, OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Verdict,
-    compute_median,
+    LossWindow, MeasuringCause, Metric, OfflineDetector, ProbeOutcome, Scalable, Target,
+    Thresholds, Verdict, compute_median,
 };
 use futures_util::future::{join, join_all};
 use tokio::sync::mpsc;
@@ -20,6 +20,9 @@ pub const CONTEXT_REFRESH_SECONDS: u32 = 10;
 pub enum EngineMessage {
     /// One second elapsed: probe every target and recompute the verdict.
     Tick,
+    /// The system reports an interface or address change: read the connection at the next tick.
+    /// A burst of events within one second costs a single reading.
+    NetworkChanged,
 }
 
 /// One metric as shown to the user: its value, its grade and whether it is close to getting worse.
@@ -63,6 +66,9 @@ pub struct MeasurementEngine<P, C, V, R> {
     presenter: V,
     context_reader: R,
     context: Option<ConnectionContext>,
+    /// The last network seen, kept through a moment without route: switching from one Wi-Fi to
+    /// another passes through one.
+    last_network: Option<ConnectionContext>,
     seconds_since_context: u32,
     targets: Vec<Target>,
     thresholds: Thresholds,
@@ -73,6 +79,7 @@ pub struct MeasurementEngine<P, C, V, R> {
     offline: OfflineDetector,
     hysteresis: Hysteresis,
     samples_since_restart: u32,
+    measuring_cause: MeasuringCause,
 }
 
 impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
@@ -87,6 +94,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
             presenter,
             context_reader,
             context: None,
+            last_network: None,
             // Due at once: the first tick reads the connection.
             seconds_since_context: CONTEXT_REFRESH_SECONDS,
             targets,
@@ -97,6 +105,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
             offline: OfflineDetector::default(),
             hysteresis: Hysteresis::default(),
             samples_since_restart: 0,
+            measuring_cause: MeasuringCause::FirstMeasures,
         }
     }
 
@@ -105,6 +114,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
     pub async fn handle(&mut self, message: EngineMessage) {
         match message {
             EngineMessage::Tick => self.measure_one_second().await,
+            EngineMessage::NetworkChanged => self.seconds_since_context = CONTEXT_REFRESH_SECONDS,
         }
     }
 
@@ -134,13 +144,32 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
         )
         .await;
         if let Some(context) = context {
-            self.context = context;
-            self.seconds_since_context = 0;
+            self.record_context(context);
         }
         self.seconds_since_context += 1;
         self.record_outcomes(&outcomes);
         let view = self.compute_view(&outcomes);
         self.presenter.present(&view);
+    }
+
+    /// Starts measuring again when another network took over; noise (an address renewed, a
+    /// virtual interface coming and going) leaves the network and the verdict as they are. O(1).
+    fn record_context(&mut self, context: Option<ConnectionContext>) {
+        if let Some(current) = context {
+            self.last_network = Some(match self.last_network {
+                Some(previous) if previous.is_same_network(&current) => {
+                    current.complete_with(&previous)
+                }
+                Some(_) => {
+                    self.restart();
+                    self.measuring_cause = MeasuringCause::NewNetwork;
+                    current
+                }
+                None => current,
+            });
+        }
+        self.context = context;
+        self.seconds_since_context = 0;
     }
 
     /// O(k log k) time, O(k) space for k targets.
@@ -232,6 +261,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
             Verdict::Measuring => Diagnosis::Measuring {
                 collected: self.samples_since_restart.min(WARM_UP_SAMPLES),
                 needed: WARM_UP_SAMPLES,
+                cause: self.measuring_cause,
             },
             Verdict::Graded(displayed) => diagnose_graded(displayed, &grades),
         };
@@ -265,6 +295,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
         self.loss = LossWindow::default();
         self.hysteresis = Hysteresis::default();
         self.samples_since_restart = 0;
+        self.measuring_cause = MeasuringCause::FirstMeasures;
         // The way back may be another network: read it at once (every second while offline).
         self.seconds_since_context = CONTEXT_REFRESH_SECONDS;
     }

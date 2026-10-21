@@ -2,13 +2,13 @@
 
 La pastille de la barre des menus montre l'état de la connexion. Chaque état a une forme et une couleur, pour rester lisible sans distinguer les couleurs.
 
-| État            | Forme                 | Quand                                                                            |
-| --------------- | --------------------- | -------------------------------------------------------------------------------- |
-| Solide          | disque plein vert     | les trois mesures sont bonnes                                                    |
-| Instable        | demi-disque ambre     | la pire mesure est dans la zone intermédiaire                                    |
-| Dégradée        | triangle rouge        | la pire mesure dépasse son seuil haut                                            |
-| Hors ligne      | anneau barré gris     | aucun serveur ne répond, ni au ping ni en TCP, pendant 5 secondes                |
-| Mesure en cours | anneau pointillé bleu | au démarrage et au retour de connexion, tant que 10 mesures n'ont pas été reçues |
+| État            | Forme                 | Quand                                                                                                                   |
+| --------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Solide          | disque plein vert     | les trois mesures sont bonnes                                                                                           |
+| Instable        | demi-disque ambre     | la pire mesure est dans la zone intermédiaire                                                                           |
+| Dégradée        | triangle rouge        | la pire mesure dépasse son seuil haut                                                                                   |
+| Hors ligne      | anneau barré gris     | aucun serveur ne répond, ni au ping ni en TCP, pendant 5 secondes                                                       |
+| Mesure en cours | anneau pointillé bleu | au démarrage, au retour de connexion et quand un autre réseau prend le relais, tant que 10 mesures n'ont pas été reçues |
 
 Survoler la pastille affiche le nom de l'état (sauf sous Linux). Un clic sur la pastille (macOS et Windows) ouvre le **popover** : l'état, le [diagnostic](diagnostic.md), et les trois mesures avec leur méthode et une jauge qui situe la valeur entre les zones Solide, Instable et Dégradée. Le popover se ferme dès qu'on clique ailleurs, sur un nouveau clic sur la pastille ou avec Échap ; son bouton « Ouvrir le tableau de bord » ouvre la fenêtre principale.
 
@@ -26,6 +26,10 @@ Le popover nomme le réseau à droite de l'état, avec le type de connexion en d
 | Autre                               | Réseau non reconnu                                      | connexion d'un type inconnu, ou lien PPP (DSL, clé 3G)                                                                                                                |
 
 Un réseau est reconnu par l'adresse MAC de sa passerelle et son type ; le nom du Wi-Fi n'est qu'un libellé et remplacera le nom générique avec le ticket Wi-Fi. Le contexte est relu toutes les 10 secondes.
+
+Quand les données sont comptées (forfait mobile, partage de connexion, mode « données réduites » de macOS), le type de connexion l'indique : « Wi-Fi, connexion limitée ». Sans réponse du système, un modem cellulaire ou un partage de connexion est supposé limité.
+
+Dès que le système signale un changement d'interface ou d'adresse, l'app relit le réseau. Si c'est un autre réseau (autre passerelle, autre type, VPN activé ou coupé), elle oublie les mesures et repasse en **Mesure en cours**. Sinon, rien ne change : une adresse renouvelée ou une interface virtuelle ne remet pas l'état à zéro. Sans événement, la relecture toutes les 10 secondes remarque aussi le changement.
 
 ## Menu de la pastille
 

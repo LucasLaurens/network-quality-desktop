@@ -30,6 +30,11 @@ tauri-build = "~2.7.3"
 tauri-plugin-positioner = { version = "=2.4.0", features = ["tray-icon"] }
 tauri-plugin-opener = "=2.5.5"
 netdev = "=0.46.3"
+netwatcher = "=0.8.0"
+# Already in the tree through Tauri: reused for the native network APIs.
+block2 = "=0.6.2"
+dispatch2 = "=0.3.1"
+windows = "=0.62.2"
 # Already linked by tao on Linux: reusing it adds no native dependency.
 dbus = "=0.9.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }

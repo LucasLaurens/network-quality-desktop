@@ -1,6 +1,6 @@
 # Plateformes
 
-Adaptateurs par OS, permissions, barre système, veille et réveil : cette partie sera écrite avec les tickets d'adaptateurs natifs.
+Adaptateurs par système, permissions et barre système. La veille et le réveil s'y ajouteront avec leur ticket.
 
 ## Windows : manifeste de l'application
 
@@ -15,6 +15,14 @@ La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le gr
 - `netdev` donne sur les trois systèmes le type d'interface, l'interface par défaut, sa passerelle et l'adresse MAC de celle-ci (zéros quand elle n'est pas résolue).
 - macOS : la table ARP est filtrée par la protection « Réseau local ». Un binaire lancé depuis un terminal ou un test peut ne voir aucune adresse MAC alors que `arp` en voit une dans le terminal : le réseau garde son nom générique, mais il n'est plus reconnaissable et l'indice « adresse aléatoire » du partage de connexion manque. L'app déclare `NSLocalNetworkUsageDescription` (`src-tauri/Info.plist`, fusionné dans le bundle) pour que macOS demande l'autorisation. À vérifier sur l'app empaquetée.
 - Windows : le nom système d'une interface est un GUID ; les VPN sont reconnus par leur type ou par leur description (WireGuard, Wintun, TAP-Windows, OpenVPN, Tailscale). Un VPN au nom inconnu, présenté comme une carte Ethernet, passe pour une connexion Ethernet.
+
+## Connexion limitée et changements de réseau
+
+- macOS : `nw_path_monitor` de Network.framework par FFI direct (`block2`, `dispatch2`, sans Swift), dans `crates/infrastructure/src/metering/macos.rs`. Le moniteur tourne sur sa propre file pour toute la vie de l'app et garde la dernière réponse (`isExpensive` puis `isConstrained`). La toute première lecture répond « inconnu » : la première mise à jour arrive un instant après.
+- Windows : `ConnectionCost` du profil de connexion Internet (WinRT, crate `windows` déjà présente via Tauri) : `Fixed` et `Variable` sont limitées.
+- Linux : propriété `Metered` de NetworkManager sur le bus système (crate `dbus`) ; les réponses devinées par NetworkManager comptent. Sans NetworkManager, la réponse est « inconnue » et le domaine se rabat sur le type de lien.
+- Changements : `netwatcher` (netlink sous Linux, IP Helper sous Windows, socket de routage sous macOS) sur un fil dédié. Il signale aussi le bruit (interfaces virtuelles, adresses IPv6 temporaires) : le moteur décide en comparant le réseau relu. Sous Linux, il suit les interfaces et les adresses mais pas la table de routage : une route par défaut qui bascule sans changement d'adresse n'est vue qu'à la relecture suivante (10 s au plus).
+- Essai réel sous macOS (partage de connexion Android, reconnu à l'option DHCP `ANDROID_METERED`) : `isExpensive` vaut `false`. macOS ne signale pas un partage Android comme payant ; seul le partage iPhone l'est (non vérifié faute d'iPhone). Sur ce Mac, un partage Android n'a donc qu'un indice (adresse de passerelle aléatoire, quand elle est lisible) et reste « Wi-Fi ».
 
 ## Icône de barre système
 

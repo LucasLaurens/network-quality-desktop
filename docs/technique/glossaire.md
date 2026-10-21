@@ -19,3 +19,4 @@ Le code est en anglais, l'interface et la documentation en français. Chaque con
 | Identité réseau   | `NetworkIdentity`   | MAC de la passerelle + type de connexion                                                 |
 | Support           | `Medium`            | Ce qui porte une interface selon le système : Wi-Fi, Ethernet, cellulaire, tunnel        |
 | Type de connexion | `ConnectionKind`    | Ce que l'utilisateur reconnaît : Ethernet, Wi-Fi, modem cellulaire, partage de connexion |
+| Connexion limitée | `Metering`          | Ce que le système dit du coût des données : payante, réduite, libre, inconnue            |

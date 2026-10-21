@@ -14,12 +14,12 @@ Le « pourquoi » s'affiche sous l'état, dans le popover. Il se compose de troi
 | Une mesure approche de son seuil                                                   | Bonne connexion, proche de la limite.             | aucune                         | ex. « Latence 85 ms, seuil 100 ms »                                       |
 | Une mesure dépasse son seuil                                                       | La connexion ne tient pas les seuils de la visio. | aucune                         | ex. « Gigue 41 ms, seuil 30 ms »                                          |
 | Les mesures sont revenues dans les seuils, l'état attend 30 s avant de s'améliorer | La connexion s'améliore, confirmation en cours.   | aucune                         | aucun                                                                     |
-| Premières mesures                                                                  | Premières mesures en cours.                       | aucune                         | progression, ex. « 6 sur 10 » (masquée une fois les 10 mesures atteintes) |
+| Premières mesures (lancement, retour d'une coupure)                                | Premières mesures en cours.                       | aucune                         | progression, ex. « 6 sur 10 » (masquée une fois les 10 mesures atteintes) |
+| Un autre réseau a pris le relais                                                   | Nouveau réseau, premières mesures en cours.       | aucune                         | progression                                                               |
 | Aucun serveur joignable                                                            | Aucun serveur ne répond.                          | Vérifier le Wi-Fi ou le câble. | aucun                                                                     |
 
-Deux textes s'écartent volontairement de la décision sur le ton :
+Un texte s'écarte volontairement de la décision sur le ton :
 
-- « Premières mesures en cours. » au lieu de « Nouveau réseau, premières mesures en cours. » : le même état s'affiche au démarrage, quand rien ne dit que le réseau est nouveau.
 - « Aucun serveur ne répond. » au lieu de « Aucun réseau connecté. » : l'app ne sait pas encore si un réseau est connecté (Wi-Fi sans Internet, box en panne). Le texte prévu reviendra avec la détection du réseau.
 
 Sous chaque mesure proche de son seuil, le popover indique « Proche du seuil ». Chaque jauge est lue par les lecteurs d'écran avec ses seuils, par exemple « Solide sous 100 ms, Dégradée au-delà de 300 ms ».

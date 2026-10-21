@@ -76,6 +76,18 @@ impl InterfaceSnapshot {
     }
 }
 
+/// Whether the system says data costs money on this connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Metering {
+    /// The system does not say (no API, or no answer).
+    Unknown,
+    Unmetered,
+    /// Billed by volume: a mobile plan, a phone hotspot.
+    Metered,
+    /// The user asked to save data on this network (macOS Low Data Mode).
+    Constrained,
+}
+
 /// The kind of connection the user recognises.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ConnectionKind {
@@ -101,26 +113,72 @@ pub struct ConnectionContext {
     /// Measurements go through the VPN: they describe what the user lives.
     pub is_vpn: bool,
     pub gateway: Option<MacAddress>,
+    /// Tells two networks apart when their gateway's MAC address cannot be read.
+    pub gateway_address: Option<Ipv4Addr>,
+    pub metering: Metering,
 }
 
 impl ConnectionContext {
     /// `measured` carries the traffic to the measurement targets; `others` are the other
-    /// interfaces that are up, where the physical link under a VPN is looked for. O(i) time and
-    /// O(1) space for i interfaces.
+    /// interfaces that are up, where the physical link under a VPN is looked for; `metering` is
+    /// what the system says of the connection in use. O(i) time and O(1) space for i interfaces.
     #[must_use]
-    pub fn classify(measured: &InterfaceSnapshot, others: &[InterfaceSnapshot]) -> Self {
+    pub fn classify(
+        measured: &InterfaceSnapshot,
+        others: &[InterfaceSnapshot],
+        metering: Metering,
+    ) -> Self {
         if !measured.is_tunnel_like() {
-            return Self::describe_physical(measured, false);
+            return Self::describe_physical(measured, false, metering);
         }
         match (find_physical_link(others), measured.medium) {
-            (Some(physical), _) => Self::describe_physical(physical, true),
-            (None, Medium::PointToPoint) => Self::describe_physical(measured, false),
+            (Some(physical), _) => Self::describe_physical(physical, true, metering),
+            (None, Medium::PointToPoint) => Self::describe_physical(measured, false, metering),
             (None, _) => Self {
                 kind: ConnectionKind::Other,
                 is_vpn: true,
                 gateway: None,
+                gateway_address: None,
+                metering,
             },
         }
+    }
+
+    /// Data counts on this connection. A recognised phone hotspot always counts (macOS calls an
+    /// Android hotspot free); without an answer from the system, so does a cellular modem.
+    #[must_use]
+    pub fn is_limited(&self) -> bool {
+        match self.metering {
+            Metering::Metered | Metering::Constrained => true,
+            Metering::Unmetered => self.kind == ConnectionKind::PhoneHotspot,
+            Metering::Unknown => matches!(
+                self.kind,
+                ConnectionKind::Cellular | ConnectionKind::PhoneHotspot
+            ),
+        }
+    }
+
+    /// This reading, with the gateway known from an `earlier` reading of the same network where
+    /// this one could not read it: a gateway that later turns out different then still shows. O(1).
+    #[must_use]
+    pub fn complete_with(&self, earlier: &Self) -> Self {
+        Self {
+            gateway: self.gateway.or(earlier.gateway),
+            gateway_address: self.gateway_address.or(earlier.gateway_address),
+            ..*self
+        }
+    }
+
+    /// Whether `other` is still this network. What is learnt later about the same link (a
+    /// gateway MAC resolved, a hotspot hint, the metering) never makes it a new one. O(1).
+    #[must_use]
+    pub fn is_same_network(&self, other: &Self) -> bool {
+        let is_same_kind = self.kind == other.kind
+            || [self.kind, other.kind].contains(&ConnectionKind::PhoneHotspot);
+        is_same_kind
+            && self.is_vpn == other.is_vpn
+            && agree(self.gateway, other.gateway)
+            && agree(self.gateway_address, other.gateway_address)
     }
 
     /// `None` while the gateway address is unknown: such a network cannot be recognised later.
@@ -133,8 +191,8 @@ impl ConnectionContext {
     }
 
     /// O(1).
-    fn describe_physical(snapshot: &InterfaceSnapshot, is_vpn: bool) -> Self {
-        let kind = if count_hotspot_signals(snapshot) >= HOTSPOT_SIGNALS_NEEDED {
+    fn describe_physical(snapshot: &InterfaceSnapshot, is_vpn: bool, metering: Metering) -> Self {
+        let kind = if count_hotspot_signals(snapshot, metering) >= HOTSPOT_SIGNALS_NEEDED {
             ConnectionKind::PhoneHotspot
         } else {
             match snapshot.medium {
@@ -148,6 +206,8 @@ impl ConnectionContext {
             kind,
             is_vpn,
             gateway: snapshot.gateway.and_then(|gateway| gateway.mac),
+            gateway_address: snapshot.gateway.and_then(|gateway| gateway.ipv4),
+            metering,
         }
     }
 }
@@ -164,7 +224,7 @@ fn find_physical_link(others: &[InterfaceSnapshot]) -> Option<&InterfaceSnapshot
 
 /// Independent hints that a phone shares its connection. The addressing plan counts once: a
 /// router may be configured like a phone. O(1).
-fn count_hotspot_signals(snapshot: &InterfaceSnapshot) -> usize {
+fn count_hotspot_signals(snapshot: &InterfaceSnapshot, metering: Metering) -> usize {
     let has_phone_gateway = snapshot
         .gateway
         .and_then(|gateway| gateway.ipv4)
@@ -180,10 +240,18 @@ fn count_hotspot_signals(snapshot: &InterfaceSnapshot) -> usize {
         has_phone_gateway || is_on_iphone_network,
         snapshot.has_phone_name,
         has_random_gateway,
+        metering == Metering::Metered,
     ]
     .into_iter()
     .filter(|signal| *signal)
     .count()
+}
+
+/// Two readings disagree only when both know the value.
+fn agree<T: PartialEq>(first: Option<T>, second: Option<T>) -> bool {
+    first
+        .zip(second)
+        .is_none_or(|(first, second)| first == second)
 }
 
 fn mask(address: Ipv4Addr, prefix: u8) -> Ipv4Addr {
@@ -229,11 +297,11 @@ mod tests {
 
         // Act & Assert
         assert_eq!(
-            ConnectionContext::classify(&wifi, &[]).kind,
+            ConnectionContext::classify(&wifi, &[], Metering::Unknown).kind,
             ConnectionKind::WiFi
         );
         assert_eq!(
-            ConnectionContext::classify(&ethernet, &[]).kind,
+            ConnectionContext::classify(&ethernet, &[], Metering::Unknown).kind,
             ConnectionKind::Ethernet
         );
     }
@@ -245,7 +313,7 @@ mod tests {
         snapshot.ipv4 = Some((Ipv4Addr::new(172, 20, 10, 3), IPHONE_PREFIX));
 
         // Act
-        let context = ConnectionContext::classify(&snapshot, &[]);
+        let context = ConnectionContext::classify(&snapshot, &[], Metering::Unknown);
 
         // Assert
         assert_eq!(context.kind, ConnectionKind::PhoneHotspot);
@@ -260,11 +328,11 @@ mod tests {
 
         // Act & Assert
         assert_eq!(
-            ConnectionContext::classify(&iphone_like, &[]).kind,
+            ConnectionContext::classify(&iphone_like, &[], Metering::Unknown).kind,
             ConnectionKind::WiFi
         );
         assert_eq!(
-            ConnectionContext::classify(&android_like, &[]).kind,
+            ConnectionContext::classify(&android_like, &[], Metering::Unknown).kind,
             ConnectionKind::WiFi
         );
     }
@@ -276,7 +344,7 @@ mod tests {
         snapshot.has_phone_name = true;
 
         // Act
-        let context = ConnectionContext::classify(&snapshot, &[]);
+        let context = ConnectionContext::classify(&snapshot, &[], Metering::Unknown);
 
         // Assert
         assert_eq!(context.kind, ConnectionKind::PhoneHotspot);
@@ -293,7 +361,7 @@ mod tests {
         });
 
         // Act
-        let context = ConnectionContext::classify(&snapshot, &[]);
+        let context = ConnectionContext::classify(&snapshot, &[], Metering::Unknown);
 
         // Assert
         assert_eq!(context.gateway, MacAddress::from_octets(ROUTER_MAC));
@@ -305,7 +373,8 @@ mod tests {
         let wifi = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
 
         // Act
-        let context = ConnectionContext::classify(&create_tunnel(Medium::Tunnel), &[wifi]);
+        let context =
+            ConnectionContext::classify(&create_tunnel(Medium::Tunnel), &[wifi], Metering::Unknown);
 
         // Assert
         assert_eq!(
@@ -314,6 +383,8 @@ mod tests {
                 kind: ConnectionKind::WiFi,
                 is_vpn: true,
                 gateway: MacAddress::from_octets(ROUTER_MAC),
+                gateway_address: Some(Ipv4Addr::new(192, 168, 1, 1)),
+                metering: Metering::Unknown,
             }
         );
     }
@@ -329,8 +400,11 @@ mod tests {
         let ethernet = create_snapshot(Medium::Ethernet, [10, 0, 0, 1], ROUTER_MAC);
 
         // Act
-        let context =
-            ConnectionContext::classify(&create_tunnel(Medium::Tunnel), &[unresolved, ethernet]);
+        let context = ConnectionContext::classify(
+            &create_tunnel(Medium::Tunnel),
+            &[unresolved, ethernet],
+            Metering::Unknown,
+        );
 
         // Assert
         assert_eq!(context.kind, ConnectionKind::Ethernet);
@@ -339,7 +413,8 @@ mod tests {
     #[test]
     fn keeps_measuring_through_a_vpn_whose_physical_link_is_hidden() {
         // Act
-        let context = ConnectionContext::classify(&create_tunnel(Medium::Tunnel), &[]);
+        let context =
+            ConnectionContext::classify(&create_tunnel(Medium::Tunnel), &[], Metering::Unknown);
 
         // Assert
         assert_eq!(context.kind, ConnectionKind::Other);
@@ -350,7 +425,11 @@ mod tests {
     #[test]
     fn treats_a_lone_point_to_point_link_as_the_connection_itself() {
         // Act
-        let context = ConnectionContext::classify(&create_tunnel(Medium::PointToPoint), &[]);
+        let context = ConnectionContext::classify(
+            &create_tunnel(Medium::PointToPoint),
+            &[],
+            Metering::Unknown,
+        );
 
         // Assert
         assert!(!context.is_vpn);
@@ -363,7 +442,11 @@ mod tests {
         let wifi = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
 
         // Act
-        let context = ConnectionContext::classify(&create_tunnel(Medium::PointToPoint), &[wifi]);
+        let context = ConnectionContext::classify(
+            &create_tunnel(Medium::PointToPoint),
+            &[wifi],
+            Metering::Unknown,
+        );
 
         // Assert
         assert!(context.is_vpn);
@@ -376,7 +459,7 @@ mod tests {
         let snapshot = create_snapshot(Medium::Ethernet, [192, 168, 1, 1], ROUTER_MAC);
 
         // Act
-        let identity = ConnectionContext::classify(&snapshot, &[]).identify();
+        let identity = ConnectionContext::classify(&snapshot, &[], Metering::Unknown).identify();
 
         // Assert
         assert_eq!(
@@ -392,5 +475,140 @@ mod tests {
     fn treats_an_all_zero_address_as_unresolved() {
         // Act & Assert
         assert_eq!(MacAddress::from_octets([0; 6]), None);
+    }
+
+    #[test]
+    fn recognises_an_iphone_hotspot_the_system_calls_metered() {
+        // Arrange
+        let mut snapshot = create_snapshot(Medium::WiFi, [172, 20, 10, 1], ROUTER_MAC);
+        snapshot.ipv4 = Some((Ipv4Addr::new(172, 20, 10, 3), IPHONE_PREFIX));
+
+        // Act
+        let context = ConnectionContext::classify(&snapshot, &[], Metering::Metered);
+
+        // Assert
+        assert_eq!(context.kind, ConnectionKind::PhoneHotspot);
+    }
+
+    #[test]
+    fn never_calls_a_hotspot_from_metering_alone() {
+        // Arrange
+        let snapshot = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+
+        // Act
+        let context = ConnectionContext::classify(&snapshot, &[], Metering::Metered);
+
+        // Assert
+        assert_eq!(context.kind, ConnectionKind::WiFi);
+        assert!(context.is_limited());
+    }
+
+    #[test]
+    fn assumes_a_cellular_link_limited_when_the_system_does_not_say() {
+        // Arrange
+        let cellular = create_snapshot(Medium::Cellular, [10, 64, 0, 1], ROUTER_MAC);
+        let wifi = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+
+        // Act
+        let cellular = ConnectionContext::classify(&cellular, &[], Metering::Unknown);
+        let wifi = ConnectionContext::classify(&wifi, &[], Metering::Unknown);
+
+        // Assert
+        assert!(cellular.is_limited());
+        assert!(!wifi.is_limited());
+    }
+
+    #[test]
+    fn counts_the_low_data_mode_as_limited() {
+        // Arrange
+        let snapshot = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+
+        // Act
+        let context = ConnectionContext::classify(&snapshot, &[], Metering::Constrained);
+
+        // Assert
+        assert!(context.is_limited());
+    }
+
+    #[test]
+    fn tells_networks_apart_by_their_gateway_even_without_its_mac() {
+        // Arrange
+        let mut home = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+        let mut office = create_snapshot(Medium::WiFi, [10, 0, 0, 1], ROUTER_MAC);
+        for snapshot in [&mut home, &mut office] {
+            if let Some(gateway) = snapshot.gateway.as_mut() {
+                gateway.mac = None;
+            }
+        }
+        let home_first = ConnectionContext::classify(&home, &[], Metering::Unknown);
+        let home_metered = ConnectionContext::classify(&home, &[], Metering::Metered);
+        let office = ConnectionContext::classify(&office, &[], Metering::Unknown);
+
+        // Act & Assert
+        assert!(home_first.is_same_network(&home_metered));
+        assert!(!home_first.is_same_network(&office));
+    }
+
+    #[test]
+    fn keeps_the_network_when_its_gateway_mac_becomes_readable() {
+        // Arrange
+        let resolved = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+        let mut unresolved = resolved;
+        if let Some(gateway) = unresolved.gateway.as_mut() {
+            gateway.mac = None;
+        }
+        let before = ConnectionContext::classify(&unresolved, &[], Metering::Unknown);
+        let after = ConnectionContext::classify(&resolved, &[], Metering::Unknown);
+
+        // Act & Assert
+        assert!(before.is_same_network(&after));
+    }
+
+    #[test]
+    fn keeps_the_network_when_a_late_hint_reveals_a_hotspot() {
+        // Arrange
+        let snapshot = create_snapshot(Medium::WiFi, [192, 168, 152, 167], RANDOM_MAC);
+        let before = ConnectionContext::classify(&snapshot, &[], Metering::Unknown);
+        let after = ConnectionContext::classify(&snapshot, &[], Metering::Metered);
+
+        // Act & Assert
+        assert_eq!(after.kind, ConnectionKind::PhoneHotspot);
+        assert!(before.is_same_network(&after));
+    }
+
+    #[test]
+    fn counts_a_recognised_hotspot_as_limited_even_when_the_system_says_otherwise() {
+        // Arrange
+        let mut snapshot = create_snapshot(Medium::Ethernet, [192, 168, 42, 129], ROUTER_MAC);
+        snapshot.has_phone_name = true;
+
+        // Act
+        let context = ConnectionContext::classify(&snapshot, &[], Metering::Unmetered);
+
+        // Assert
+        assert_eq!(context.kind, ConnectionKind::PhoneHotspot);
+        assert!(context.is_limited());
+    }
+
+    #[test]
+    fn keeps_what_an_earlier_reading_knew_of_the_same_network() {
+        // Arrange
+        let known = ConnectionContext::classify(
+            &create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC),
+            &[],
+            Metering::Unknown,
+        );
+        let mut unresolved = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+        if let Some(gateway) = unresolved.gateway.as_mut() {
+            gateway.mac = None;
+        }
+        let later = ConnectionContext::classify(&unresolved, &[], Metering::Metered);
+
+        // Act
+        let merged = later.complete_with(&known);
+
+        // Assert
+        assert_eq!(merged.gateway, known.gateway);
+        assert_eq!(merged.metering, Metering::Metered);
     }
 }
