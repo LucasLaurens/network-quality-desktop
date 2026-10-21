@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>NSLocationUsageDescription</key>
+  <string>L'app lit le nom du réseau Wi-Fi, que macOS ne donne qu'avec l'accès à la localisation. Elle ne lit pas la position.</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>L'app lit le nom du réseau Wi-Fi, que macOS ne donne qu'avec l'accès à la localisation. Elle ne lit pas la position.</string>
   <key>NSLocalNetworkUsageDescription</key>
   <string>L'app lit l'adresse de la box ou du téléphone qui partage sa connexion, pour reconnaître le réseau utilisé.</string>
 </dict>

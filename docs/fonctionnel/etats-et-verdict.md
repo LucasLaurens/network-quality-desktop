@@ -25,7 +25,9 @@ Le popover nomme le réseau à droite de l'état, avec le type de connexion en d
 | VPN                                 | Réseau via un VPN, ou le nom de la connexion en dessous | la mesure passe par le VPN ; le type affiché est « Wi-Fi, via un VPN » quand la connexion physique est connue, sinon « VPN »                                          |
 | Autre                               | Réseau non reconnu                                      | connexion d'un type inconnu, ou lien PPP (DSL, clé 3G)                                                                                                                |
 
-Un réseau est reconnu par l'adresse MAC de sa passerelle et son type ; le nom du Wi-Fi n'est qu'un libellé et remplacera le nom générique avec le ticket Wi-Fi. Le contexte est relu toutes les 10 secondes.
+Un réseau est reconnu par l'adresse MAC de sa passerelle et son type ; le nom du Wi-Fi n'est qu'un libellé. Le contexte est relu toutes les 10 secondes.
+
+En Wi-Fi, le popover affiche le nom du réseau et la bande (« Wi-Fi 5 GHz »). macOS et Windows ne donnent ce nom qu'avec l'accès à la localisation : sans lui, le popover affiche « Wi-Fi (nom masqué) » et un lien **Afficher le nom du réseau**. Sous macOS, le lien fait apparaître la demande du système la première fois, puis ouvre les réglages de localisation ; sous Windows, il ouvre les réglages (Windows pose lui-même la question une fois). L'app ne lit jamais la position. Refuser ne change rien d'autre : le signal, la bande, le canal et le débit restent mesurés. Linux donne le nom sans permission.
 
 Quand les données sont comptées (forfait mobile, partage de connexion, mode « données réduites » de macOS), le type de connexion l'indique : « Wi-Fi, connexion limitée ». Sans réponse du système, un modem cellulaire ou un partage de connexion est supposé limité.
 

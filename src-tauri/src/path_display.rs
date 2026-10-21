@@ -235,6 +235,7 @@ mod tests {
                 metering: Metering::Unmetered,
             }),
             local,
+            wifi: None,
         }
     }
 

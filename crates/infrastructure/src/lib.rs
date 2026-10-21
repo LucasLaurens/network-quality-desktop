@@ -10,6 +10,7 @@ mod netdev_context_reader;
 mod system_clock;
 mod system_tray_host;
 mod tcp_connection_opener;
+mod wifi;
 
 pub use fallback_latency_probe::{ConnectionOpener, EchoResult, EchoSender, FallbackLatencyProbe};
 pub use icmp_echo_sender::IcmpEchoSender;
@@ -19,3 +20,4 @@ pub use netdev_context_reader::NetdevContextReader;
 pub use system_clock::SystemClock;
 pub use system_tray_host::SystemTrayHost;
 pub use tcp_connection_opener::TcpConnectionOpener;
+pub use wifi::{LocationRequest, SystemWifiReader, request_location_permission};

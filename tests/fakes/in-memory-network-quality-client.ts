@@ -56,7 +56,7 @@ export function createConnectionDisplay(overrides: Partial<ConnectionDisplay> = 
     detail: null,
     metrics: [createMetricDisplay(), createMetricDisplay(), createMetricDisplay()],
     openDashboardLabel: faker.lorem.words(3),
-    network: { label: faker.company.name(), connection: faker.lorem.words(2) },
+    network: { label: faker.company.name(), connection: faker.lorem.words(2), revealLabel: null },
     path: createPathDisplay(),
     ...overrides,
   }
@@ -80,6 +80,7 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   popoverClosings = 0
   extensionPageOpenings = 0
   quitRequests = 0
+  nameRevealRequests = 0
   private isWindowModeReadFailing = false
   private listeners: ((display: ConnectionDisplay) => void)[] = []
   private isHoldingReads = false
@@ -149,6 +150,11 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   quitApp(): Promise<void> {
     this.quitRequests += 1
+    return Promise.resolve()
+  }
+
+  revealNetworkName(): Promise<void> {
+    this.nameRevealRequests += 1
     return Promise.resolve()
   }
 

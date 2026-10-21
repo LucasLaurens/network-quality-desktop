@@ -24,6 +24,15 @@ La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le gr
 - Changements : `netwatcher` (netlink sous Linux, IP Helper sous Windows, socket de routage sous macOS) sur un fil dédié. Il signale aussi le bruit (interfaces virtuelles, adresses IPv6 temporaires) : le moteur décide en comparant le réseau relu. Sous Linux, il suit les interfaces et les adresses mais pas la table de routage : une route par défaut qui bascule sans changement d'adresse n'est vue qu'à la relecture suivante (10 s au plus).
 - Essai réel sous macOS (partage de connexion Android, reconnu à l'option DHCP `ANDROID_METERED`) : `isExpensive` vaut `false`. macOS ne signale pas un partage Android comme payant ; seul le partage iPhone l'est (non vérifié faute d'iPhone). Sur ce Mac, un partage Android n'a donc qu'un indice (adresse de passerelle aléatoire, quand elle est lisible) et reste « Wi-Fi ».
 
+## Wi-Fi
+
+- Lu toutes les 10 secondes avec le contexte, par le port `WifiReader` (`SystemWifiReader`, `crates/infrastructure/src/wifi/`), sur un fil bloquant.
+- macOS : `CWInterface` de CoreWLAN (`objc2-core-wlan`) : signal et bruit en dBm, débit, canal, bande 2,4 / 5 / 6 GHz. Le nom (SSID) demande l'accès à la localisation (`CLLocationManager`, `objc2-core-location`, clés `NSLocationUsageDescription` et `NSLocationWhenInUseUsageDescription` dans `src-tauri/Info.plist`). Vérifié sur macOS 26 avec un binaire de test sans autorisation : nom absent, mais signal (−59 dBm), bruit (−94 dBm), débit (325 Mbit/s), canal 149 et bande 5 GHz lisibles.
+- Windows : WLAN API (`WlanQueryInterface`). Le signal en dBm et le canal se lisent sans permission ; la connexion courante (nom, débit) renvoie `ERROR_ACCESS_DENIED` sans localisation depuis Windows 11 24H2. La bande n'est connue qu'en 2,4 GHz (canal 14 au plus) : en 5 et 6 GHz les numéros de canal se recouvrent.
+- Linux : NetworkManager (périphérique Wi-Fi activé, point d'accès actif) : nom, fréquence (d'où bande et canal), débit. La force arrive en pourcentage, convertie en dBm avec l'échelle de Windows (0 % = −100 dBm, 100 % = −50 dBm). Pas de bruit. Sans NetworkManager, pas de détail Wi-Fi.
+- Demande de permission : commande `reveal_network_name`, exécutée sur le fil principal (CoreLocation répond par la boucle principale). macOS montre sa demande tant qu'elle n'a pas reçu de réponse, puis l'app ouvre les réglages de localisation ; Windows ouvre directement `ms-settings:privacy-location`.
+- `make dev` : le binaire tourne hors d'un `.app`, sans `Info.plist` ; sous macOS, le nom reste masqué et la demande de localisation peut ne pas s'afficher (elle serait attribuée au terminal). Les valeurs radio restent lisibles. L'autorisation se vérifie sur l'app empaquetée (`make build`).
+
 ## Icône de barre système
 
 - L'icône est dessinée en Rust (`src-tauri/src/tray_icon.rs`), une forme par état (cinq, Hors ligne compris), avec les couleurs claires des tokens. Elle a été vérifiée lisible sur barre claire et sombre ; le gris de Hors ligne y est plus discret ; elle n'est pas redessinée quand le thème change.

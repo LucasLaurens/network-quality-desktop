@@ -7,10 +7,11 @@ use std::time::Duration;
 
 use std::net::Ipv4Addr;
 
-use domain::{ConnectionContext, GatewayEcho, ProbeOutcome, Target, Timestamp};
+use domain::{ConnectionContext, GatewayEcho, ProbeOutcome, Target, Timestamp, WifiLink};
 
 use crate::{
     Clock, ConnectionContextReader, GatewayProbe, LatencyProbe, VerdictPresenter, VerdictView,
+    WifiReader,
 };
 
 /// A simulated network: each target gives the outcome set for it; an unknown target is unreachable.
@@ -85,6 +86,29 @@ impl GatewayProbe for InMemoryGateway {
     }
 }
 
+/// A Wi-Fi link the test sets; none until told otherwise.
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryWifi {
+    link: Arc<Mutex<Option<WifiLink>>>,
+}
+
+impl InMemoryWifi {
+    pub fn set_link(&self, link: Option<WifiLink>) {
+        *self.link.lock().unwrap_or_else(PoisonError::into_inner) = link;
+    }
+}
+
+impl WifiReader for InMemoryWifi {
+    fn read_wifi(&self) -> impl Future<Output = Option<WifiLink>> + Send {
+        std::future::ready(
+            self.link
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .clone(),
+        )
+    }
+}
+
 /// A clock that only moves when the test says so.
 #[derive(Debug, Clone, Default)]
 pub struct ManualClock {
@@ -116,7 +140,7 @@ impl InMemoryVerdictPresenter {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .last()
-            .copied()
+            .cloned()
     }
 }
 
@@ -125,6 +149,6 @@ impl VerdictPresenter for InMemoryVerdictPresenter {
         self.views
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .push(*view);
+            .push(view.clone());
     }
 }

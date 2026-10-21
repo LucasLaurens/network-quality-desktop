@@ -5,7 +5,7 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use crate::{ConnectionKind, LatencyWindow, LossRate};
+use crate::{ConnectionKind, LatencyWindow, LossRate, WifiLink};
 
 /// Above this, the link to the gateway is the problem: a box answers within a few milliseconds.
 pub const LOCAL_LATENCY_LIMIT: Duration = Duration::from_millis(30);
@@ -113,6 +113,8 @@ impl GatewayWindow {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocalProblem {
+    /// The Wi-Fi signal is under −70 dBm: the most likely reason for the slow or lossy link.
+    WeakSignal,
     Loss,
     Latency,
 }
@@ -131,12 +133,24 @@ pub enum Fault {
 
 impl Fault {
     /// Applies the attribution rules once the Internet segment is known to be bad. The local
-    /// link is cleared only once its losses can be judged. O(1).
+    /// link is cleared only once its losses can be judged; a bad local link over a weak Wi-Fi
+    /// signal is put down to the signal. O(1).
     #[must_use]
-    pub fn attribute(kind: ConnectionKind, local: LocalSegment) -> Self {
+    pub fn attribute(kind: ConnectionKind, local: LocalSegment, wifi: Option<&WifiLink>) -> Self {
         if kind == ConnectionKind::Cellular {
             return Self::MobileNetwork;
         }
+        // The computer may stay associated with a Wi-Fi while a cable carries the traffic.
+        let is_over_wifi = matches!(kind, ConnectionKind::WiFi | ConnectionKind::PhoneHotspot);
+        match Self::attribute_link(kind, local) {
+            Self::LocalLink(_) if is_over_wifi && wifi.is_some_and(WifiLink::is_signal_weak) => {
+                Self::LocalLink(LocalProblem::WeakSignal)
+            }
+            fault => fault,
+        }
+    }
+
+    fn attribute_link(kind: ConnectionKind, local: LocalSegment) -> Self {
         match local {
             LocalSegment::Unmeasurable(reason) => Self::Undetermined(reason),
             LocalSegment::Measured {
@@ -181,7 +195,7 @@ mod tests {
     fn blames_the_operator_when_the_local_link_is_good() {
         // Act & Assert
         assert_eq!(
-            Fault::attribute(ConnectionKind::WiFi, GOOD_LOCAL),
+            Fault::attribute(ConnectionKind::WiFi, GOOD_LOCAL, None),
             Fault::Operator
         );
     }
@@ -190,7 +204,7 @@ mod tests {
     fn blames_the_mobile_network_behind_a_good_link_with_the_phone() {
         // Act & Assert
         assert_eq!(
-            Fault::attribute(ConnectionKind::PhoneHotspot, GOOD_LOCAL),
+            Fault::attribute(ConnectionKind::PhoneHotspot, GOOD_LOCAL, None),
             Fault::MobileNetwork
         );
     }
@@ -206,7 +220,7 @@ mod tests {
 
         // Act & Assert
         assert_eq!(
-            Fault::attribute(ConnectionKind::WiFi, lossy),
+            Fault::attribute(ConnectionKind::WiFi, lossy, None),
             Fault::LocalLink(LocalProblem::Loss)
         );
     }
@@ -223,7 +237,7 @@ mod tests {
         window.record_second(GatewayEcho::Lost);
 
         // Act
-        let fault = Fault::attribute(ConnectionKind::WiFi, window.compute_segment());
+        let fault = Fault::attribute(ConnectionKind::WiFi, window.compute_segment(), None);
 
         // Assert
         assert_eq!(fault, Fault::Operator);
@@ -240,7 +254,7 @@ mod tests {
 
         // Act & Assert
         assert_eq!(
-            Fault::attribute(ConnectionKind::WiFi, slow),
+            Fault::attribute(ConnectionKind::WiFi, slow, None),
             Fault::LocalLink(LocalProblem::Latency)
         );
     }
@@ -256,7 +270,7 @@ mod tests {
         );
 
         // Act
-        let fault = Fault::attribute(ConnectionKind::WiFi, window.compute_segment());
+        let fault = Fault::attribute(ConnectionKind::WiFi, window.compute_segment(), None);
 
         // Assert
         assert_eq!(fault, Fault::Undetermined(Unmeasurable::TooFewPings));
@@ -270,7 +284,7 @@ mod tests {
         record(&mut window, GatewayEcho::Lost, 20);
 
         // Act
-        let fault = Fault::attribute(ConnectionKind::WiFi, window.compute_segment());
+        let fault = Fault::attribute(ConnectionKind::WiFi, window.compute_segment(), None);
 
         // Assert
         assert_eq!(fault, Fault::LocalLink(LocalProblem::Loss));
@@ -282,7 +296,8 @@ mod tests {
         assert_eq!(
             Fault::attribute(
                 ConnectionKind::WiFi,
-                LocalSegment::Unmeasurable(Unmeasurable::NotPermitted)
+                LocalSegment::Unmeasurable(Unmeasurable::NotPermitted),
+                None
             ),
             Fault::Undetermined(Unmeasurable::NotPermitted)
         );
@@ -294,7 +309,8 @@ mod tests {
         assert_eq!(
             Fault::attribute(
                 ConnectionKind::Cellular,
-                LocalSegment::Unmeasurable(Unmeasurable::NoGateway)
+                LocalSegment::Unmeasurable(Unmeasurable::NoGateway),
+                None
             ),
             Fault::MobileNetwork
         );
@@ -340,5 +356,57 @@ mod tests {
         // Act & Assert
         assert!(window.has_answered_within(6));
         assert!(!window.has_answered_within(5));
+    }
+
+    #[test]
+    fn puts_a_bad_local_link_down_to_a_weak_wifi_signal() {
+        // Arrange
+        let slow = LocalSegment::Measured {
+            latency: Some(Duration::from_millis(45)),
+            loss: Some(LossRate::from_percent(0.0)),
+            lost: 0,
+        };
+        let weak = WifiLink {
+            name: None,
+            signal_dbm: Some(-78),
+            noise_dbm: None,
+            rate_mbps: None,
+            channel: None,
+            band: crate::WifiBand::Unknown,
+        };
+
+        // Act & Assert
+        assert_eq!(
+            Fault::attribute(ConnectionKind::WiFi, slow, Some(&weak)),
+            Fault::LocalLink(LocalProblem::WeakSignal)
+        );
+        assert_eq!(
+            Fault::attribute(ConnectionKind::WiFi, GOOD_LOCAL, Some(&weak)),
+            Fault::Operator
+        );
+    }
+
+    #[test]
+    fn ignores_the_wifi_signal_when_a_cable_carries_the_traffic() {
+        // Arrange
+        let slow = LocalSegment::Measured {
+            latency: Some(Duration::from_millis(45)),
+            loss: Some(LossRate::from_percent(0.0)),
+            lost: 0,
+        };
+        let weak = WifiLink {
+            name: None,
+            signal_dbm: Some(-80),
+            noise_dbm: None,
+            rate_mbps: None,
+            channel: None,
+            band: crate::WifiBand::Unknown,
+        };
+
+        // Act & Assert
+        assert_eq!(
+            Fault::attribute(ConnectionKind::Ethernet, slow, Some(&weak)),
+            Fault::LocalLink(LocalProblem::Latency)
+        );
     }
 }

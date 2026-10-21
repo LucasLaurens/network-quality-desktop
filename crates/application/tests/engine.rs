@@ -4,7 +4,8 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use application::test_support::{
-    InMemoryConnection, InMemoryGateway, InMemoryNetwork, InMemoryVerdictPresenter, ManualClock,
+    InMemoryConnection, InMemoryGateway, InMemoryNetwork, InMemoryVerdictPresenter, InMemoryWifi,
+    ManualClock,
 };
 use application::{
     CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, MeasurementEngine, VerdictView,
@@ -12,7 +13,7 @@ use application::{
 use domain::{
     ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayEcho, Grade, LocalProblem,
     LocalSegment, MacAddress, MeasuringCause, Metering, Metric, ProbeOutcome, Target, Unmeasurable,
-    Verdict,
+    Verdict, WifiBand, WifiLink,
 };
 
 // Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
@@ -31,12 +32,14 @@ struct Harness {
     presenter: InMemoryVerdictPresenter,
     connection: InMemoryConnection,
     gateway: InMemoryGateway,
+    wifi: InMemoryWifi,
     engine: MeasurementEngine<
         InMemoryNetwork,
         ManualClock,
         InMemoryVerdictPresenter,
         InMemoryConnection,
         InMemoryGateway,
+        InMemoryWifi,
     >,
 }
 
@@ -46,6 +49,7 @@ fn create_harness() -> Harness {
     let presenter = InMemoryVerdictPresenter::default();
     let connection = InMemoryConnection::default();
     let gateway = InMemoryGateway::default();
+    let wifi = InMemoryWifi::default();
     let targets = vec![Target::parse(FIRST_TARGET), Target::parse(SECOND_TARGET)];
     let engine = MeasurementEngine::new(
         EnginePorts {
@@ -54,6 +58,7 @@ fn create_harness() -> Harness {
             presenter: presenter.clone(),
             context_reader: connection.clone(),
             gateway_probe: gateway.clone(),
+            wifi_reader: wifi.clone(),
         },
         targets,
     );
@@ -63,6 +68,7 @@ fn create_harness() -> Harness {
         presenter,
         connection,
         gateway,
+        wifi,
         engine,
     }
 }
@@ -1012,4 +1018,35 @@ async fn stays_solid_when_only_the_link_to_the_box_is_slow() {
     let view = harness.read_last_view();
     assert_eq!(view.verdict, Verdict::Graded(Grade::Solid));
     assert_eq!(view.diagnosis, Diagnosis::Healthy);
+}
+
+#[tokio::test]
+async fn puts_a_slow_wifi_down_to_its_weak_signal() {
+    // Arrange
+    let mut harness = create_harness();
+    harness.wifi.set_link(Some(WifiLink {
+        name: None,
+        signal_dbm: Some(-80),
+        noise_dbm: None,
+        rate_mbps: None,
+        channel: None,
+        band: WifiBand::TwoPointFourGhz,
+    }));
+
+    // Act
+    run_slow_internet_behind(
+        &mut harness,
+        ConnectionKind::WiFi,
+        GatewayEcho::Answered(Duration::from_millis(45)),
+    )
+    .await;
+
+    // Assert
+    assert_eq!(
+        harness.read_last_view().diagnosis,
+        Diagnosis::OutOfThreshold {
+            metric: Metric::Latency,
+            fault: Fault::LocalLink(LocalProblem::WeakSignal),
+        }
+    );
 }
