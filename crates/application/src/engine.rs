@@ -66,6 +66,9 @@ pub struct MeasurementEngine<P, C, V, R> {
     presenter: V,
     context_reader: R,
     context: Option<ConnectionContext>,
+    /// The last network seen, kept through a moment without route: switching from one Wi-Fi to
+    /// another passes through one.
+    last_network: Option<ConnectionContext>,
     seconds_since_context: u32,
     targets: Vec<Target>,
     thresholds: Thresholds,
@@ -91,6 +94,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
             presenter,
             context_reader,
             context: None,
+            last_network: None,
             // Due at once: the first tick reads the connection.
             seconds_since_context: CONTEXT_REFRESH_SECONDS,
             targets,
@@ -151,11 +155,14 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
     /// Starts measuring again when another network took over; noise (an address renewed, a
     /// virtual interface coming and going) leaves the network and the verdict as they are. O(1).
     fn record_context(&mut self, context: Option<ConnectionContext>) {
-        if let (Some(previous), Some(current)) = (self.context, context)
-            && !previous.is_same_network(&current)
-        {
-            self.restart();
-            self.measuring_cause = MeasuringCause::NewNetwork;
+        if let Some(current) = context {
+            if let Some(previous) = self.last_network
+                && !previous.is_same_network(&current)
+            {
+                self.restart();
+                self.measuring_cause = MeasuringCause::NewNetwork;
+            }
+            self.last_network = Some(current);
         }
         self.context = context;
         self.seconds_since_context = 0;

@@ -740,3 +740,26 @@ async fn notices_a_new_network_at_the_next_reading_without_any_event() {
     // Assert
     assert_eq!(harness.read_presented_verdict(), Verdict::Measuring);
 }
+
+#[tokio::test]
+async fn notices_a_new_network_reached_through_a_moment_without_route() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 11)));
+    harness.warm_up_with_latency(FAST).await;
+    harness.connection.set_context(None);
+    harness.engine.handle(EngineMessage::NetworkChanged).await;
+    harness.run_seconds(1).await;
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 12)));
+    harness.engine.handle(EngineMessage::NetworkChanged).await;
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(harness.read_presented_verdict(), Verdict::Measuring);
+}

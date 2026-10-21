@@ -138,7 +138,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     );
     let change_sender = sender.clone();
     InterfaceChangeWatcher.watch(move || {
-        // A full inbox already holds a tick that will read the connection soon enough.
+        // Dropped when the inbox is full: the periodic reading still catches the change within 10 s.
         let _ = change_sender.try_send(EngineMessage::NetworkChanged);
     });
     tauri::async_runtime::spawn(engine.run(inbox));

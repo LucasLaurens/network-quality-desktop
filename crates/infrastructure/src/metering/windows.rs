@@ -1,4 +1,4 @@
-//! `ConnectionCost` of the Internet connection profile (WinRT).
+//! `ConnectionCost` of the Internet connection profile (`WinRT`).
 
 use domain::Metering;
 use windows::Networking::Connectivity::{NetworkCostType, NetworkInformation};

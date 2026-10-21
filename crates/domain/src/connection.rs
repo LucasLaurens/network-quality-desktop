@@ -158,13 +158,16 @@ impl ConnectionContext {
         }
     }
 
-    /// Whether `other` is still this network: a change of metering alone is not a new network.
+    /// Whether `other` is still this network. What is learnt later about the same link (a
+    /// gateway MAC resolved, a hotspot hint, the metering) never makes it a new one. O(1).
     #[must_use]
     pub fn is_same_network(&self, other: &Self) -> bool {
-        self.kind == other.kind
+        let is_same_kind = self.kind == other.kind
+            || [self.kind, other.kind].contains(&ConnectionKind::PhoneHotspot);
+        is_same_kind
             && self.is_vpn == other.is_vpn
-            && self.gateway == other.gateway
-            && self.gateway_address == other.gateway_address
+            && agree(self.gateway, other.gateway)
+            && agree(self.gateway_address, other.gateway_address)
     }
 
     /// `None` while the gateway address is unknown: such a network cannot be recognised later.
@@ -231,6 +234,13 @@ fn count_hotspot_signals(snapshot: &InterfaceSnapshot, metering: Metering) -> us
     .into_iter()
     .filter(|signal| *signal)
     .count()
+}
+
+/// Two readings disagree only when both know the value.
+fn agree<T: PartialEq>(first: Option<T>, second: Option<T>) -> bool {
+    first
+        .zip(second)
+        .is_none_or(|(first, second)| first == second)
 }
 
 fn mask(address: Ipv4Addr, prefix: u8) -> Ipv4Addr {
@@ -526,5 +536,32 @@ mod tests {
         // Act & Assert
         assert!(home_first.is_same_network(&home_metered));
         assert!(!home_first.is_same_network(&office));
+    }
+
+    #[test]
+    fn keeps_the_network_when_its_gateway_mac_becomes_readable() {
+        // Arrange
+        let resolved = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+        let mut unresolved = resolved;
+        if let Some(gateway) = unresolved.gateway.as_mut() {
+            gateway.mac = None;
+        }
+        let before = ConnectionContext::classify(&unresolved, &[], Metering::Unknown);
+        let after = ConnectionContext::classify(&resolved, &[], Metering::Unknown);
+
+        // Act & Assert
+        assert!(before.is_same_network(&after));
+    }
+
+    #[test]
+    fn keeps_the_network_when_a_late_hint_reveals_a_hotspot() {
+        // Arrange
+        let snapshot = create_snapshot(Medium::WiFi, [192, 168, 152, 167], RANDOM_MAC);
+        let before = ConnectionContext::classify(&snapshot, &[], Metering::Unknown);
+        let after = ConnectionContext::classify(&snapshot, &[], Metering::Metered);
+
+        // Act & Assert
+        assert_eq!(after.kind, ConnectionKind::PhoneHotspot);
+        assert!(before.is_same_network(&after));
     }
 }
