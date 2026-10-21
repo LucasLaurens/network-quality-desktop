@@ -42,6 +42,40 @@ Une courbe par mesure (latence p90, gigue moyenne, perte) sur 1 h, 24 h, 7 j ou 
 
 Chaque réseau des 30 derniers jours, le plus utilisé en premier : son nom (celui du Wi-Fi quand il est connu, sinon un nom générique), son type de connexion, la répartition de son temps entre les états, sa latence p90 et sa perte. Le réseau actuel porte la mention « actuel ». Quand au moins deux réseaux ont été mesurés une heure ou plus, celui qui a passé la plus grande part de son temps en Solide est désigné « le plus fiable pour la visio ».
 
+## Débit
+
+Les tests de débit lancés d'un clic et les derniers résultats : voir [Tests de débit](tests-de-debit.md).
+
+## Détails techniques
+
+Sous le débit, un panneau replié, « Détails techniques ». Replié, il ne lit rien et la box n'est pas interrogée. Une fois ouvert :
+
+| Section        | Ce qu'elle montre                                                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Connexion      | Le réseau, la liaison (type de connexion) et l'adresse de la box. Absente sans connexion.                                                                                |
+| Wi-Fi          | Le signal, la bande, le canal et le débit négocié avec la borne. Seulement quand le Wi-Fi porte le trafic.                                                               |
+| Trafic observé | Ce que l'ordinateur reçoit (↓) et envoie (↑), en moyenne sur 5 secondes, et le pic de la dernière heure. « Disponible dans quelques secondes » juste après le lancement. |
+| Ligne          | L'accès (ADSL, fibre ou inconnu) et, si la box le dit, le débit synchronisé de sa ligne et son trafic total.                                                             |
+
+Les trois premières sections se relisent toutes les 5 secondes tant que le panneau est ouvert. La ligne est lue à chaque ouverture, à part, car la box peut mettre quelques secondes à répondre (« Interrogation de la box… » en attendant).
+
+Le trafic observé vient des compteurs de l'interface réseau : c'est ce que l'ordinateur échange, toutes applications confondues, pas ce que la ligne peut porter. Il ne compte jamais dans l'état. Pour la capacité de la ligne, lancer un [test de débit](tests-de-debit.md).
+
+### Accès et ligne
+
+L'app demande à la box, en UPnP et en lecture seule, ce qu'elle sait de sa ligne. Beaucoup de box ont l'UPnP désactivé ou ne répondent pas : le panneau le dit (« La box ne répond pas en UPnP : l'accès n'est qu'estimé, d'après les tests de débit de ce réseau et la latence. »).
+
+| Accès affiché             | Quand                                                                                                                         |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| ADSL (annoncé par la box) | La box dit « DSL ».                                                                                                           |
+| Fibre (estimé)            | Sinon : envoi d'au moins 20 Mbit/s (médiane des 5 derniers tests de débit sur ce réseau) et latence affichée de 8 ms au plus. |
+| ADSL (estimé)             | Sinon : envoi de 2 Mbit/s au plus et latence affichée d'au moins 10 ms.                                                       |
+| Inconnu                   | Dans tous les autres cas, et tant qu'il manque un test de débit sur ce réseau ou une latence affichée.                        |
+
+Une box fibre se dit « Ethernet », comme une box câble ou une box derrière une autre : cette réponse ne prouve rien. La fibre et le câble se ressemblent, et le VDSL tombe entre les deux : ils restent « Inconnu » plutôt que devinés. Les seuils sont des propositions, pas encore vérifiées sur des lignes réelles.
+
+Le débit synchronisé et le trafic total sont ceux que la box annonce, pas des mesures de l'app : le débit synchronisé est la vitesse négociée par la box avec l'opérateur, ou une valeur de sa configuration. Le compteur de trafic de la box compte tous les appareils derrière elle et repart souvent de zéro tous les 4 Go.
+
 ## Premier lancement
 
 Avant la première minute écrite, la courbe laisse la place à « L'historique se remplit au fil des mesures. La première courbe apparaît après une minute. » et le tableau des réseaux à « Chaque réseau utilisé apparaîtra ici, avec le temps passé dans chaque état. »

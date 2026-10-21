@@ -199,7 +199,10 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   erases = 0
   technicalDetailsReads = 0
   lineDetailsReads = 0
-  technicalDetails: TechnicalDetails = { sections: [createDetailSection(), createDetailSection()] }
+  technicalDetails: TechnicalDetails = {
+    sections: [createDetailSection(), createDetailSection()],
+    refreshSeconds: faker.number.int({ min: 2, max: 10 }),
+  }
   readonly lineDetails: LineDetails = { section: createDetailSection(), note: faker.lorem.sentence() }
   /** Empty while exports and erases succeed. */
   private dataRefusal = ''

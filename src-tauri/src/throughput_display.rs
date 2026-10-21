@@ -154,7 +154,7 @@ const fn to_profile_key(profile: TestProfile) -> &'static str {
 pub fn format_bitrate(rate: Bitrate, catalog: &TextCatalog) -> String {
     let megabits = rate.to_bits_per_second() as f64 / BITS_PER_MEGABIT;
     let value = if megabits < DECIMAL_BELOW_MEGABITS {
-        format!("{megabits:.1}").replace('.', ",")
+        format_one_decimal(megabits)
     } else {
         format!("{megabits:.0}")
     };
@@ -172,9 +172,14 @@ pub fn format_megabytes(bytes: u64, catalog: &TextCatalog) -> String {
     let mut args = FluentArgs::new();
     args.set(
         "value",
-        format!("{:.1}", bytes as f64 / BYTES_PER_MEGABYTE).replace('.', ","),
+        format_one_decimal(bytes as f64 / BYTES_PER_MEGABYTE),
     );
     catalog.render("unit-megabytes", Some(&args))
+}
+
+/// « 4,2 »: one decimal, after a comma. O(1).
+pub fn format_one_decimal(value: f64) -> String {
+    format!("{value:.1}").replace('.', ",")
 }
 
 #[cfg(test)]

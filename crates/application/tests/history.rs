@@ -426,18 +426,20 @@ fn writes_a_throughput_test_under_its_network() {
 }
 
 #[test]
-fn erases_everything_written_before() {
+fn erases_everything_written_before_and_answers_once_done() {
     // Arrange
     let mut writer = HistoryWriter::new(InMemoryMeasurementRepository::default());
     let network = create_key(30);
     save_minute(&mut writer, &network, SOME_HOUR);
+    let (answer, answered) = mpsc::sync_channel(1);
 
     // Act
     writer
-        .apply(HistoryCommand::EraseAll, SOME_HOUR + MINUTE)
+        .apply(HistoryCommand::EraseAll(answer), SOME_HOUR + MINUTE)
         .expect("an erase");
 
     // Assert
+    assert!(answered.recv().is_ok());
     let repository = writer.into_repository();
     let minutes = repository
         .list_aggregates(&network, Granularity::Minute, 0, SOME_HOUR + MINUTE)
@@ -446,29 +448,67 @@ fn erases_everything_written_before() {
 }
 
 #[test]
-fn starts_afresh_on_erase_without_the_minute_in_progress() {
+fn leaves_an_erase_that_failed_unanswered() {
+    // Arrange
+    let mut repository = InMemoryMeasurementRepository::default();
+    repository.fail_erases();
+    let mut writer = HistoryWriter::new(repository);
+    let (answer, answered) = mpsc::sync_channel(1);
+
+    // Act
+    let erased = writer.apply(HistoryCommand::EraseAll(answer), SOME_HOUR);
+
+    // Assert
+    assert!(erased.is_err());
+    assert!(answered.recv().is_err(), "the asker learns it failed");
+}
+
+#[test]
+fn drops_the_last_hour_and_the_minute_in_progress_on_erase() {
     // Arrange
     let recorder = InMemoryHistoryRecorder::default();
     let mut tracker = HistoryTracker::default();
-    let context = Some(create_context(31));
+    tracker.record_second(
+        &create_second(SOME_HOUR, Verdict::Offline),
+        Some(create_context(31)),
+        None,
+        &recorder,
+    );
+    let (answer, _answered) = mpsc::sync_channel(1);
+
+    // Act
+    tracker.erase(answer, &recorder);
+
+    // Assert
+    assert!(recorder.list_saved_minutes().is_empty());
+    assert!(tracker.list_last_hour().is_empty());
+    assert!(recorder.has_erase());
+}
+
+#[test]
+fn notes_the_network_and_the_outage_again_after_an_erase() {
+    // Arrange
+    let recorder = InMemoryHistoryRecorder::default();
+    let mut tracker = HistoryTracker::default();
+    let context = Some(create_context(32));
     tracker.record_second(
         &create_second(SOME_HOUR, Verdict::Offline),
         context,
         None,
         &recorder,
     );
-    let (answer, answered) = mpsc::sync_channel(1);
-
-    // Act
+    let (answer, _answered) = mpsc::sync_channel(1);
     tracker.erase(answer, &recorder);
 
-    // Assert
+    // Act
     tracker.record_second(
         &create_second(SOME_HOUR + 1, Verdict::Offline),
         context,
         None,
         &recorder,
     );
+
+    // Assert
     let kinds: Vec<EventKind> = recorder
         .list_events()
         .iter()
@@ -481,10 +521,6 @@ fn starts_afresh_on_erase_without_the_minute_in_progress() {
             EventKind::OfflineStarted,
             EventKind::NetworkChanged,
             EventKind::OfflineStarted,
-        ],
-        "the outage and the network are noted again after the erase"
+        ]
     );
-    assert!(recorder.list_saved_minutes().is_empty());
-    assert_eq!(tracker.list_last_hour().len(), 1);
-    assert!(answered.recv().is_ok());
 }

@@ -3,9 +3,6 @@ import { computed, inject, onUnmounted, ref } from 'vue'
 import type { LineDetails, TechnicalDetails } from '../bindings'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 
-/** The traffic is averaged over 5 s in the core: reading it faster shows nothing new. */
-const REFRESH_EVERY_MS = 5000
-
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
 
@@ -37,12 +34,16 @@ const stopRefreshing = (): void => {
 }
 
 // Nothing is read while folded: the box is only asked when the user looks.
-const onToggle = (event: Event): void => {
+const onToggle = async (event: Event): Promise<void> => {
   stopRefreshing()
-  if (!(event.target as HTMLDetailsElement).open) return
-  void loadDetails()
+  const element = event.target as HTMLDetailsElement
+  const isOpen = (): boolean => element.open
+  if (!isOpen()) return
   void loadLine()
-  refresh = setInterval(() => void loadDetails(), REFRESH_EVERY_MS)
+  await loadDetails()
+  // Folded again while the details were read: nothing to refresh.
+  if (!isOpen() || !details.value) return
+  refresh = setInterval(() => void loadDetails(), details.value.refreshSeconds * 1000)
 }
 
 onUnmounted(stopRefreshing)

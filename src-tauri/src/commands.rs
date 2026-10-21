@@ -437,8 +437,7 @@ pub fn read_technical_details(
     traffic: State<'_, TrafficStore>,
     catalog: State<'_, TextCatalog>,
 ) -> TechnicalDetails {
-    let (current, peak) = traffic.read();
-    TechnicalDetails::compose(&connection.read_all(), current, peak, &catalog)
+    TechnicalDetails::compose(&connection.read_all(), traffic.read(), &catalog)
 }
 
 /// What carries the line: the box asked over `UPnP` (a few seconds at most), then the estimate
@@ -446,7 +445,7 @@ pub fn read_technical_details(
 ///
 /// # Errors
 ///
-/// The history could not be read.
+/// The sentence shown in the panel when the history could not be read.
 #[tauri::command]
 #[specta::specta]
 pub async fn read_line_details(
@@ -459,9 +458,14 @@ pub async fn read_line_details(
     let now = SystemClock::start().read_utc_seconds();
     let tests = history
         .read(|reader| reader.list_throughput_tests(0, now + 1))
-        .map_err(|error| error.0)?;
-    let latency = connection.read_all().latency;
-    let line = detect_access(&UpnpAccessDetector, &tests, network.as_ref(), latency).await;
+        .map_err(|error| {
+            eprintln!("Reading the throughput tests failed: {}", error.0);
+            catalog.render("details-line-failed", None)
+        })?;
+    let reading = connection.read_all();
+    let detector =
+        UpnpAccessDetector::new(reading.context.and_then(|context| context.gateway_address));
+    let line = detect_access(&detector, &tests, network.as_ref(), reading.latency).await;
     Ok(LineDetails::compose(&line, &catalog))
 }
 

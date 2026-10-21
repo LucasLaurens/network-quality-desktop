@@ -173,7 +173,7 @@ impl InMemoryHistoryRecorder {
                 } => Some((network.clone(), *start, *aggregate)),
                 HistoryCommand::RecordEvent(_)
                 | HistoryCommand::RecordThroughput(_)
-                | HistoryCommand::EraseAll
+                | HistoryCommand::EraseAll(_)
                 | HistoryCommand::Flush(_) => None,
             })
             .collect()
@@ -189,10 +189,19 @@ impl InMemoryHistoryRecorder {
                 HistoryCommand::RecordEvent(event) => Some(event.clone()),
                 HistoryCommand::SaveMinute { .. }
                 | HistoryCommand::RecordThroughput(_)
-                | HistoryCommand::EraseAll
+                | HistoryCommand::EraseAll(_)
                 | HistoryCommand::Flush(_) => None,
             })
             .collect()
+    }
+
+    #[must_use]
+    pub fn has_erase(&self) -> bool {
+        self.commands
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .any(|command| matches!(command, HistoryCommand::EraseAll(_)))
     }
 
     #[must_use]
@@ -205,7 +214,7 @@ impl InMemoryHistoryRecorder {
                 HistoryCommand::RecordThroughput(record) => Some(record.clone()),
                 HistoryCommand::SaveMinute { .. }
                 | HistoryCommand::RecordEvent(_)
-                | HistoryCommand::EraseAll
+                | HistoryCommand::EraseAll(_)
                 | HistoryCommand::Flush(_) => None,
             })
             .collect()
@@ -230,9 +239,15 @@ pub struct InMemoryMeasurementRepository {
     rows: Vec<(NetworkKey, Granularity, i64, Aggregate)>,
     events: Vec<HistoryEvent>,
     throughput_tests: Vec<ThroughputRecord>,
+    is_erase_failing: bool,
 }
 
 impl InMemoryMeasurementRepository {
+    /// Every erase fails from now on, as a full disk would make it.
+    pub const fn fail_erases(&mut self) {
+        self.is_erase_failing = true;
+    }
+
     fn find_row(
         &mut self,
         network: &NetworkKey,
@@ -386,6 +401,9 @@ impl MeasurementRepository for InMemoryMeasurementRepository {
     }
 
     fn erase_history(&mut self) -> Result<(), RepositoryError> {
+        if self.is_erase_failing {
+            return Err(RepositoryError("the erase failed".to_owned()));
+        }
         *self = Self::default();
         Ok(())
     }

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use application::TrafficCounterReader;
-use domain::{TrafficMeter, TrafficRate};
+use domain::{TrafficMeter, TrafficReading};
 
 const SAMPLE_EVERY: Duration = Duration::from_secs(1);
 
@@ -40,8 +40,10 @@ impl TrafficStore {
 
     /// The last window and the peak of the last hour. O(w) for w ≤ 720 windows.
     #[must_use]
-    pub fn read(&self) -> (Option<TrafficRate>, Option<TrafficRate>) {
-        let meter = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        (meter.compute_current(), meter.compute_peak())
+    pub fn read(&self) -> TrafficReading {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .compute_reading()
     }
 }

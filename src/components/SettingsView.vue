@@ -59,7 +59,7 @@ const saveTypedServer = (): Promise<void> => queue(typedServer.value)
 
 // The public servers need nothing more; an own server waits for its address.
 const exportPeriod = ref<ExportPeriodChoice>('lastMonth')
-const isErasing = ref(false)
+const isConfirmingErase = ref(false)
 const isBusy = ref(false)
 const dataStatus = ref('')
 const dataRefusal = ref('')
@@ -81,7 +81,7 @@ const exportHistory = (): Promise<void> =>
   runDataAction(() => client.exportHistory(exportPeriod.value, readUtcOffsetSeconds()))
 
 const eraseHistory = (): Promise<void> => {
-  isErasing.value = false
+  isConfirmingErase.value = false
   return runDataAction(() => client.eraseHistory())
 }
 
@@ -234,10 +234,16 @@ onMounted(async () => {
         </div>
         <div class="setting">
           <span class="label">Effacer l'historique</span>
-          <button type="button" class="secondary" :disabled="isBusy" data-erase @click="isErasing = true">
+          <button type="button" class="secondary" :disabled="isBusy" data-erase @click="isConfirmingErase = true">
             Effacer…
           </button>
-          <div v-if="isErasing" class="warning" role="alertdialog" aria-labelledby="erase-warning" data-erase-warning>
+          <div
+            v-if="isConfirmingErase"
+            class="warning"
+            role="alertdialog"
+            aria-labelledby="erase-warning"
+            data-erase-warning
+          >
             <p id="erase-warning">
               Toutes les mesures (minutes et heures), les événements (coupures, changements de réseau, veilles) et les
               tests de débit seront supprimés, sans retour possible. Les réglages sont conservés.
@@ -246,7 +252,7 @@ onMounted(async () => {
               <button type="button" class="secondary" data-erase-confirm @click="eraseHistory">
                 Effacer l'historique
               </button>
-              <button type="button" class="link" data-erase-cancel @click="isErasing = false">Annuler</button>
+              <button type="button" class="link" data-erase-cancel @click="isConfirmingErase = false">Annuler</button>
             </div>
           </div>
         </div>

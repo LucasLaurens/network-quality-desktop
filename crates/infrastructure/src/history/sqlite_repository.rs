@@ -285,18 +285,26 @@ impl MeasurementRepository for SqliteMeasurementRepository {
         })
     }
 
-    /// Then rewrites the file and empties the journal, so the deleted rows leave the disk too.
-    /// O(file).
+    /// Deleted pages are zeroed as they go (`secure_delete`), then the file is rewritten and the
+    /// journal emptied. The rows are gone once the transaction commits: a rewrite that fails, or a
+    /// journal a reader still holds, is only logged. O(file).
     fn erase_history(&mut self) -> Result<(), RepositoryError> {
+        self.connection
+            .pragma_update(None, "secure_delete", true)
+            .map_err(to_error)?;
         self.write(|transaction| {
             transaction.execute_batch(
                 "DELETE FROM aggregates; DELETE FROM events; DELETE FROM throughput_tests; \
                  DELETE FROM networks;",
             )
         })?;
-        self.connection
+        if let Err(error) = self
+            .connection
             .execute_batch("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);")
-            .map_err(to_error)
+        {
+            eprintln!("Rewriting the history after the erase failed: {error}");
+        }
+        Ok(())
     }
 }
 
@@ -369,11 +377,9 @@ impl HistoryStream for SqliteMeasurementRepository {
                 ))
             })
             .map_err(to_error)?;
-        for row in rows {
-            let (network, start, aggregate) = row.map_err(to_error)?;
-            visit(&network, start, &aggregate)?;
-        }
-        Ok(())
+        visit_rows(rows, |(network, start, aggregate)| {
+            visit(&network, start, &aggregate)
+        })
     }
 
     /// O(log n + k) time through the time index, O(1) space.
@@ -400,10 +406,7 @@ impl HistoryStream for SqliteMeasurementRepository {
                 })
             })
             .map_err(to_error)?;
-        for row in rows {
-            visit(&row.map_err(to_error)?)?;
-        }
-        Ok(())
+        visit_rows(rows, |row| visit(&row))
     }
 
     /// O(t log t) time for the t tests kept, O(1) space.
@@ -438,11 +441,20 @@ impl HistoryStream for SqliteMeasurementRepository {
                 })
             })
             .map_err(to_error)?;
-        for row in rows {
-            visit(&row.map_err(to_error)?)?;
-        }
-        Ok(())
+        visit_rows(rows, |row| visit(&row))
     }
+}
+
+/// Hands each row to `visit` as the cursor reads it; the first failure stops the reading.
+/// O(k) for k rows, O(1) space.
+fn visit_rows<T, E: From<RepositoryError>>(
+    rows: impl Iterator<Item = rusqlite::Result<T>>,
+    mut visit: impl FnMut(T) -> Result<(), E>,
+) -> Result<(), E> {
+    for row in rows {
+        visit(row.map_err(to_error)?)?;
+    }
+    Ok(())
 }
 
 impl SettingsRepository for SqliteMeasurementRepository {

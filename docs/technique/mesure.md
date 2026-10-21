@@ -16,7 +16,7 @@
 - Un acteur unique, `MeasurementEngine`, possède tout l'état et reçoit des messages par un canal tokio. L'app lui envoie `Tick` chaque seconde (`MissedTickBehavior::Delay`) ; tout tourne côté Rust, jamais dans le webview.
 - La fenêtre compte des `Tick` : si le système retarde l'horloge, « 15 s » devient « 15 ticks ». Sous macOS, une activité déclarée au lancement (`keep_measuring_in_background`) empêche App Nap d'espacer les ticks quand aucune fenêtre n'est visible.
 - Veille : `EngineMessage::Sleep` suspend la mesure (les `Tick` ne font plus rien) ; `EngineMessage::Wake` repart de zéro (fenêtres, hystérésis, passerelle, détection Hors ligne), relit le réseau et présente aussitôt « Mesure en cours » avec la cause `MeasuringCause::Wake`. Un avis de réveil reçu alors que le moteur est déjà éveillé (le filet l'a précédé) est ignoré : un seul réveil par veille.
-- Deux boîtes : `Sleep`, `Wake` et `Flush` passent par une boîte urgente lue en priorité (`select!` biaisé), avant les `Tick` en attente. Un avis attend donc au plus le tick en cours : 1,8 s dans le pire cas (cible joignable mais muette, ICMP puis TCP), au-delà des 1,5 s accordées ; la minute écrite à chaque fin de minute borne alors la perte.
+- Deux boîtes : `Sleep`, `Wake`, `Flush` et `EraseHistory` passent par une boîte urgente lue en priorité (`select!` biaisé), avant les `Tick` en attente. Un avis attend donc au plus le tick en cours : 1,8 s dans le pire cas (cible joignable mais muette, ICMP puis TCP), au-delà des 1,5 s accordées ; la minute écrite à chaque fin de minute borne alors la perte.
 - Réglages : `EngineMessage::SettingsChanged` ne regarde que les serveurs. D'autres cibles (`list_targets` : 1.1.1.1 et 8.8.8.8, ou le seul serveur personnalisé) remplacent les fenêtres de gigue et repartent de zéro (`MeasuringCause::NewServers`) ; les mêmes cibles ne changent rien. La route par défaut se lit toujours vers 1.1.1.1 : c'est la route vers Internet, quel que soit le serveur mesuré. Un nouveau serveur personnalisé est sondé une fois avant d'être enregistré : la règle est dans la couche application (`can_measure_against`, testée avec les faux), la commande `save_settings` ne fait que l'appeler avec la sonde de production (`create_latency_probe`, la même que le moteur).
 - Tests de débit : `run_throughput_test` (couche application) mène chaque sens par paliers (`TestProfile::list_steps`), s'arrête après le palier où un transfert dépasse `ENOUGH_TRANSFER_TIME` (1 s) et ne lance aucun transfert qui finirait après le budget du sens au débit du dernier transfert d'au moins 1 Mo (tant qu'aucun n'est chronométré, le palier suivant part toujours : un petit transfert d'échauffement mesure la requête plus que la ligne) (1,5 s pour le rapide, 15 s pour le complet). `ThroughputStarted` (boîte urgente) suspend la mesure jusqu'à `ThroughputEnded`, ou au plus 60 s (`THROUGHPUT_TEST_MAX_SECONDS`) : les ticks ne mesurent plus la ligne pleine, l'horloge des ticks reste à jour (pas de faux réveil). `ThroughputResult::compose` prend le 90e percentile des transferts de 1 Mo ou plus et la médiane des allers-retours en charge. `EngineMessage::ThroughputCompleted` garde le test dans l'historique et, si `compute_grade` est pire que Solide, plafonne le verdict affiché pendant `THROUGHPUT_CAP_DURATION` (10 min, à l'heure murale : l'horloge monotone s'arrête pendant la veille) avec `Diagnosis::LowThroughput` ; un nouveau réseau ou un test assez rapide lève le plafond, un test fini pendant une veille n'en pose pas. Le plafond ne passe pas par l'hystérésis : il s'applique et se lève d'un coup. Les notifications jugent le verdict mesuré, avant plafond (`measured_verdict`).
 - Notifications : chaque vue présentée passe par `DegradationWatch` (domaine). Elle répond « à annoncer » quand l'état affiché est plus grave que le dernier état mesuré (`Severity` : les niveaux dans l'ordre de `Grade`, puis la coupure) ; l'hystérésis a déjà exigé 10 s pour un niveau pire (`DEGRADE_AFTER`, seule source de ce délai), et une coupure est annoncée à 10 s de coupure en tout (`OFFLINE_AFTER_SECONDS` pour la détecter, le reste affichée), même après « Mesure en cours ». « Mesure en cours » efface le dernier niveau connu. Le moteur appelle alors le port `Notifier` si le réglage `notifies_on_degradation` le permet ; le shell applique les réglages enregistrés au moteur avant de le lancer (`apply_settings`).
@@ -47,16 +47,36 @@
 - Hors ligne : sans route, « Aucun réseau connecté » ; si la passerelle a répondu dans les 5 dernières secondes, « La box répond, mais Internet ne répond plus » ; sinon « Aucun serveur ne répond ». Le jugement sur quelques secondes évite qu'un ping perdu fasse changer la phrase.
 - Le chemin du popover (`PathDisplay`) vient du même `VerdictView` : latence de chaque tronçon, tronçon en cause marqué par un mot.
 
+## Trafic observé
+
+- Passif : aucune donnée envoyée. Le port `TrafficCounterReader` (`NetdevContextReader`) lit les compteurs d'octets reçus et envoyés de l'interface qui porte la route par défaut, la même que celle du contexte (`ByteCounters` : index de l'interface, reçus, envoyés).
+- `TrafficStore` (crate `app`) les lit chaque seconde sur un fil dédié, pour toute la vie de l'app : le pic de la dernière heure est là dès que les détails s'ouvrent.
+- `TrafficMeter` (domaine) cumule les écarts entre deux lectures et ferme une fenêtre toutes les 5 s (`TRAFFIC_WINDOW`) ; il garde les fenêtres fermées depuis moins d'une heure (720 au plus) pour le pic, calculé sens par sens. Après un trou (veille), la dernière fenêtre n'est plus montrée comme « sur 5 secondes » ; le pic garde ce qui reste dans l'heure. Un compteur qui recule (remise à zéro, retour à zéro d'un compteur 32 bits), une autre interface ou plus de 3 s entre deux lectures (veille, fil retardé) ne comptent pas : l'intervalle repart de la lecture suivante.
+- C'est ce que l'ordinateur échange, pas ce que la ligne peut porter : affiché à côté du verdict, jamais dedans.
+
+## Ligne et accès
+
+- Port `AccessTechnologyDetector` (`read_box_line`), adaptateur `UpnpAccessDetector` (voir [Plateformes](plateformes.md#upnp)) : la ligne vue par la box (`BoxLine` : `WanAccessType`, débits synchronisés, octets reçus et envoyés par la box), ou `None` si elle ne répond pas.
+- `detect_access` (couche application) demande la box, puis prend l'envoi des 5 derniers tests de débit du réseau courant (`ACCESS_TESTS`, réseau comparé par `NetworkKey::is_likely_same`, tests sans envoi écartés) et la latence au repos affichée. `AccessEstimate::estimate` (domaine) décide :
+  - `WanAccessType::Dsl` : `ReportedDsl` (« ADSL (annoncé par la box) ») ;
+  - sinon, médiane des envois ≥ 20 Mbit/s et latence ≤ 8 ms : `EstimatedFibre` ; médiane ≤ 2 Mbit/s et latence ≥ 10 ms : `EstimatedAdsl` ;
+  - sinon `Unknown`, comme quand il manque l'un des deux signaux. `Ethernet`, `Cable`, `POTS` et les extensions propriétaires (`X_AVM-DE_Fiber`) ne prouvent rien : une box fibre voit son lien comme Ethernet.
+- Les seuils viennent de la note de recherche sur ADSL et fibre (branche `research/adsl-fibre`, `research/adsl-fibre.md`), qui les donne comme propositions non validées sur le terrain. La note proposait le RTT vers le premier saut de l'opérateur ; l'app prend la latence affichée vers Internet (p90 sur 15 s). Fibre et câble se confondent, le VDSL tombe entre les seuils : tous deux restent inconnus.
+- La médiane sur un nombre pair d'envois prend la plus basse des deux valeurs du milieu.
+
 ## Complexité
 
-| Opération                        | Temps                          | Espace                            |
-| -------------------------------- | ------------------------------ | --------------------------------- |
-| Ajout d'une seconde à la fenêtre | O(1)                           | O(1), fenêtre bornée à 15 entrées |
-| p90 de la fenêtre                | O(n log n), n ≤ 15             | O(n)                              |
-| Médiane des cibles               | O(k log k), k = 2              | O(k)                              |
-| Gigue de la fenêtre              | O(n), n ≤ 15                   | O(n)                              |
-| Fenêtre de perte (ajout, taux)   | O(1), totaux tenus à jour      | O(1), 60 entrées au plus          |
-| Détection Hors ligne             | O(1)                           | O(1)                              |
-| Classement du contexte           | O(i·n), i interfaces de n noms | O(i)                              |
-| Hystérésis                       | O(1)                           | O(1)                              |
-| Dessin de l'icône                | O(s²), s = 44 px               | O(s²)                             |
+| Opération                        | Temps                                 | Espace                            |
+| -------------------------------- | ------------------------------------- | --------------------------------- |
+| Ajout d'une seconde à la fenêtre | O(1)                                  | O(1), fenêtre bornée à 15 entrées |
+| p90 de la fenêtre                | O(n log n), n ≤ 15                    | O(n)                              |
+| Médiane des cibles               | O(k log k), k = 2                     | O(k)                              |
+| Gigue de la fenêtre              | O(n), n ≤ 15                          | O(n)                              |
+| Fenêtre de perte (ajout, taux)   | O(1), totaux tenus à jour             | O(1), 60 entrées au plus          |
+| Détection Hors ligne             | O(1)                                  | O(1)                              |
+| Classement du contexte           | O(i·n), i interfaces de n noms        | O(i)                              |
+| Hystérésis                       | O(1)                                  | O(1)                              |
+| Dessin de l'icône                | O(s²), s = 44 px                      | O(s²)                             |
+| Trafic : une lecture             | O(1) amorti                           | O(1), 720 fenêtres au plus        |
+| Trafic : pic de l'heure          | O(w), w ≤ 720                         | O(1)                              |
+| Estimation de l'accès            | O(t + u log u), t tests, u ≤ 5 envois | O(u)                              |

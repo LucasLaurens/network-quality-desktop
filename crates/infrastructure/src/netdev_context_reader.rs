@@ -67,10 +67,9 @@ impl TrafficCounterReader for NetdevContextReader {
         let mut interface = netdev::get_interfaces()
             .into_iter()
             .find(|interface| !interface.is_loopback() && owns_address(interface, source))?;
-        // Windows leaves the counters out of the listing.
-        if let Err(error) = interface.update_stats() {
-            eprintln!("Reading the traffic counters failed: {error}");
-        }
+        // Windows leaves the counters out of the listing. A failure leaves `stats` empty: read
+        // every second, it would flood the log.
+        let _ = interface.update_stats();
         let stats = interface.stats?;
         Some(ByteCounters {
             interface: interface.index,

@@ -2,7 +2,10 @@
 //! seen on the interface, then the box's line, read apart because the box may take seconds.
 
 use application::LineReading;
-use domain::{AccessEstimate, Bitrate, TrafficRate};
+use domain::{
+    AccessEstimate, Bitrate, ConnectionContext, TRAFFIC_WINDOW, TrafficRate, TrafficReading,
+    WifiLink,
+};
 use fluent_bundle::FluentArgs;
 use serde::Serialize;
 use specta::Type;
@@ -10,7 +13,7 @@ use specta::Type;
 use crate::network_display::{NetworkDisplay, select_band_key};
 use crate::shell_presenter::ConnectionReading;
 use crate::text_catalog::TextCatalog;
-use crate::throughput_display::{format_bitrate, format_megabytes};
+use crate::throughput_display::{format_bitrate, format_megabytes, format_one_decimal};
 
 const BYTES_PER_GIGABYTE: u64 = 1_000_000_000;
 
@@ -33,6 +36,8 @@ pub struct DetailSection {
 pub struct TechnicalDetails {
     /// The connection, the Wi-Fi when it carries the traffic, the traffic seen.
     pub sections: Vec<DetailSection>,
+    /// The traffic is averaged over this long: reading it faster shows nothing new.
+    pub refresh_seconds: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -43,86 +48,110 @@ pub struct LineDetails {
     pub note: String,
 }
 
+impl DetailRow {
+    fn compose(key: &str, value: String, catalog: &TextCatalog) -> Self {
+        Self {
+            label: catalog.render(key, None),
+            value,
+        }
+    }
+}
+
 impl TechnicalDetails {
     /// Without a route there is no connection to describe, only the traffic. O(1).
     #[must_use]
     pub fn compose(
         connection: &ConnectionReading,
-        current: Option<TrafficRate>,
-        peak: Option<TrafficRate>,
+        traffic: TrafficReading,
         catalog: &TextCatalog,
     ) -> Self {
-        let row = |key: &str, value: String| DetailRow {
-            label: catalog.render(key, None),
-            value,
-        };
         let mut sections = Vec::new();
         if let Some(context) = &connection.context {
-            let network = NetworkDisplay::from_context(context, connection.wifi.as_ref(), catalog);
-            sections.push(DetailSection {
-                title: catalog.render("details-connection", None),
-                rows: vec![
-                    row("details-network", network.label),
-                    row("details-connection-kind", network.connection),
-                    row(
-                        "details-gateway",
-                        context.gateway_address.map_or_else(
-                            || catalog.render("value-unknown", None),
-                            |address| address.to_string(),
-                        ),
-                    ),
-                ],
-            });
+            sections.push(compose_connection_section(
+                context,
+                connection.wifi.as_ref(),
+                catalog,
+            ));
             if let Some(wifi) = connection
                 .wifi
                 .as_ref()
                 .filter(|_| context.is_carried_by_wifi())
             {
-                let unknown = || catalog.render("value-unknown", None);
-                let render = |key: &str, value: String| {
-                    let mut args = FluentArgs::new();
-                    args.set("value", value);
-                    catalog.render(key, Some(&args))
-                };
-                sections.push(DetailSection {
-                    title: catalog.render("details-wifi", None),
-                    rows: vec![
-                        row(
-                            "details-wifi-signal",
-                            wifi.signal_dbm.map_or_else(unknown, |signal| {
-                                render("unit-dbm", signal.unsigned_abs().to_string())
-                            }),
-                        ),
-                        row(
-                            "details-wifi-band",
-                            select_band_key(wifi.band)
-                                .map_or_else(unknown, |key| catalog.render(key, None)),
-                        ),
-                        row(
-                            "details-wifi-channel",
-                            wifi.channel
-                                .map_or_else(unknown, |channel| channel.to_string()),
-                        ),
-                        row(
-                            "details-wifi-rate",
-                            wifi.rate_mbps.map_or_else(unknown, |rate| {
-                                render("unit-megabits", rate.to_string())
-                            }),
-                        ),
-                    ],
-                });
+                sections.push(compose_wifi_section(wifi, catalog));
             }
         }
-        let waiting = || catalog.render("details-traffic-waiting", None);
-        let pair = |rate: TrafficRate| format_pair(rate.received, rate.sent, catalog);
-        sections.push(DetailSection {
-            title: catalog.render("details-traffic", None),
-            rows: vec![
-                row("details-traffic-now", current.map_or_else(waiting, pair)),
-                row("details-traffic-peak", peak.map_or_else(waiting, pair)),
-            ],
-        });
-        Self { sections }
+        sections.push(compose_traffic_section(traffic, catalog));
+        Self {
+            sections,
+            refresh_seconds: u32::try_from(TRAFFIC_WINDOW.as_secs()).unwrap_or(u32::MAX),
+        }
+    }
+}
+
+/// O(1).
+fn compose_connection_section(
+    context: &ConnectionContext,
+    wifi: Option<&WifiLink>,
+    catalog: &TextCatalog,
+) -> DetailSection {
+    let network = NetworkDisplay::from_context(context, wifi, catalog);
+    let gateway = context.gateway_address.map_or_else(
+        || catalog.render("value-unknown", None),
+        |address| address.to_string(),
+    );
+    DetailSection {
+        title: catalog.render("details-connection", None),
+        rows: vec![
+            DetailRow::compose("details-network", network.label, catalog),
+            DetailRow::compose("details-connection-kind", network.connection, catalog),
+            DetailRow::compose("details-gateway", gateway, catalog),
+        ],
+    }
+}
+
+/// O(1).
+fn compose_wifi_section(wifi: &WifiLink, catalog: &TextCatalog) -> DetailSection {
+    let unknown = || catalog.render("value-unknown", None);
+    let render = |key: &str, value: String| {
+        let mut args = FluentArgs::new();
+        args.set("value", value);
+        catalog.render(key, Some(&args))
+    };
+    let signal = wifi.signal_dbm.map_or_else(unknown, |signal| {
+        render("unit-dbm", signal.unsigned_abs().to_string())
+    });
+    let band = select_band_key(wifi.band).map_or_else(unknown, |key| catalog.render(key, None));
+    let channel = wifi
+        .channel
+        .map_or_else(unknown, |channel| channel.to_string());
+    let rate = wifi
+        .rate_mbps
+        .map_or_else(unknown, |rate| render("unit-megabits", rate.to_string()));
+    DetailSection {
+        title: catalog.render("details-wifi", None),
+        rows: vec![
+            DetailRow::compose("details-wifi-signal", signal, catalog),
+            DetailRow::compose("details-wifi-band", band, catalog),
+            DetailRow::compose("details-wifi-channel", channel, catalog),
+            DetailRow::compose("details-wifi-rate", rate, catalog),
+        ],
+    }
+}
+
+/// O(1).
+fn compose_traffic_section(traffic: TrafficReading, catalog: &TextCatalog) -> DetailSection {
+    let format = |rate: Option<TrafficRate>| {
+        rate.map_or_else(
+            || catalog.render("details-traffic-waiting", None),
+            |rate| format_pair(rate.received, rate.sent, catalog),
+        )
+    };
+    DetailSection {
+        title: catalog.render("details-traffic", None),
+        rows: vec![
+            DetailRow::compose("details-traffic-now", format(traffic.current), catalog),
+            DetailRow::compose("details-traffic-peak", format(traffic.peak), catalog),
+        ],
     }
 }
 
@@ -130,10 +159,7 @@ impl LineDetails {
     /// O(1).
     #[must_use]
     pub fn compose(reading: &LineReading, catalog: &TextCatalog) -> Self {
-        let row = |key: &str, value: String| DetailRow {
-            label: catalog.render(key, None),
-            value,
-        };
+        let row = |key: &str, value: String| DetailRow::compose(key, value, catalog);
         let mut rows = vec![row(
             "details-access",
             catalog.render(to_access_key(reading.access), None),
@@ -196,7 +222,7 @@ fn format_bytes(bytes: u64, catalog: &TextCatalog) -> String {
     let mut args = FluentArgs::new();
     args.set(
         "value",
-        format!("{:.1}", bytes as f64 / BYTES_PER_GIGABYTE as f64).replace('.', ","),
+        format_one_decimal(bytes as f64 / BYTES_PER_GIGABYTE as f64),
     );
     catalog.render("unit-gigabytes", Some(&args))
 }
@@ -205,10 +231,7 @@ fn format_bytes(bytes: u64, catalog: &TextCatalog) -> String {
 mod tests {
     use std::net::Ipv4Addr;
 
-    use domain::{
-        BoxLine, ConnectionContext, ConnectionKind, MacAddress, Medium, Metering, WanAccessType,
-        WifiBand, WifiLink,
-    };
+    use domain::{BoxLine, ConnectionKind, MacAddress, Medium, Metering, WanAccessType, WifiBand};
 
     use super::*;
 
@@ -256,8 +279,14 @@ mod tests {
         };
 
         // Act
-        let details =
-            TechnicalDetails::compose(&create_reading(Medium::WiFi), Some(rate), None, &catalog);
+        let details = TechnicalDetails::compose(
+            &create_reading(Medium::WiFi),
+            TrafficReading {
+                current: Some(rate),
+                peak: None,
+            },
+            &catalog,
+        );
 
         // Assert
         assert_eq!(
@@ -282,8 +311,11 @@ mod tests {
         let catalog = TextCatalog::load();
 
         // Act
-        let details =
-            TechnicalDetails::compose(&create_reading(Medium::Ethernet), None, None, &catalog);
+        let details = TechnicalDetails::compose(
+            &create_reading(Medium::Ethernet),
+            TrafficReading::default(),
+            &catalog,
+        );
 
         // Assert
         assert_eq!(list_titles(&details), ["Connexion", "Trafic observé"]);

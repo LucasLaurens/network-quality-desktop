@@ -2,17 +2,13 @@
 //! writer one at a time, so an export of years holds a single row in memory. Neither the gateway's
 //! MAC nor the latency histogram leaves the app.
 
-use std::fmt::Write as _;
 use std::io::{self, Write};
 use std::time::Duration;
 
-use domain::{
-    Aggregate, Bitrate, CivilDate, ConnectionKind, Granularity, SECONDS_PER_DAY, SECONDS_PER_HOUR,
-    SECONDS_PER_MINUTE, TestProfile,
-};
+use domain::{Aggregate, Bitrate, CivilDateTime, ConnectionKind, Granularity, TestProfile};
 
 use crate::{
-    EventKind, HistoryEvent, HistoryStream, MINUTE_RETENTION, NetworkKey, RepositoryError,
+    EventKind, HistoryEvent, HistoryStream, MINUTE_RETENTION, NetworkKey, Period, RepositoryError,
     ThroughputRecord,
 };
 
@@ -45,6 +41,8 @@ const TEST_HEADER: [&str; 9] = [
 ];
 const BITS_PER_KILOBIT: u64 = 1000;
 const MINUTE_RETENTION_SECONDS: i64 = MINUTE_RETENTION.as_secs().cast_signed();
+/// What a spreadsheet reads as the start of a formula.
+const FORMULA_STARTS: [char; 6] = ['=', '+', '-', '@', '\t', '\r'];
 
 /// How far back an export reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,10 +58,11 @@ impl ExportPeriod {
     #[must_use]
     pub const fn find_start(self, now_utc: i64) -> i64 {
         match self {
-            Self::LastDay => now_utc - SECONDS_PER_DAY,
-            Self::LastWeek => now_utc - 7 * SECONDS_PER_DAY,
-            Self::LastMonth => now_utc - 30 * SECONDS_PER_DAY,
-            Self::All => i64::MIN,
+            Self::LastDay => now_utc - Period::Day.to_seconds(),
+            Self::LastWeek => now_utc - Period::Week.to_seconds(),
+            Self::LastMonth => now_utc - Period::Month.to_seconds(),
+            // Nothing was measured before 1970.
+            Self::All => 0,
         }
     }
 }
@@ -86,7 +85,8 @@ impl From<io::Error> for ExportError {
     }
 }
 
-/// Hours before the minutes still kept, then the minutes: each second once, at its finest grain.
+/// Hours up to the one the purge cut into, then the minutes after it: each second once. The hour
+/// holding the start of the period comes whole, a few minutes before it included.
 /// O(r) time for r rows, O(1) space.
 ///
 /// # Errors
@@ -100,9 +100,12 @@ pub fn export_measures(
 ) -> Result<(), ExportError> {
     writer.write_all(encode_csv_line(&MEASURE_HEADER).as_bytes())?;
     let from = period.find_start(now_utc);
-    let minutes_from = Granularity::Hour.find_start(now_utc - MINUTE_RETENTION_SECONDS);
+    // The purge keeps a minute until its hour is kept: past the cut hour, every minute is there.
+    let minutes_from = Granularity::Hour.find_start(now_utc - MINUTE_RETENTION_SECONDS)
+        + Granularity::Hour.to_seconds();
     if from < minutes_from {
-        write_measures(stream, Granularity::Hour, from, minutes_from, writer)?;
+        let hours_from = Granularity::Hour.find_start(from);
+        write_measures(stream, Granularity::Hour, hours_from, minutes_from, writer)?;
     }
     write_measures(
         stream,
@@ -188,16 +191,15 @@ pub fn encode_csv_line<S: AsRef<str>>(fields: &[S]) -> String {
 /// "2023-11-14T22:13:20Z". O(1).
 #[must_use]
 pub fn format_utc_iso8601(utc: i64) -> String {
-    let date = CivilDate::from_days(utc.div_euclid(SECONDS_PER_DAY));
-    let second_of_day = utc.rem_euclid(SECONDS_PER_DAY);
+    let moment = CivilDateTime::from_seconds(utc);
     format!(
         "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        date.year,
-        date.month,
-        date.day,
-        second_of_day / SECONDS_PER_HOUR,
-        second_of_day % SECONDS_PER_HOUR / SECONDS_PER_MINUTE,
-        second_of_day % SECONDS_PER_MINUTE
+        moment.date.year,
+        moment.date.month,
+        moment.date.day,
+        moment.hour,
+        moment.minute,
+        moment.second
     )
 }
 
@@ -212,7 +214,7 @@ fn encode_measure_line(
     encode_csv_line(&[
         format_utc_iso8601(start),
         to_granularity_text(granularity).to_owned(),
-        to_network_name(network).to_owned(),
+        to_network_name(network),
         to_kind_text(network.kind).to_owned(),
         format_or_empty(aggregate.compute_latency_p90(), format_tenths_of_millis),
         format_or_empty(aggregate.compute_mean_jitter(), format_tenths_of_millis),
@@ -231,10 +233,10 @@ fn encode_measure_line(
 /// O(1).
 fn encode_event_line(event: &HistoryEvent) -> String {
     encode_csv_line(&[
-        format_utc_iso8601(event.utc).as_str(),
+        format_utc_iso8601(event.utc),
         to_network_name(&event.network),
-        to_kind_text(event.network.kind),
-        to_event_text(event.kind),
+        to_kind_text(event.network.kind).to_owned(),
+        to_event_text(event.kind).to_owned(),
     ])
 }
 
@@ -248,7 +250,7 @@ fn encode_test_line(record: &ThroughputRecord) -> String {
     };
     encode_csv_line(&[
         format_utc_iso8601(record.utc),
-        to_network_name(&record.network).to_owned(),
+        to_network_name(&record.network),
         to_kind_text(record.network.kind).to_owned(),
         to_profile_text(result.profile).to_owned(),
         kilobits(result.download),
@@ -266,16 +268,21 @@ fn format_or_empty<T>(value: Option<T>, format: impl FnOnce(T) -> String) -> Str
     value.map_or_else(String::new, format)
 }
 
-/// "12.6": a dot, as a spreadsheet in any language reads a CSV. O(1).
+/// "12.6": a dot, as RFC 4180 tools read numbers. O(1).
 fn format_tenths_of_millis(duration: Duration) -> String {
     let tenths = duration.as_micros() / 100;
-    let mut text = String::new();
-    let _ = write!(text, "{}.{}", tenths / 10, tenths % 10);
-    text
+    format!("{}.{}", tenths / 10, tenths % 10)
 }
 
-fn to_network_name(network: &NetworkKey) -> &str {
-    network.name.as_deref().unwrap_or_default()
+/// A Wi-Fi name is anyone's choice: one that a spreadsheet would run as a formula is quoted with
+/// a leading apostrophe. O(length).
+fn to_network_name(network: &NetworkKey) -> String {
+    let name = network.name.as_deref().unwrap_or_default();
+    if name.starts_with(FORMULA_STARTS) {
+        format!("'{name}")
+    } else {
+        name.to_owned()
+    }
 }
 
 const fn to_granularity_text(granularity: Granularity) -> &'static str {

@@ -9,7 +9,7 @@ use crate::Bitrate;
 /// Averaged over this long: one second is too jumpy to read.
 pub const TRAFFIC_WINDOW: Duration = Duration::from_secs(5);
 /// The peak is the busiest window of the last hour.
-const PEAK_WINDOWS: usize = 720;
+const PEAK_SPAN: Duration = Duration::from_hours(1);
 /// A longer gap between two readings (a sleep, a stalled thread) tells nothing about a rate.
 const MAX_READING_GAP: Duration = Duration::from_secs(3);
 const BITS_PER_BYTE: u128 = 8;
@@ -30,6 +30,13 @@ pub struct TrafficRate {
     pub sent: Bitrate,
 }
 
+/// What the meter says: `None` until a whole window was seen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TrafficReading {
+    pub current: Option<TrafficRate>,
+    pub peak: Option<TrafficRate>,
+}
+
 /// Rates over `TRAFFIC_WINDOW`, the last hour of them.
 #[derive(Debug, Clone, Default)]
 pub struct TrafficMeter {
@@ -38,7 +45,8 @@ pub struct TrafficMeter {
     received: u64,
     sent: u64,
     elapsed: Duration,
-    windows: VecDeque<TrafficRate>,
+    /// Each window with the time it closed, oldest first.
+    windows: VecDeque<(Duration, TrafficRate)>,
 }
 
 impl TrafficMeter {
@@ -46,6 +54,13 @@ impl TrafficMeter {
     /// interface or a long gap only starts a new interval. O(1) amortised.
     pub fn record(&mut self, at: Duration, counters: ByteCounters) {
         let previous = self.previous.replace((at, counters));
+        while self
+            .windows
+            .front()
+            .is_some_and(|(closed, _)| *closed + PEAK_SPAN < at)
+        {
+            self.windows.pop_front();
+        }
         let Some((previous_at, previous_counters)) = previous else {
             return;
         };
@@ -63,32 +78,46 @@ impl TrafficMeter {
         self.sent = self.sent.saturating_add(sent);
         self.elapsed += gap;
         if self.elapsed >= TRAFFIC_WINDOW {
-            self.close_window();
+            self.close_window(at);
         }
     }
 
-    /// The last window. O(1).
+    /// The last window, unless it closed before a gap (a sleep): it no longer says what is
+    /// happening. O(1).
     #[must_use]
     pub fn compute_current(&self) -> Option<TrafficRate> {
-        self.windows.back().copied()
+        let (latest, _) = self.previous?;
+        self.windows
+            .back()
+            .filter(|(closed, _)| *closed + 2 * TRAFFIC_WINDOW >= latest)
+            .map(|(_, rate)| *rate)
     }
 
     /// The busiest window of the last hour, each way on its own. O(w) for w ≤ 720 windows.
     #[must_use]
     pub fn compute_peak(&self) -> Option<TrafficRate> {
-        let received = self.windows.iter().map(|rate| rate.received).max()?;
-        let sent = self.windows.iter().map(|rate| rate.sent).max()?;
+        let received = self.windows.iter().map(|(_, rate)| rate.received).max()?;
+        let sent = self.windows.iter().map(|(_, rate)| rate.sent).max()?;
         Some(TrafficRate { received, sent })
     }
 
-    fn close_window(&mut self) {
-        if self.windows.len() == PEAK_WINDOWS {
-            self.windows.pop_front();
+    /// O(w) for w ≤ 720 windows.
+    #[must_use]
+    pub fn compute_reading(&self) -> TrafficReading {
+        TrafficReading {
+            current: self.compute_current(),
+            peak: self.compute_peak(),
         }
-        self.windows.push_back(TrafficRate {
-            received: compute_rate(self.received, self.elapsed),
-            sent: compute_rate(self.sent, self.elapsed),
-        });
+    }
+
+    fn close_window(&mut self, at: Duration) {
+        self.windows.push_back((
+            at,
+            TrafficRate {
+                received: compute_rate(self.received, self.elapsed),
+                sent: compute_rate(self.sent, self.elapsed),
+            },
+        ));
         self.received = 0;
         self.sent = 0;
         self.elapsed = Duration::ZERO;
@@ -113,6 +142,25 @@ mod tests {
             interface: 4,
             received,
             sent,
+        }
+    }
+
+    /// One reading a second from `start`, counting on from `counters` by `received` bytes a second.
+    fn record_seconds_from(
+        meter: &mut TrafficMeter,
+        start: u64,
+        seconds: u64,
+        counters: ByteCounters,
+        received: u64,
+    ) {
+        for second in start..=start + seconds {
+            meter.record(
+                Duration::from_secs(second),
+                ByteCounters {
+                    received: counters.received + (second - start) * received,
+                    ..counters
+                },
+            );
         }
     }
 
@@ -169,10 +217,14 @@ mod tests {
         // Arrange
         let mut meter = TrafficMeter::default();
         record_seconds(&mut meter, 0, 5, 10 * MEGABYTE, 0);
-        meter = TrafficMeter {
-            previous: None,
-            ..meter
-        };
+        // Another interface in between: the counting starts over.
+        meter.record(
+            Duration::from_secs(99),
+            ByteCounters {
+                interface: 5,
+                ..create_counters(0, 0)
+            },
+        );
 
         // Act
         record_seconds(&mut meter, 100, 5, 0, MEGABYTE);
@@ -212,9 +264,14 @@ mod tests {
             },
         );
 
+        record_seconds_from(&mut meter, 61, 5, create_counters(0, 0), MEGABYTE);
+
         // Assert
-        assert_eq!(meter.compute_current(), None);
-        assert_eq!(meter.received, 0);
+        assert_eq!(
+            meter.compute_current().map(|rate| rate.received),
+            Some(Bitrate::from_bits_per_second(8_000_000)),
+            "only the five steady seconds count"
+        );
     }
 
     #[test]
@@ -225,12 +282,40 @@ mod tests {
         let quiet = create_counters(50 * MEGABYTE, 0);
 
         // Act
-        for second in 6..=3_605 {
+        for second in 6..=3_606 {
             meter.record(Duration::from_secs(second), quiet);
         }
 
         // Assert
         let peak = meter.compute_peak().expect("a peak");
         assert_eq!(peak.received, Bitrate::from_bits_per_second(0));
+    }
+
+    #[test]
+    fn forgets_what_came_before_a_long_sleep() {
+        // Arrange
+        let mut meter = TrafficMeter::default();
+        record_seconds(&mut meter, 0, 5, 10 * MEGABYTE, 0);
+
+        // Act
+        meter.record(Duration::from_hours(2), create_counters(0, 0));
+
+        // Assert
+        assert_eq!(meter.compute_current(), None);
+        assert_eq!(meter.compute_peak(), None);
+    }
+
+    #[test]
+    fn keeps_the_peak_but_not_the_current_rate_across_a_short_sleep() {
+        // Arrange
+        let mut meter = TrafficMeter::default();
+        record_seconds(&mut meter, 0, 5, 10 * MEGABYTE, 0);
+
+        // Act
+        meter.record(Duration::from_secs(600), create_counters(0, 0));
+
+        // Assert
+        assert_eq!(meter.compute_current(), None);
+        assert!(meter.compute_peak().is_some());
     }
 }

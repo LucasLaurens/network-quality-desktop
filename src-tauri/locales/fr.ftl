@@ -242,3 +242,4 @@ access-reported-dsl = ADSL (annoncé par la box)
 access-estimated-fibre = Fibre (estimé)
 access-estimated-adsl = ADSL (estimé)
 access-unknown = Inconnu
+details-line-failed = La ligne n'a pas pu être lue.

@@ -9,7 +9,7 @@ use application::{
     ExportError, ExportPeriod, HistoryStream, export_events, export_measures,
     export_throughput_tests,
 };
-use domain::{CivilDate, SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE};
+use domain::CivilDateTime;
 use infrastructure::SqliteMeasurementRepository;
 use serde::Deserialize;
 use specta::Type;
@@ -89,16 +89,15 @@ fn write_files(
 
 /// "qualite-reseau-2026-10-21-140512", to the second: two exports never share a folder. O(1).
 fn format_folder_name(local: i64) -> String {
-    let date = CivilDate::from_days(local.div_euclid(SECONDS_PER_DAY));
-    let second_of_day = local.rem_euclid(SECONDS_PER_DAY);
+    let moment = CivilDateTime::from_seconds(local);
     format!(
         "qualite-reseau-{:04}-{:02}-{:02}-{:02}{:02}{:02}",
-        date.year,
-        date.month,
-        date.day,
-        second_of_day / SECONDS_PER_HOUR,
-        second_of_day % SECONDS_PER_HOUR / SECONDS_PER_MINUTE,
-        second_of_day % SECONDS_PER_MINUTE
+        moment.date.year,
+        moment.date.month,
+        moment.date.day,
+        moment.hour,
+        moment.minute,
+        moment.second
     )
 }
 

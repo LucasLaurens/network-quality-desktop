@@ -104,7 +104,7 @@ export const commands = {
 	 * 
 	 *  # Errors
 	 * 
-	 *  The history could not be read.
+	 *  The sentence shown in the panel when the history could not be read.
 	 */
 	readLineDetails: () => typedError<LineDetails, string>(__TAURI_INVOKE("read_line_details")),
 };
@@ -304,6 +304,8 @@ export type StateShares = {
 export type TechnicalDetails = {
 	/**  The connection, the Wi-Fi when it carries the traffic, the traffic seen. */
 	sections: DetailSection[],
+	/**  The traffic is averaged over this long: reading it faster shows nothing new. */
+	refreshSeconds: number,
 };
 
 /**  What a click on a test gives: its row, or the warning to accept first where data counts. */

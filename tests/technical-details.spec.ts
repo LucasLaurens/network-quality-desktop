@@ -49,13 +49,14 @@ describe('TechnicalDetails', () => {
     const wrapper = mountDetails(client)
     await toggle(wrapper, true)
     const newer = createDetailSection()
-    client.technicalDetails = { sections: [newer] }
+    const refreshMs = client.technicalDetails.refreshSeconds * 1000
+    client.technicalDetails = { ...client.technicalDetails, sections: [newer] }
 
     // Act
-    await vi.advanceTimersByTimeAsync(5000)
+    await vi.advanceTimersByTimeAsync(refreshMs)
     const readsWhileOpen = client.technicalDetailsReads
     await toggle(wrapper, false)
-    await vi.advanceTimersByTimeAsync(15000)
+    await vi.advanceTimersByTimeAsync(3 * refreshMs)
 
     // Assert
     expect(readsWhileOpen).toBe(2)

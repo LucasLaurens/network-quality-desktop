@@ -24,7 +24,7 @@ mod verdict;
 mod wifi;
 
 pub use access::{ACCESS_TESTS, AccessEstimate, BoxLine, WanAccessType};
-pub use calendar::CivilDate;
+pub use calendar::{CivilDate, CivilDateTime};
 pub use connection::{
     ConnectionContext, ConnectionKind, Gateway, InterfaceSnapshot, MacAddress, Medium, Metering,
     NetworkIdentity,
@@ -53,7 +53,7 @@ pub use throughput::{
     ThroughputResult, Transfer,
 };
 pub use timestamp::Timestamp;
-pub use traffic::{ByteCounters, TRAFFIC_WINDOW, TrafficMeter, TrafficRate};
+pub use traffic::{ByteCounters, TRAFFIC_WINDOW, TrafficMeter, TrafficRate, TrafficReading};
 pub use verdict::Verdict;
 pub use wifi::{
     WEAK_SIGNAL_DBM, WifiBand, WifiLink, compute_channel, convert_kilobits_to_megabits,

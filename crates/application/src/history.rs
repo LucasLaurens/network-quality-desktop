@@ -70,8 +70,9 @@ pub enum HistoryCommand {
     },
     RecordEvent(HistoryEvent),
     RecordThroughput(ThroughputRecord),
-    /// The user erases the history: everything written so far goes.
-    EraseAll,
+    /// The user erases the history: everything written so far goes. Answered once it is done,
+    /// never after a failure: the asker then sees its answer dropped.
+    EraseAll(SyncSender<()>),
     /// Answered once every earlier command is written.
     Flush(SyncSender<()>),
 }
@@ -139,9 +140,11 @@ impl<R: MeasurementRepository> HistoryWriter<R> {
             HistoryCommand::RecordThroughput(record) => {
                 self.repository.record_throughput_test(&record)
             }
-            HistoryCommand::EraseAll => {
+            HistoryCommand::EraseAll(answer) => {
+                self.repository.erase_history()?;
                 self.last_hour = None;
-                self.repository.erase_history()
+                let _ = answer.send(());
+                Ok(())
             }
             HistoryCommand::Flush(answer) => {
                 // The asker may have given up waiting: nothing to do then.
@@ -278,12 +281,12 @@ impl HistoryTracker {
         recorder.record(HistoryCommand::Flush(answer));
     }
 
-    /// Forgets the last hour and the minute in progress, erases what was written, then answers
-    /// `answer`. The next second notes its network and any outage again, as at launch. O(1).
+    /// Forgets the last hour and the minute in progress, then has what was written erased; the
+    /// writer answers `answer` once done. The next second notes its network and any outage
+    /// again, as at launch. O(1).
     pub fn erase(&mut self, answer: SyncSender<()>, recorder: &impl HistoryRecorder) {
         *self = Self::default();
-        recorder.record(HistoryCommand::EraseAll);
-        recorder.record(HistoryCommand::Flush(answer));
+        recorder.record(HistoryCommand::EraseAll(answer));
     }
 
     /// Closes an outage in progress (nothing is measured while asleep), notes the sleep, then

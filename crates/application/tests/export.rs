@@ -4,12 +4,13 @@ use std::time::Duration;
 
 use application::test_support::InMemoryMeasurementRepository;
 use application::{
-    EventKind, ExportPeriod, HistoryEvent, MeasurementRepository, NetworkKey, ThroughputRecord,
-    encode_csv_line, export_events, export_measures, export_throughput_tests, format_utc_iso8601,
+    EventKind, ExportPeriod, HistoryEvent, MINUTE_RETENTION, MeasurementRepository, NetworkKey,
+    ThroughputRecord, encode_csv_line, export_events, export_measures, export_throughput_tests,
+    format_utc_iso8601,
 };
 use domain::{
-    Aggregate, Bitrate, ConnectionKind, CountedState, MacAddress, SecondSample, TestProfile,
-    ThroughputResult,
+    Aggregate, Bitrate, ConnectionKind, CountedState, Granularity, MacAddress, SECONDS_PER_DAY,
+    SECONDS_PER_HOUR, SECONDS_PER_MINUTE, SecondSample, TestProfile, ThroughputResult,
 };
 
 /// 2023-11-14 22:13:20 UTC.
@@ -39,7 +40,7 @@ fn create_minute() -> Aggregate {
 
 /// The three files, as text.
 fn export(repository: &InMemoryMeasurementRepository, period: ExportPeriod) -> [String; 3] {
-    let now = SOME_UTC + 3600;
+    let now = SOME_UTC + SECONDS_PER_HOUR;
     let mut measures = Vec::new();
     let mut events = Vec::new();
     let mut tests = Vec::new();
@@ -129,7 +130,7 @@ fn leaves_out_what_is_older_than_the_period() {
     repository
         .add_minute(
             &create_network("Box"),
-            SOME_UTC - 3 * 86_400,
+            SOME_UTC - 3 * SECONDS_PER_DAY,
             &create_minute(),
         )
         .expect("an old minute");
@@ -146,12 +147,20 @@ fn exports_hours_where_minutes_are_gone_and_never_a_second_twice() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
     let network = create_network("Box");
-    let recent_hour = SOME_UTC - SOME_UTC % 3600;
+    let recent_hour = SOME_UTC - SOME_UTC % SECONDS_PER_HOUR;
     repository
-        .save_hour(&network, recent_hour - 40 * 86_400, &create_minute())
+        .save_hour(
+            &network,
+            recent_hour - 40 * SECONDS_PER_DAY,
+            &create_minute(),
+        )
         .expect("an old hour");
     repository
-        .add_minute(&network, recent_hour - 40 * 86_400, &create_minute())
+        .add_minute(
+            &network,
+            recent_hour - 40 * SECONDS_PER_DAY,
+            &create_minute(),
+        )
         .expect("its minute, not purged yet");
     repository
         .save_hour(&network, recent_hour, &create_minute())
@@ -171,4 +180,70 @@ fn exports_hours_where_minutes_are_gone_and_never_a_second_twice() {
         .filter_map(|line| line.split(',').nth(1))
         .collect();
     assert_eq!(grains, ["heure", "minute"]);
+}
+
+#[test]
+fn exports_the_hour_where_the_purge_cut_its_minutes() {
+    // Arrange
+    let mut repository = InMemoryMeasurementRepository::default();
+    let network = create_network("Box");
+    let purge_cutoff = SOME_UTC + SECONDS_PER_HOUR - MINUTE_RETENTION.as_secs().cast_signed();
+    let cut_hour = Granularity::Hour.find_start(purge_cutoff);
+    repository
+        .save_hour(&network, cut_hour, &create_minute())
+        .expect("the cut hour");
+    let kept_minute = Granularity::Minute.find_start(purge_cutoff) + SECONDS_PER_MINUTE;
+    repository
+        .add_minute(&network, kept_minute, &create_minute())
+        .expect("a minute after the cutoff");
+
+    // Act
+    let [measures, ..] = export(&repository, ExportPeriod::All);
+
+    // Assert
+    let grains: Vec<&str> = measures
+        .split("\r\n")
+        .skip(1)
+        .filter_map(|line| line.split(',').nth(1))
+        .collect();
+    assert_eq!(grains, ["heure"], "the hour already holds its minutes");
+}
+
+#[test]
+fn keeps_a_network_name_from_becoming_a_spreadsheet_formula() {
+    // Arrange
+    let mut repository = InMemoryMeasurementRepository::default();
+    repository
+        .add_minute(
+            &create_network("=HYPERLINK(\"x\")"),
+            SOME_UTC - 20,
+            &create_minute(),
+        )
+        .expect("a minute");
+
+    // Act
+    let [measures, ..] = export(&repository, ExportPeriod::LastDay);
+
+    // Assert
+    assert!(measures.contains(",minute,\"'=HYPERLINK(\"\"x\"\")\",wifi,"));
+}
+
+#[test]
+fn starts_the_last_month_with_the_whole_hour_it_falls_in() {
+    // Arrange
+    let mut repository = InMemoryMeasurementRepository::default();
+    let month_start = SOME_UTC + SECONDS_PER_HOUR - 30 * SECONDS_PER_DAY;
+    repository
+        .save_hour(
+            &create_network("Box"),
+            Granularity::Hour.find_start(month_start),
+            &create_minute(),
+        )
+        .expect("the first hour");
+
+    // Act
+    let [measures, ..] = export(&repository, ExportPeriod::LastMonth);
+
+    // Assert
+    assert!(measures.contains(",heure,Box,"));
 }

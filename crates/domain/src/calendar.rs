@@ -1,5 +1,7 @@
 //! Days since 1970-01-01 turned into calendar dates, in the proleptic Gregorian calendar.
 
+use crate::{SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE};
+
 /// Days from 0000-03-01 to 1970-01-01.
 const DAYS_TO_EPOCH: i64 = 719_468;
 const DAYS_PER_ERA: i64 = 146_097;
@@ -43,9 +45,45 @@ impl CivilDate {
     }
 }
 
+/// A second since 1970-01-01, as a date and a time of day: UTC, or local once shifted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CivilDateTime {
+    pub date: CivilDate,
+    pub hour: i64,
+    pub minute: i64,
+    pub second: i64,
+}
+
+impl CivilDateTime {
+    /// O(1).
+    #[must_use]
+    pub const fn from_seconds(seconds: i64) -> Self {
+        let second_of_day = seconds.rem_euclid(SECONDS_PER_DAY);
+        Self {
+            date: CivilDate::from_days(seconds.div_euclid(SECONDS_PER_DAY)),
+            hour: second_of_day / SECONDS_PER_HOUR,
+            minute: second_of_day % SECONDS_PER_HOUR / SECONDS_PER_MINUTE,
+            second: second_of_day % SECONDS_PER_MINUTE,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn splits_a_second_into_its_date_and_time_of_day() {
+        // Act
+        let moment = CivilDateTime::from_seconds(1_700_000_000);
+
+        // Assert
+        assert_eq!(
+            (moment.date.year, moment.date.month, moment.date.day),
+            (2023, 11, 14)
+        );
+        assert_eq!((moment.hour, moment.minute, moment.second), (22, 13, 20));
+    }
 
     #[test]
     fn finds_the_date_of_a_day() {
