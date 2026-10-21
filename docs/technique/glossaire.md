@@ -20,3 +20,5 @@ Le code est en anglais, l'interface et la documentation en français. Chaque con
 | Support           | `Medium`            | Ce qui porte une interface selon le système : Wi-Fi, Ethernet, cellulaire, tunnel        |
 | Type de connexion | `ConnectionKind`    | Ce que l'utilisateur reconnaît : Ethernet, Wi-Fi, modem cellulaire, partage de connexion |
 | Connexion limitée | `Metering`          | Ce que le système dit du coût des données : payante, réduite, libre, inconnue            |
+| Tronçon en cause  | `Fault`             | Lien local, opérateur, réseau mobile, ou indéterminé                                     |
+| Non mesurable     | `Unmeasurable`      | Ping refusé, passerelle muette, ou pas de passerelle                                     |

@@ -1,3 +1,5 @@
+use crate::Fault;
+
 /// The three measured quantities, in the order they are shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Metric {
@@ -16,12 +18,15 @@ pub enum MeasuringCause {
 }
 
 /// Why the connection is in its current state: the « pourquoi » shown under the state.
-/// Segment attribution (Wi-Fi, operator, mobile network) comes with the gateway probe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Diagnosis {
     Healthy,
     NearThreshold(Metric),
-    OutOfThreshold(Metric),
+    /// The Internet segment is past a threshold, and where the fault lies.
+    OutOfThreshold {
+        metric: Metric,
+        fault: Fault,
+    },
     /// Every metric is back within its thresholds; the state waits before improving.
     Recovering,
     Measuring {
@@ -29,6 +34,10 @@ pub enum Diagnosis {
         needed: u32,
         cause: MeasuringCause,
     },
-    /// No target answered for 5 s; whether a network is connected at all is not known yet.
+    /// No default route: the computer is not connected to any network.
+    NoNetwork,
+    /// The gateway answers while no target does: the box has lost its Internet access.
+    GatewayWithoutInternet,
+    /// No target answered for 5 s, and the gateway is silent or cannot be pinged.
     NoServerReachable,
 }

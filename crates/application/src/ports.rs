@@ -1,12 +1,19 @@
 use std::future::Future;
 
-use domain::{ConnectionContext, ProbeOutcome, Target, Timestamp};
+use std::net::Ipv4Addr;
+
+use domain::{ConnectionContext, GatewayEcho, ProbeOutcome, Target, Timestamp};
 
 use crate::VerdictView;
 
 /// Sends one probe to a target and says whether it answered, was lost, or is unreachable.
 pub trait LatencyProbe {
     fn send_probe(&self, target: Target) -> impl Future<Output = ProbeOutcome> + Send;
+}
+
+/// Pings the gateway over ICMP only: a TCP fallback would say nothing reliable about the link.
+pub trait GatewayProbe {
+    fn ping_gateway(&self, gateway: Ipv4Addr) -> impl Future<Output = GatewayEcho> + Send;
 }
 
 /// Describes the connection of the default route; `None` when there is none.

@@ -1,5 +1,12 @@
 import { faker } from '@faker-js/faker'
-import type { AppInfo, ConnectionDisplay, MetricDisplay, WindowModeTexts } from '../../src/bindings'
+import type {
+  AppInfo,
+  ConnectionDisplay,
+  MetricDisplay,
+  PathDisplay,
+  SegmentDisplay,
+  WindowModeTexts,
+} from '../../src/bindings'
 import type { NetworkQualityClient } from '../../src/services/network-quality-client'
 
 export function createMetricDisplay(overrides: Partial<MetricDisplay> = {}): MetricDisplay {
@@ -18,6 +25,28 @@ export function createMetricDisplay(overrides: Partial<MetricDisplay> = {}): Met
   }
 }
 
+export function createSegmentDisplay(overrides: Partial<SegmentDisplay> = {}): SegmentDisplay {
+  return {
+    label: faker.lorem.words(2),
+    fault: null,
+    state: 'solid',
+    isCut: false,
+    ...overrides,
+  }
+}
+
+export function createPathDisplay(overrides: Partial<PathDisplay> = {}): PathDisplay {
+  return {
+    computer: faker.lorem.word(),
+    gateway: faker.lorem.word(),
+    internet: faker.lorem.word(),
+    local: createSegmentDisplay(),
+    internetSegment: createSegmentDisplay(),
+    description: faker.lorem.sentence(),
+    ...overrides,
+  }
+}
+
 export function createConnectionDisplay(overrides: Partial<ConnectionDisplay> = {}): ConnectionDisplay {
   return {
     state: 'solid',
@@ -28,6 +57,7 @@ export function createConnectionDisplay(overrides: Partial<ConnectionDisplay> = 
     metrics: [createMetricDisplay(), createMetricDisplay(), createMetricDisplay()],
     openDashboardLabel: faker.lorem.words(3),
     network: { label: faker.company.name(), connection: faker.lorem.words(2) },
+    path: createPathDisplay(),
     ...overrides,
   }
 }
