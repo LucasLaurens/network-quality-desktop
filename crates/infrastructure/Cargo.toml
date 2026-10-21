@@ -9,9 +9,10 @@ publish.workspace = true
 application.workspace = true
 domain.workspace = true
 ping-async.workspace = true
+tokio = { workspace = true, features = ["net"] }
 
 [dev-dependencies]
-tokio.workspace = true
+tokio = { workspace = true, features = ["net", "macros", "rt"] }
 
 [lints]
 workspace = true

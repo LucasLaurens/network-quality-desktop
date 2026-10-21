@@ -20,11 +20,18 @@ pub enum StateColour {
     Unstable,
     Degraded,
     Measuring,
+    Offline,
 }
 
 impl StateColour {
     #[cfg(test)]
-    pub const ALL: [Self; 4] = [Self::Solid, Self::Unstable, Self::Degraded, Self::Measuring];
+    pub const ALL: [Self; 5] = [
+        Self::Solid,
+        Self::Unstable,
+        Self::Degraded,
+        Self::Measuring,
+        Self::Offline,
+    ];
 
     #[cfg(test)]
     pub const fn token_name(self) -> &'static str {
@@ -33,6 +40,7 @@ impl StateColour {
             Self::Unstable => "--unstable",
             Self::Degraded => "--degraded",
             Self::Measuring => "--measuring",
+            Self::Offline => "--offline",
         }
     }
 
@@ -44,6 +52,7 @@ impl StateColour {
             Self::Unstable => (0.62, 0.14, 70.0),
             Self::Degraded => (0.55, 0.18, 27.0),
             Self::Measuring => (0.56, 0.1, 250.0),
+            Self::Offline => (0.56, 0.01, 85.0),
         }
     }
 
@@ -76,6 +85,7 @@ impl From<Verdict> for StateColour {
             Verdict::Graded(Grade::Unstable) => Self::Unstable,
             Verdict::Graded(Grade::Degraded) => Self::Degraded,
             Verdict::Measuring => Self::Measuring,
+            Verdict::Offline => Self::Offline,
         }
     }
 }
@@ -121,6 +131,12 @@ fn compute_signed_distance(verdict: Verdict, (x, y): (f64, f64), size: f64) -> f
         Verdict::Graded(Grade::Solid) => disc,
         Verdict::Graded(Grade::Unstable) => ring.min(disc.max(centre - x)),
         Verdict::Graded(Grade::Degraded) => compute_triangle_distance((x, y), size),
+        Verdict::Offline => {
+            // A "/" through the centre, kept inside the disc.
+            let slash =
+                ((x - centre) + (y - centre)).abs() / std::f64::consts::SQRT_2 - RING_WIDTH / 2.0;
+            ring.min(slash.max(disc))
+        }
         Verdict::Measuring => {
             let turn = ((y - centre).atan2(x - centre) + PI) / (2.0 * PI);
             let in_dash = (turn * DASHES).floor().rem_euclid(2.0) < 1.0;
@@ -221,6 +237,23 @@ mod tests {
         assert!(ring_pixels > 0);
     }
 
+    #[test]
+    fn draws_offline_as_a_crossed_out_ring_in_the_offline_colour() {
+        // Act
+        let rgba = render_verdict_icon(Verdict::Offline, SIZE);
+
+        // Assert
+        let on_the_slash = read_pixel(&rgba, SIZE / 2, SIZE / 2);
+        assert!(is_opaque(on_the_slash));
+        assert_eq!(on_the_slash[..3], StateColour::Offline.to_srgb());
+        assert!(is_opaque(read_pixel(&rgba, 4, SIZE / 2)));
+        assert!(is_transparent(read_pixel(
+            &rgba,
+            SIZE / 2 - 8,
+            SIZE / 2 - 8
+        )));
+    }
+
     // The state colours exist twice (CSS for the windows, Rust for the tray); this keeps them equal.
     #[test]
     fn uses_the_same_state_colours_as_the_design_tokens() {
@@ -239,17 +272,25 @@ mod tests {
         }
     }
 
+    fn read_custom_property(block: &str, name: &str) -> String {
+        block
+            .lines()
+            .find_map(|line| line.trim().strip_prefix(&format!("{name}:")))
+            .map_or_else(
+                || panic!("{name} is missing from tokens.css"),
+                |value| value.trim().trim_end_matches(';').to_owned(),
+            )
+    }
+
     fn read_light_token(tokens: &str, name: &str) -> (f64, f64, f64) {
         let light_block = tokens.split("@media").next().expect("a light block");
-        let line = light_block
-            .lines()
-            .find(|line| line.trim_start().starts_with(&format!("{name}:")))
-            .unwrap_or_else(|| panic!("{name} is missing from tokens.css"));
-        let inside = line
-            .split("oklch(")
-            .nth(1)
-            .and_then(|rest| rest.split(')').next())
-            .expect("an oklch value");
+        let value = read_custom_property(light_block, name);
+        // Neutrals share their hue through `var(--hue)`; resolve it like the browser does.
+        let inside = value
+            .strip_prefix("oklch(")
+            .and_then(|rest| rest.strip_suffix(')'))
+            .expect("an oklch value")
+            .replace("var(--hue)", &read_custom_property(light_block, "--hue"));
         let mut parts = inside.split_whitespace();
         let lightness = parts
             .next()

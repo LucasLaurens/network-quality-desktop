@@ -1,0 +1,59 @@
+use std::collections::VecDeque;
+
+use crate::grade::Scalable;
+
+const WINDOW_SECONDS: usize = 60;
+/// Below 60 probes (30 s with two targets) a single loss would weigh several percent.
+const MIN_PROBES: u32 = 60;
+
+/// Share of probes that got no answer, in percent.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct LossRate(f64);
+
+impl LossRate {
+    #[must_use]
+    pub const fn from_percent(percent: f64) -> Self {
+        Self(percent)
+    }
+
+    #[must_use]
+    pub const fn to_percent(self) -> f64 {
+        self.0
+    }
+}
+
+impl Scalable for LossRate {
+    fn scale_by(self, factor: f64) -> Self {
+        Self(self.0 * factor)
+    }
+}
+
+/// Probes sent and lost over the last 60 seconds, all targets together.
+#[derive(Debug, Clone, Default)]
+pub struct LossWindow {
+    seconds: VecDeque<(u32, u32)>,
+    sent: u32,
+    lost: u32,
+}
+
+impl LossWindow {
+    /// O(1) time: running totals are adjusted instead of re-summed. O(1) space (60 entries at most).
+    pub fn record_second(&mut self, sent: u32, lost: u32) {
+        if self.seconds.len() == WINDOW_SECONDS
+            && let Some((old_sent, old_lost)) = self.seconds.pop_front()
+        {
+            self.sent -= old_sent;
+            self.lost -= old_lost;
+        }
+        self.seconds.push_back((sent, lost));
+        self.sent += sent;
+        self.lost += lost;
+    }
+
+    /// `None` until 60 probes were sent. O(1).
+    #[must_use]
+    pub fn compute_rate(&self) -> Option<LossRate> {
+        (self.sent >= MIN_PROBES)
+            .then(|| LossRate(f64::from(self.lost) * 100.0 / f64::from(self.sent)))
+    }
+}

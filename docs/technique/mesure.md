@@ -1,26 +1,32 @@
 # Mesure
 
-## Sonde de latence
+## Sonde
 
-- Port `LatencyProbe` (crate `application`), adaptateur `IcmpLatencyProbe` (crate `infrastructure`) basé sur `ping-async` : ICMP sans privilège, sockets DGRAM sur macOS et Linux, `IcmpSendEcho2Ex` sur Windows.
-- Délai maximal d'une sonde : 900 ms, pour qu'elle ne déborde jamais sur la seconde suivante. Une réponse plus lente compte comme perdue.
+- Port `LatencyProbe` (crate `application`) : `send_probe` renvoie une `ProbeOutcome` (réponse avec son temps, perdue mais joignable, injoignable).
+- Adaptateur `FallbackLatencyProbe` (crate `infrastructure`), composé de deux briques remplaçables :
+  - `IcmpEchoSender` : ICMP sans privilège via `ping-async` (sockets DGRAM sur macOS et Linux, `IcmpSendEcho2Ex` sur Windows), délai 900 ms ;
+  - `TcpConnectionOpener` : poignée de main TCP sur le port 443, délai 900 ms ; un refus de connexion prouve aussi que l'hôte répond.
+- Pour chaque cible : l'écho d'abord. S'il est perdu, une connexion TCP dit si la cible est encore joignable (perte) ou non (injoignable). Une réponse lente reste une latence et non une perte. Quand l'écho échoue, la vérification TCP peut faire déborder la seconde : le tick suivant est simplement retardé (`MissedTickBehavior::Delay`).
+- Repli TCP permanent pour une cible quand l'ICMP est refusé par le système (Linux sans `ping_group_range`) ou filtré (10 échos perdus de suite alors que TCP répond, seuil assez haut pour qu'un Wi-Fi qui perd 30 % des paquets ne l'atteigne presque jamais). Le temps de la poignée de main sert alors de latence. Ce repli dure jusqu'au redémarrage de l'app.
 - Cibles par défaut : `1.1.1.1` et `8.8.8.8` (`list_default_targets`), sondées en parallèle à chaque seconde.
-- Linux : le réglage `net.ipv4.ping_group_range` doit inclure l'utilisateur, sinon toutes les sondes échouent (repli TCP prévu par le ticket « Verdict complet »).
-- Le test réel de la sonde ne tourne qu'à la demande : `cargo test -p infrastructure -- --ignored`.
+- Les tests réels de l'ICMP et du TCP ne tournent qu'à la demande : `cargo test -p infrastructure -- --ignored`.
 
 ## Moteur
 
 - Un acteur unique, `MeasurementEngine`, possède tout l'état et reçoit des messages par un canal tokio. L'app lui envoie `Tick` chaque seconde (`MissedTickBehavior::Delay`) ; tout tourne côté Rust, jamais dans le webview.
 - La fenêtre compte des `Tick` : si le système retarde l'horloge (veille, App Nap), « 15 s » devient « 15 ticks ».
-- À chaque `Tick` : sondes en parallèle, médiane des réponses, ajout à la fenêtre, p90, niveau, hystérésis, puis envoi d'un `VerdictView` au `VerdictPresenter`.
+- À chaque `Tick` : sondes en parallèle, enregistrement dans les fenêtres de latence et de perte, détection Hors ligne, puis calcul des trois `MetricReading` (valeur, niveau, proche du seuil) et du verdict, envoyés dans un `VerdictView` au `VerdictPresenter`.
 - L'horloge passe par le port `Clock` (`SystemClock` en production, horloge manuelle en test).
 
 ## Complexité
 
-| Opération                        | Temps              | Espace                            |
-| -------------------------------- | ------------------ | --------------------------------- |
-| Ajout d'une seconde à la fenêtre | O(1)               | O(1), fenêtre bornée à 15 entrées |
-| p90 de la fenêtre                | O(n log n), n ≤ 15 | O(n)                              |
-| Médiane des cibles               | O(k log k), k = 2  | O(k)                              |
-| Hystérésis                       | O(1)               | O(1)                              |
-| Dessin de l'icône                | O(s²), s = 44 px   | O(s²)                             |
+| Opération                        | Temps                     | Espace                            |
+| -------------------------------- | ------------------------- | --------------------------------- |
+| Ajout d'une seconde à la fenêtre | O(1)                      | O(1), fenêtre bornée à 15 entrées |
+| p90 de la fenêtre                | O(n log n), n ≤ 15        | O(n)                              |
+| Médiane des cibles               | O(k log k), k = 2         | O(k)                              |
+| Gigue de la fenêtre              | O(n), n ≤ 15              | O(n)                              |
+| Fenêtre de perte (ajout, taux)   | O(1), totaux tenus à jour | O(1), 60 entrées au plus          |
+| Détection Hors ligne             | O(1)                      | O(1)                              |
+| Hystérésis                       | O(1)                      | O(1)                              |
+| Dessin de l'icône                | O(s²), s = 44 px          | O(s²)                             |
