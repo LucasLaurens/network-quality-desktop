@@ -3,9 +3,11 @@
 
 pub mod commands;
 mod display;
+mod shell_mode;
 mod shell_presenter;
 mod text_catalog;
 mod tray_icon;
+mod tray_menu;
 mod windows;
 
 use std::time::Duration;
@@ -13,21 +15,26 @@ use std::time::Duration;
 use application::{EngineMessage, MeasurementEngine, list_default_targets};
 use display::ConnectionDisplay;
 use domain::Verdict;
-use infrastructure::{FallbackLatencyProbe, IcmpEchoSender, SystemClock, TcpConnectionOpener};
+use infrastructure::{
+    FallbackLatencyProbe, IcmpEchoSender, SystemClock, SystemTrayHost, TcpConnectionOpener,
+};
+use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
     ConnectionDisplayChanged, DisplayStore, ShellPresenter, create_icon_image, describe_verdict,
 };
 use tauri::Manager;
-use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri_specta::{Builder, collect_commands, collect_events};
 use text_catalog::TextCatalog;
 use tokio::sync::mpsc;
 use tokio::time::MissedTickBehavior;
-use windows::{PopoverDismissal, apply_window_event, toggle_popover};
+use tray_menu::{MenuAction, TrayMenu, compose_menu_entries};
+use windows::{
+    HAS_POPOVER, PopoverDismissal, apply_window_event, create_popover, show_dashboard,
+    toggle_popover,
+};
 
 const TRAY_ID: &str = "connection-state";
-const QUIT_ID: &str = "quit";
 const TICK_EVERY: Duration = Duration::from_secs(1);
 /// A few pending ticks at most: if the engine falls behind, older ticks are not worth replaying.
 const ENGINE_INBOX_CAPACITY: usize = 4;
@@ -41,7 +48,10 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_app_info,
             commands::read_connection_display,
             commands::open_dashboard,
-            commands::close_popover
+            commands::close_popover,
+            commands::read_window_mode_texts,
+            commands::open_tray_extension_page,
+            commands::quit_app
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -56,6 +66,12 @@ pub fn run() {
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
+            // A menu-bar app: no Dock icon, whose click would find the dashboard hidden.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            if HAS_POPOVER {
+                create_popover(app.handle())?;
+            }
             start_measurement(app.handle())?;
             Ok(())
         })
@@ -64,31 +80,32 @@ pub fn run() {
         .expect("the Tauri runtime failed to start");
 }
 
-/// Creates the menu-bar dot and starts the measurement actor with its 1 Hz clock, all on the Rust side.
+/// Picks the tray or window mode, builds the dot and its menu, and starts the measurement actor
+/// with its 1 Hz clock, all on the Rust side.
 fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     let catalog = TextCatalog::load();
-    let store = DisplayStore::new(ConnectionDisplay::create_initial(&catalog));
-    app.manage(store.clone());
+    let initial = ConnectionDisplay::create_initial(&catalog);
+    let mode = ShellMode::detect(&SystemTrayHost);
+    app.manage(mode);
+    app.manage(WindowModeTexts::compose(mode, &catalog));
     app.manage(PopoverDismissal::default());
-    // Linux tray backends may hide an icon that has no menu; the full native menu comes later.
-    let quit = MenuItem::with_id(
-        app,
-        QUIT_ID,
-        catalog.render("menu-quit", None),
-        true,
-        None::<&str>,
-    )?;
+    let store = DisplayStore::new(initial.clone());
+    app.manage(store.clone());
+    let menu = TrayMenu::build(app, &compose_menu_entries(&initial, &catalog))?;
+    // The icon is built in window mode too: a tray that appears later still gets its dot.
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(create_icon_image(Verdict::Measuring))
         .icon_as_template(false)
         .tooltip(describe_verdict(Verdict::Measuring, &catalog))
-        .menu(&Menu::with_items(app, &[&quit])?)
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| {
-            if event.id() == QUIT_ID {
-                app.exit(0);
-            }
-        })
+        .menu(menu.read_menu())
+        .show_menu_on_left_click(!HAS_POPOVER)
+        .on_menu_event(
+            |app, event| match MenuAction::from_id(event.id().as_ref()) {
+                Some(MenuAction::OpenDashboard) => show_dashboard(app),
+                Some(MenuAction::Quit) => app.exit(0),
+                None => {}
+            },
+        )
         .on_tray_icon_event(|tray, event| {
             tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
             if let TrayIconEvent::Click {
@@ -96,16 +113,20 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
                 button_state: MouseButtonState::Up,
                 ..
             } = event
+                && HAS_POPOVER
             {
                 toggle_popover(tray.app_handle());
             }
         })
         .build(app)?;
+    if mode == ShellMode::Window {
+        show_dashboard(app);
+    }
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
     let engine = MeasurementEngine::new(
         FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener),
         SystemClock::start(),
-        ShellPresenter::new(app.clone(), tray, catalog, store),
+        ShellPresenter::new(app.clone(), tray, menu, catalog, store),
         list_default_targets(),
     );
     tauri::async_runtime::spawn(engine.run(inbox));

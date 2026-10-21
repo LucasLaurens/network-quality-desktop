@@ -28,6 +28,9 @@ specta-typescript = "=0.0.12"
 tauri = "~2.12.4"
 tauri-build = "~2.7.3"
 tauri-plugin-positioner = { version = "=2.4.0", features = ["tray-icon"] }
+tauri-plugin-opener = "=2.5.5"
+# Already linked by tao on Linux: reusing it adds no native dependency.
+dbus = "=0.9.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 unic-langid = { version = "0.9", features = ["macros"] }
 tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }

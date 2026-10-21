@@ -11,6 +11,9 @@ domain.workspace = true
 ping-async.workspace = true
 tokio = { workspace = true, features = ["net"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus.workspace = true
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["net", "macros", "rt"] }
 

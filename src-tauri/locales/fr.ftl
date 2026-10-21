@@ -25,6 +25,12 @@ action-open-dashboard = Ouvrir le tableau de bord
 
 menu-quit = Quitter
 
+## Window mode, when the desktop shows no tray icon
+
+tray-hint-message = Ce bureau n'affiche pas les icônes de la barre système : l'app reste ouverte dans une fenêtre. L'extension AppIndicator fait apparaître la pastille.
+tray-hint-link = Ouvrir la page de l'extension
+tray-hint-dismiss = Masquer
+
 ## Figures
 
 detail-metric = { $metric } { $value }, seuil { $threshold }

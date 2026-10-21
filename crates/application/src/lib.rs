@@ -8,5 +8,5 @@ mod targets;
 pub mod test_support;
 
 pub use engine::{EngineMessage, MeasurementEngine, MetricReading, VerdictView, WARM_UP_SAMPLES};
-pub use ports::{Clock, LatencyProbe, VerdictPresenter};
+pub use ports::{Clock, LatencyProbe, TrayHost, VerdictPresenter};
 pub use targets::list_default_targets;

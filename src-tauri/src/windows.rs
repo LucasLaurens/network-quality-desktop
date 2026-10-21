@@ -3,11 +3,16 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::{AppHandle, Manager, WebviewWindow, Window, WindowEvent};
+use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 use tauri_plugin_positioner::{Position, WindowExt};
+
+use crate::shell_mode::{CloseAction, ShellMode};
 
 pub const MAIN_WINDOW: &str = "main";
 pub const POPOVER_WINDOW: &str = "popover";
+
+/// Linux trays do not report clicks: the menu replaces the popover there.
+pub const HAS_POPOVER: bool = !cfg!(target_os = "linux");
 
 /// The tray sits at the top on macOS and at the bottom of the taskbar on Windows.
 const POPOVER_POSITION: Position = if cfg!(target_os = "windows") {
@@ -40,6 +45,23 @@ impl PopoverDismissal {
     }
 }
 
+/// Builds the hidden popover from its `tauri.conf.json` entry (declared with `create: false`), only
+/// where it can be opened: Linux would keep a webview alive for nothing. O(w) for w windows.
+pub fn create_popover(app: &AppHandle) -> tauri::Result<()> {
+    let Some(config) = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == POPOVER_WINDOW)
+    else {
+        eprintln!("The popover window is missing from tauri.conf.json");
+        return Ok(());
+    };
+    WebviewWindowBuilder::from_config(app, config)?.build()?;
+    Ok(())
+}
+
 /// Opens the popover under (or above) the dot, or closes it when it is already open.
 pub fn toggle_popover(app: &AppHandle) {
     let Some(popover) = app.get_webview_window(POPOVER_WINDOW) else {
@@ -59,8 +81,8 @@ pub fn toggle_popover(app: &AppHandle) {
     report_failure("Opening the popover", show_next_to_tray(&popover));
 }
 
-/// The popover closes as soon as the user clicks elsewhere; closing the dashboard only hides it,
-/// so the popover can bring it back.
+/// The popover closes as soon as the user clicks elsewhere. Closing the dashboard never quits:
+/// in tray mode it hides (the dot brings it back), in window mode it minimises to the taskbar.
 pub fn apply_window_event(window: &Window, event: &WindowEvent) {
     match (window.label(), event) {
         (POPOVER_WINDOW, WindowEvent::Focused(false)) => {
@@ -69,9 +91,27 @@ pub fn apply_window_event(window: &Window, event: &WindowEvent) {
         }
         (MAIN_WINDOW, WindowEvent::CloseRequested { api, .. }) => {
             api.prevent_close();
-            report_failure("Hiding the dashboard", window.hide());
+            match window.state::<ShellMode>().choose_close_action() {
+                CloseAction::Hide => report_failure("Hiding the dashboard", window.hide()),
+                CloseAction::Minimise => {
+                    report_failure("Minimising the dashboard", window.minimize());
+                }
+            }
         }
         _ => {}
+    }
+}
+
+/// Brings the dashboard forward, from the popover or the tray menu.
+pub fn show_dashboard(app: &AppHandle) {
+    match app.get_webview_window(MAIN_WINDOW) {
+        Some(main) => report_failure(
+            "Showing the dashboard",
+            main.unminimize()
+                .and_then(|()| main.show())
+                .and_then(|()| main.set_focus()),
+        ),
+        None => eprintln!("The dashboard window is missing"),
     }
 }
 

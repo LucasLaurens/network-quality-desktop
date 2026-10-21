@@ -14,6 +14,11 @@ pub trait Clock {
     fn read_now(&self) -> Timestamp;
 }
 
+/// Says whether the desktop can show a tray icon: some Linux sessions cannot.
+pub trait TrayHost {
+    fn is_tray_available(&self) -> bool;
+}
+
 /// Receives every verdict computed by the engine (menu-bar dot, later the popover).
 pub trait VerdictPresenter {
     fn present(&self, view: &VerdictView);
