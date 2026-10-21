@@ -53,7 +53,7 @@ Points laissés ouverts par la recherche (#19), tranchés :
 ## Réglages
 
 - Apparence : `AppHandle::set_theme` applique Clair ou Sombre à toutes les fenêtres (Système : `None`). Le webview suit le thème de sa fenêtre, donc les media queries `prefers-color-scheme` des tokens CSS aussi : pas de second jeu de couleurs. Non vérifié dans l'app réelle : à contrôler à la main sur les trois systèmes (barre de titre et page).
-- Ouverture de session : `tauri-plugin-autostart` 2.7.0, appelé depuis Rust seulement (aucune permission front) : LaunchAgent sous macOS, clé `Run` du registre sous Windows, fichier `.desktop` dans `~/.config/autostart` sous Linux. Le réglage est appliqué au lancement et à chaque enregistrement ; une version de développement (`debug_assertions`) ne s'inscrit jamais.
+- Ouverture de session : `tauri-plugin-autostart` 2.7.0, appelé depuis Rust seulement (aucune permission front) : LaunchAgent sous macOS, clé `Run` du registre sous Windows, fichier `.desktop` dans `~/.config/autostart` sous Linux. Le réglage est appliqué au lancement, avant toute fenêtre, et à chaque enregistrement : le réglage de l'app fait foi sur l'état du système. Une version de développement (`debug_assertions`) ne s'inscrit jamais.
 
 ## Tâche de fond et App Nap
 

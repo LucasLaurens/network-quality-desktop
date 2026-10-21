@@ -149,6 +149,7 @@ value-unknown = –
 ## Settings
 
 settings-saved = Enregistré à { $time }.
+settings-saved-session = Enregistré à { $time }, pour cette session seulement.
 settings-not-saved = Le réglage n'a pas pu être enregistré.
 server-invalid = Adresse IP invalide.
 server-unreachable = Ce serveur ne répond pas au ping.

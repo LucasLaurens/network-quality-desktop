@@ -65,8 +65,6 @@ impl HistoryReader for EmptyHistory {
     }
 }
 
-/// Opens the history in the app's data folder; an unreadable file is set aside and a new
-/// history starts. Without a usable disk, the history lives in memory for this session.
 /// Everything kept in the history file, each with the connection it needs.
 pub struct OpenedStores {
     pub recorder: SqliteHistoryRecorder,
@@ -75,7 +73,10 @@ pub struct OpenedStores {
     pub settings: SettingsStore,
 }
 
-pub fn open_history(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> OpenedStores {
+/// Opens the history in the app's data folder, then the dashboard's and the settings'
+/// connections beside it; an unreadable file is set aside and a new history starts. Without a
+/// usable disk, the history and the settings live in memory for this session.
+pub fn open_stores(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> OpenedStores {
     let opened = app
         .path()
         .app_data_dir()

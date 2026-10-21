@@ -4,13 +4,10 @@ use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Manager, State};
 
-use application::{Clock, LatencyProbe, list_network_summaries, read_day_overview};
-use domain::{MeasurementServers, ProbeOutcome, Target};
-use infrastructure::{
-    FallbackLatencyProbe, IcmpEchoSender, LocationRequest, SystemClock, TcpConnectionOpener,
-    request_location_permission,
-};
+use application::{Clock, can_measure_against, list_network_summaries, read_day_overview};
+use infrastructure::{LocationRequest, SystemClock, request_location_permission};
 
+use crate::create_latency_probe;
 use crate::dashboard_display::{
     DashboardSummaryDisplay, EvolutionDisplay, PeriodChoice, compute_day_start,
 };
@@ -18,7 +15,7 @@ use crate::display::ConnectionDisplay;
 use crate::engine_inbox::EngineInbox;
 use crate::history_store::{DashboardHistory, HistoryNotice};
 use crate::settings_effects::apply_settings;
-use crate::settings_form::{SettingsForm, confirm_saved};
+use crate::settings_form::{SettingsForm, format_save_confirmation};
 use crate::settings_store::SettingsStore;
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
 use crate::shell_presenter::DisplayStore;
@@ -236,10 +233,8 @@ pub async fn save_settings(
     catalog: State<'_, TextCatalog>,
 ) -> Result<String, String> {
     let settings = form.to_settings(&catalog)?;
-    if let MeasurementServers::Custom(target) = settings.servers
-        && store.read().servers != settings.servers
-        && !answers_ping(target).await
-    {
+    let previous = store.read().servers;
+    if !can_measure_against(previous, settings.servers, &create_latency_probe()).await {
         return Err(catalog.render("server-unreachable", None));
     }
     store.save(&settings).map_err(|error| {
@@ -248,20 +243,12 @@ pub async fn save_settings(
     })?;
     apply_settings(&app, &settings);
     inbox.send_settings(settings).await;
-    Ok(confirm_saved(
+    Ok(format_save_confirmation(
         SystemClock::start().read_utc_seconds(),
         i64::from(utc_offset_seconds),
+        store.read_durability(),
         &catalog,
     ))
-}
-
-/// One probe, as the engine sends them: an answer or a refused connection both prove the server
-/// is there. At most one probe timeout.
-async fn answers_ping(target: Target) -> bool {
-    FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener)
-        .send_probe(target)
-        .await
-        != ProbeOutcome::Unreachable
 }
 
 #[cfg(test)]

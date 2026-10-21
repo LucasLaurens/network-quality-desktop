@@ -162,8 +162,11 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   readonly evolutionRequests: PeriodChoice[] = []
   readonly savedForms: SettingsForm[] = []
   private settings: SettingsForm = { launchAtLogin: true, appearance: 'system', ownServer: null }
-  private settingsRefusal: string | null = null
+  /** Empty while saves are accepted. */
+  private settingsRefusal = ''
   private readonly confirmation = faker.lorem.sentence()
+  private isHoldingSaves = false
+  private heldSaves: (() => void)[] = []
 
   constructor(
     private readonly appInfo: AppInfo = { name: faker.word.noun(), version: faker.system.semver() },
@@ -277,14 +280,35 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   }
 
   acceptSettings(): void {
-    this.settingsRefusal = null
+    this.settingsRefusal = ''
   }
 
   saveSettings(form: SettingsForm): Promise<string> {
     this.savedForms.push({ ...form })
-    if (this.settingsRefusal !== null) return Promise.reject(new Error(this.settingsRefusal))
-    this.settings = { ...form }
-    return Promise.resolve(this.confirmation)
+    const answer = (): Promise<string> => {
+      if (this.settingsRefusal !== '') return Promise.reject(new Error(this.settingsRefusal))
+      this.settings = { ...form }
+      return Promise.resolve(this.confirmation)
+    }
+    if (!this.isHoldingSaves) return answer()
+    return new Promise((resolve, reject) => {
+      this.heldSaves.push(() => {
+        answer().then(resolve, reject)
+      })
+    })
+  }
+
+  /** Saves wait until `releaseSaves`, as a server probe would. */
+  holdSaves(): void {
+    this.isHoldingSaves = true
+  }
+
+  releaseSaves(): void {
+    this.isHoldingSaves = false
+    this.heldSaves.forEach((release) => {
+      release()
+    })
+    this.heldSaves = []
   }
 
   readConfirmation(): string {

@@ -8,12 +8,20 @@ use application::{RepositoryError, SettingsRepository};
 use domain::Settings;
 use infrastructure::SqliteMeasurementRepository;
 
-pub struct SettingsStore(Mutex<Box<dyn SettingsRepository + Send>>);
+use crate::settings_form::Durability;
+
+pub struct SettingsStore {
+    repository: Mutex<Box<dyn SettingsRepository + Send>>,
+    durability: Durability,
+}
 
 impl SettingsStore {
     pub fn open(path: &Path) -> Self {
         match SqliteMeasurementRepository::open_alongside(path) {
-            Ok(repository) => Self(Mutex::new(Box::new(repository))),
+            Ok(repository) => Self {
+                repository: Mutex::new(Box::new(repository)),
+                durability: Durability::OnDisk,
+            },
             Err(error) => {
                 eprintln!(
                     "Opening the settings failed, they last this session: {}",
@@ -25,12 +33,20 @@ impl SettingsStore {
     }
 
     pub fn create_in_memory() -> Self {
-        Self(Mutex::new(Box::new(SessionSettings::default())))
+        Self {
+            repository: Mutex::new(Box::new(SessionSettings::default())),
+            durability: Durability::ThisSession,
+        }
+    }
+
+    #[must_use]
+    pub const fn read_durability(&self) -> Durability {
+        self.durability
     }
 
     /// The defaults when the settings cannot be read: the app still starts.
     pub fn read(&self) -> Settings {
-        self.0
+        self.repository
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .read_settings()
@@ -47,7 +63,7 @@ impl SettingsStore {
     ///
     /// The storage failed; nothing was written.
     pub fn save(&self, settings: &Settings) -> Result<(), RepositoryError> {
-        self.0
+        self.repository
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .save_settings(settings)

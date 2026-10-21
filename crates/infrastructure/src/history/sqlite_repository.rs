@@ -337,10 +337,10 @@ impl SettingsRepository for SqliteMeasurementRepository {
 
     /// O(1).
     fn save_settings(&mut self, settings: &Settings) -> Result<(), RepositoryError> {
-        let ping_target = match settings.servers {
-            MeasurementServers::Default => None,
-            MeasurementServers::Custom(target) => Some(target.address().to_string()),
-        };
+        let ping_target = settings
+            .servers
+            .to_own_target()
+            .map(|target| target.address().to_string());
         self.write(|transaction| {
             transaction.execute(
                 "UPDATE settings SET autostart = ?1, theme = ?2, ping_target = ?3 WHERE id = 1",
@@ -355,18 +355,23 @@ impl SettingsRepository for SqliteMeasurementRepository {
     }
 }
 
+/// The values the `theme` column accepts (its CHECK constraint).
+const THEME_SYSTEM: &str = "system";
+const THEME_LIGHT: &str = "light";
+const THEME_DARK: &str = "dark";
+
 const fn to_theme_text(appearance: Appearance) -> &'static str {
     match appearance {
-        Appearance::System => "system",
-        Appearance::Light => "light",
-        Appearance::Dark => "dark",
+        Appearance::System => THEME_SYSTEM,
+        Appearance::Light => THEME_LIGHT,
+        Appearance::Dark => THEME_DARK,
     }
 }
 
 fn from_theme_text(text: &str) -> Appearance {
     match text {
-        "light" => Appearance::Light,
-        "dark" => Appearance::Dark,
+        THEME_LIGHT => Appearance::Light,
+        THEME_DARK => Appearance::Dark,
         _ => Appearance::System,
     }
 }

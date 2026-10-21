@@ -382,17 +382,15 @@ impl HistoryReader for InMemoryMeasurementRepository {
 
 /// Settings in memory: the defaults until saved.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct InMemorySettingsRepository {
-    saved: Option<Settings>,
-}
+pub struct InMemorySettingsRepository(Settings);
 
 impl SettingsRepository for InMemorySettingsRepository {
     fn read_settings(&self) -> Result<Settings, RepositoryError> {
-        Ok(self.saved.unwrap_or_default())
+        Ok(self.0)
     }
 
     fn save_settings(&mut self, settings: &Settings) -> Result<(), RepositoryError> {
-        self.saved = Some(*settings);
+        self.0 = *settings;
         Ok(())
     }
 }

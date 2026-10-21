@@ -62,24 +62,72 @@ describe('SettingsView', () => {
     expect(client.savedForms.at(-1)?.appearance).toBe('dark')
   })
 
-  it('waits for the whole address before saving an own server', async () => {
+  it('saves nothing while an address is being typed', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountSettings(client)
+    await wrapper.get('#setting-servers').setValue('own')
+
+    // Act
+    await type(wrapper.get('#setting-server'), createAddress().slice(0, 4))
+    await flushPromises()
+
+    // Assert
+    expect(client.savedForms).toEqual([])
+  })
+
+  it('saves the own server once its address is complete', async () => {
     // Arrange
     const client = new InMemoryNetworkQualityClient()
     const wrapper = await mountSettings(client)
     const address = createAddress()
     await wrapper.get('#setting-servers').setValue('own')
     const server = wrapper.get('#setting-server')
+    await type(server, address)
 
     // Act
-    await type(server, address.slice(0, 4))
-    const whileTyping = client.savedForms.length
-    await type(server, address)
     await server.trigger('change')
     await flushPromises()
 
     // Assert
-    expect(whileTyping).toBe(0)
     expect(client.savedForms).toEqual([{ launchAtLogin: true, appearance: 'system', ownServer: address }])
+  })
+
+  it('saves the look with the last accepted server while an address is half typed', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountSettings(client)
+    await wrapper.get('#setting-servers').setValue('own')
+    await type(wrapper.get('#setting-server'), createAddress().slice(0, 4))
+
+    // Act
+    await wrapper.get('[value="dark"]').setValue(true)
+    await flushPromises()
+
+    // Assert
+    expect(client.savedForms).toEqual([{ launchAtLogin: true, appearance: 'dark', ownServer: null }])
+    expect(wrapper.find('[data-refused]').exists()).toBe(false)
+  })
+
+  it('sends one save at a time, in the order of the changes', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountSettings(client)
+    client.holdSaves()
+    await wrapper.get('#setting-launch').setValue(false)
+    await wrapper.get('[value="light"]').setValue(true)
+    await flushPromises()
+    const whileTheFirstWaits = client.savedForms.length
+
+    // Act
+    client.releaseSaves()
+    await flushPromises()
+    client.releaseSaves()
+    await flushPromises()
+
+    // Assert
+    expect(whileTheFirstWaits).toBe(1)
+    expect(client.savedForms.map((form) => form.appearance)).toEqual(['system', 'light'])
   })
 
   it('keeps what was typed when the server is refused, and says why', async () => {
@@ -93,7 +141,7 @@ describe('SettingsView', () => {
     const server = wrapper.get('#setting-server')
 
     // Act
-    await server.setValue(address)
+    await type(server, address)
     await server.trigger('change')
     await flushPromises()
 
@@ -108,12 +156,12 @@ describe('SettingsView', () => {
     const client = new InMemoryNetworkQualityClient()
     const wrapper = await mountSettings(client)
     await wrapper.get('#setting-servers').setValue('own')
-    await wrapper.get('#setting-server').setValue(createAddress())
+    await type(wrapper.get('#setting-server'), createAddress())
     await wrapper.get('#setting-server').trigger('change')
     await flushPromises()
 
     // Act
-    await wrapper.get('#setting-servers').setValue('default')
+    await wrapper.get('#setting-servers').setValue('public')
     await flushPromises()
 
     // Assert

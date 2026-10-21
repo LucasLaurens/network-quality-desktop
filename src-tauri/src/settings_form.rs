@@ -36,10 +36,10 @@ impl SettingsForm {
                 Appearance::Light => AppearanceChoice::Light,
                 Appearance::Dark => AppearanceChoice::Dark,
             },
-            own_server: match settings.servers {
-                MeasurementServers::Default => None,
-                MeasurementServers::Custom(target) => Some(target.address().to_string()),
-            },
+            own_server: settings
+                .servers
+                .to_own_target()
+                .map(|target| target.address().to_string()),
         }
     }
 
@@ -67,12 +67,28 @@ impl SettingsForm {
     }
 }
 
-/// « Enregistré à 14 h 05. » in the user's time zone. O(1).
+/// How long a save lasts: on disk, or until the app quits when the history cannot be kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Durability {
+    OnDisk,
+    ThisSession,
+}
+
+/// « Enregistré à 14 h 05. » in the user's time zone, and the session-only caveat. O(1).
 #[must_use]
-pub fn confirm_saved(now: i64, offset: i64, catalog: &TextCatalog) -> String {
+pub fn format_save_confirmation(
+    now: i64,
+    offset: i64,
+    durability: Durability,
+    catalog: &TextCatalog,
+) -> String {
     let mut args = FluentArgs::new();
     args.set("time", format_time_of_day(now, offset, catalog));
-    catalog.render("settings-saved", Some(&args))
+    let key = match durability {
+        Durability::OnDisk => "settings-saved",
+        Durability::ThisSession => "settings-saved-session",
+    };
+    catalog.render(key, Some(&args))
 }
 
 #[cfg(test)]
@@ -80,6 +96,8 @@ mod tests {
     use super::*;
 
     const NBSP: char = '\u{a0}';
+    /// Paris in winter, one hour ahead of UTC.
+    const PARIS: i64 = 3600;
 
     fn create_form(own_server: Option<&str>) -> SettingsForm {
         SettingsForm {
@@ -127,9 +145,11 @@ mod tests {
         let now = 1_699_967_100;
 
         // Act
-        let confirmation = confirm_saved(now, 3600, &catalog);
+        let confirmation = format_save_confirmation(now, PARIS, Durability::OnDisk, &catalog);
+        let session_only = format_save_confirmation(now, PARIS, Durability::ThisSession, &catalog);
 
         // Assert
         assert_eq!(confirmation, format!("Enregistré à 14{NBSP}h{NBSP}05."));
+        assert!(session_only.ends_with("pour cette session seulement."));
     }
 }

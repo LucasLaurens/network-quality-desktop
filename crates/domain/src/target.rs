@@ -37,3 +37,24 @@ impl Target {
         self.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_a_typed_address_and_refuses_anything_else() {
+        // Act & Assert
+        assert_eq!(
+            Target::try_parse(" 192.168.1.10 "),
+            Some(Target::parse("192.168.1.10"))
+        );
+        assert_eq!(
+            Target::try_parse("2606:4700:4700::1111").map(Target::is_ipv6),
+            Some(true)
+        );
+        assert_eq!(Target::try_parse("192.168.1"), None);
+        assert_eq!(Target::try_parse("box.local"), None);
+        assert_eq!(Target::try_parse(""), None);
+    }
+}

@@ -14,11 +14,22 @@ pub enum Appearance {
 /// Where the latency probes go.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MeasurementServers {
-    /// Two public providers, so one slow or filtering server cannot decide the verdict alone.
+    /// Cloudflare and Google.
     #[default]
     Default,
     /// The user's own server: nothing else is pinged.
     Custom(Target),
+}
+
+impl MeasurementServers {
+    /// The user's own server, if there is one. O(1).
+    #[must_use]
+    pub const fn to_own_target(self) -> Option<Target> {
+        match self {
+            Self::Default => None,
+            Self::Custom(target) => Some(target),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,21 +62,5 @@ mod tests {
         assert!(settings.launch_at_login);
         assert_eq!(settings.appearance, Appearance::System);
         assert_eq!(settings.servers, MeasurementServers::Default);
-    }
-
-    #[test]
-    fn reads_a_typed_address_and_refuses_anything_else() {
-        // Act & Assert
-        assert_eq!(
-            Target::try_parse(" 192.168.1.10 "),
-            Some(Target::parse("192.168.1.10"))
-        );
-        assert_eq!(
-            Target::try_parse("2606:4700:4700::1111").map(Target::is_ipv6),
-            Some(true)
-        );
-        assert_eq!(Target::try_parse("192.168.1"), None);
-        assert_eq!(Target::try_parse("box.local"), None);
-        assert_eq!(Target::try_parse(""), None);
     }
 }

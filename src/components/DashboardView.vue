@@ -3,6 +3,7 @@ import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { DashboardSummaryDisplay, EvolutionDisplay, PeriodChoice } from '../bindings'
 import { useConnectionDisplay } from '../composables/use-connection-display'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
+import { readUtcOffsetSeconds } from '../services/time-zone'
 import CurrentMetrics from './CurrentMetrics.vue'
 import DashboardState from './DashboardState.vue'
 import EvolutionChart from './EvolutionChart.vue'
@@ -43,8 +44,6 @@ const chosenMetric = computed(() => METRICS.find((entry) => entry.value === metr
 const chartLabel = computed(
   () => `${chosenMetric.value.label} sur ${chosenPeriod.value.label}, avec les seuils Instable et Dégradée`,
 )
-
-const readUtcOffsetSeconds = (): number => -new Date().getTimezoneOffset() * 60
 
 watch(display, () => {
   updatedAt.value = new Date().toLocaleTimeString('fr-FR')

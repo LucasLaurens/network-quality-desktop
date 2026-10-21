@@ -1503,36 +1503,51 @@ fn create_settings(servers: MeasurementServers) -> Settings {
     }
 }
 
-#[tokio::test]
-async fn measures_the_own_server_alone_once_picked() {
-    // Arrange
+/// Warm on the public servers, with only the own server answering from now on.
+async fn create_harness_moving_to_the_own_server() -> Harness {
     let mut harness = create_harness();
     harness.warm_up_with_latency(FAST).await;
     harness.set_every_target(ProbeOutcome::Unreachable);
     harness
         .network
         .set_outcome(Target::parse(OWN_SERVER), ProbeOutcome::Answered(FAST));
-
-    // Act
     harness
         .engine
         .handle(EngineMessage::SettingsChanged(create_settings(
             MeasurementServers::Custom(Target::parse(OWN_SERVER)),
         )))
         .await;
+    harness
+}
+
+#[tokio::test]
+async fn measures_again_from_scratch_against_new_servers() {
+    // Arrange
+    let mut harness = create_harness_moving_to_the_own_server().await;
+
+    // Act
     harness.run_seconds(1).await;
-    let restarted = harness.read_last_view();
-    harness.run_seconds(WARM_UP).await;
 
     // Assert
     assert!(matches!(
-        restarted.diagnosis,
+        harness.read_last_view().diagnosis,
         Diagnosis::Measuring {
             collected: 1,
             cause: MeasuringCause::NewServers,
             ..
         }
     ));
+}
+
+#[tokio::test]
+async fn measures_the_own_server_alone_once_picked() {
+    // Arrange
+    let mut harness = create_harness_moving_to_the_own_server().await;
+
+    // Act
+    harness.run_seconds(WARM_UP).await;
+
+    // Assert
     assert_eq!(
         harness.read_presented_verdict(),
         Verdict::Graded(Grade::Solid)

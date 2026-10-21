@@ -7,6 +7,7 @@ mod history;
 mod ports;
 #[cfg(any(test, feature = "test-support"))]
 pub mod repository_contract;
+mod settings;
 mod targets;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
@@ -28,4 +29,5 @@ pub use ports::{
     MeasurementRepository, NetworkChangeWatcher, PowerEvent, PowerEventSource, SettingsRepository,
     TrayHost, VerdictPresenter, WifiReader,
 };
+pub use settings::can_measure_against;
 pub use targets::{list_default_targets, list_targets};

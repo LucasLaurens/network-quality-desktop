@@ -2,8 +2,11 @@
 import { inject, onMounted, ref } from 'vue'
 import type { AppearanceChoice, SettingsForm } from '../bindings'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
+import { readUtcOffsetSeconds } from '../services/time-zone'
 
-type ServersChoice = 'default' | 'own'
+const PUBLIC_SERVERS = 'public'
+const OWN_SERVER = 'own'
+type ServersChoice = typeof PUBLIC_SERVERS | typeof OWN_SERVER
 
 const APPEARANCES = [
   { value: 'system', label: 'Système' },
@@ -16,40 +19,50 @@ if (!client) throw new Error('NetworkQualityClient is not provided')
 
 // The form is filled once and then belongs to the user: answers never rewrite what is typed.
 const form = ref<SettingsForm | null>(null)
-const servers = ref<ServersChoice>('default')
-const ownServer = ref('')
+const servers = ref<ServersChoice>(PUBLIC_SERVERS)
+const typedServer = ref('')
 const saved = ref('')
 const refusal = ref('')
+// The server last accepted: a switch or a look saved while an address is half typed keeps it.
+let savedServer: string | null = null
+// One save at a time, in the order of the changes: the last change is the one that stays.
+let pending: Promise<void> = Promise.resolve()
 
-const readUtcOffsetSeconds = (): number => -new Date().getTimezoneOffset() * 60
-
-const save = async (): Promise<void> => {
+const send = async (ownServer: string | null): Promise<void> => {
   if (!form.value) return
-  const sent: SettingsForm = {
-    ...form.value,
-    ownServer: servers.value === 'own' ? ownServer.value : null,
-  }
+  const sent: SettingsForm = { ...form.value, ownServer }
   try {
     saved.value = await client.saveSettings(sent, readUtcOffsetSeconds())
     refusal.value = ''
+    savedServer = ownServer
   } catch (error) {
     refusal.value = error instanceof Error ? error.message : String(error)
     saved.value = ''
   }
 }
 
+const queue = (ownServer: string | null): Promise<void> => {
+  pending = pending.then(() => send(ownServer))
+  return pending
+}
+
+const saveChange = (): Promise<void> => queue(savedServer)
+
+const saveTypedServer = (): Promise<void> => queue(typedServer.value)
+
 // The public servers need nothing more; an own server waits for its address.
 const chooseServers = async (): Promise<void> => {
   refusal.value = ''
-  if (servers.value === 'default') await save()
+  if (servers.value === PUBLIC_SERVERS) await queue(null)
 }
 
 onMounted(async () => {
   try {
     const read = await client.readSettings()
     form.value = read
-    servers.value = read.ownServer === null ? 'default' : 'own'
-    ownServer.value = read.ownServer ?? ''
+    savedServer = read.ownServer
+    servers.value = read.ownServer === null ? PUBLIC_SERVERS : OWN_SERVER
+    typedServer.value = read.ownServer ?? ''
   } catch (error) {
     console.error('Reading the settings failed', error)
   }
@@ -71,7 +84,7 @@ onMounted(async () => {
             type="checkbox"
             role="switch"
             aria-describedby="setting-launch-hint"
-            @change="save"
+            @change="saveChange"
           />
           <span id="setting-launch-hint" class="hint">L'état reste visible dans la barre des menus.</span>
         </div>
@@ -84,7 +97,7 @@ onMounted(async () => {
                 type="radio"
                 name="appearance"
                 :value="appearance.value"
-                @change="save"
+                @change="saveChange"
               />
               {{ appearance.label }}
             </label>
@@ -100,16 +113,16 @@ onMounted(async () => {
         <div class="setting">
           <label for="setting-servers">Serveurs de mesure</label>
           <select id="setting-servers" v-model="servers" @change="chooseServers">
-            <option value="default">Cloudflare et Google (recommandé)</option>
-            <option value="own">Serveur personnalisé</option>
+            <option :value="PUBLIC_SERVERS">Cloudflare et Google (recommandé)</option>
+            <option :value="OWN_SERVER">Serveur personnalisé</option>
           </select>
           <span class="hint">Une petite requête par seconde pour mesurer latence, gigue et perte.</span>
         </div>
-        <div v-if="servers === 'own'" class="setting">
+        <div v-if="servers === OWN_SERVER" class="setting">
           <label for="setting-server">Adresse du serveur</label>
           <input
             id="setting-server"
-            v-model.trim="ownServer"
+            v-model.trim="typedServer"
             type="text"
             inputmode="decimal"
             autocomplete="off"
@@ -117,10 +130,10 @@ onMounted(async () => {
             placeholder="ex. 192.168.1.10"
             aria-describedby="setting-server-hint"
             :aria-invalid="refusal !== ''"
-            @change="save"
+            @change="saveTypedServer"
           />
           <span id="setting-server-hint" class="hint"
-            >Une adresse IP qui répond au ping. Seul ce serveur est alors mesuré.</span
+            >Une adresse IP qui répond au ping, ou sur le port 443. Seul ce serveur est alors mesuré.</span
           >
         </div>
       </div>

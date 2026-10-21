@@ -125,7 +125,7 @@ describe('App', () => {
     expect(wrapper.get('[data-history-notice]').text()).toBe(notice)
   })
 
-  it('opens the settings page from the dashboard and back', async () => {
+  it('opens the settings page from the dashboard', async () => {
     // Arrange
     const client = new InMemoryNetworkQualityClient()
     const wrapper = await mountApp(client)
@@ -133,12 +133,24 @@ describe('App', () => {
     // Act
     await wrapper.get('[data-page="settings"]').trigger('click')
     await flushPromises()
-    const onSettings = wrapper.find('#settings-title').exists()
+
+    // Assert
+    expect(wrapper.find('#settings-title').exists()).toBe(true)
+    expect(wrapper.get('[data-page="settings"]').attributes('aria-current')).toBe('page')
+  })
+
+  it('goes back to the dashboard from the settings page', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountApp(client)
+    await wrapper.get('[data-page="settings"]').trigger('click')
+    await flushPromises()
+
+    // Act
     await wrapper.get('[data-page="dashboard"]').trigger('click')
     await flushPromises()
 
     // Assert
-    expect(onSettings).toBe(true)
     expect(wrapper.find('#settings-title').exists()).toBe(false)
     expect(wrapper.get('[data-page="dashboard"]').attributes('aria-current')).toBe('page')
   })
