@@ -20,7 +20,7 @@ Les entrées « Réglages » et « Tests de débit » s'ajouteront au menu avec 
 
 ## Sans barre système
 
-Certains bureaux n'affichent pas les icônes de la barre système (GNOME sans l'extension AppIndicator). L'app le détecte au lancement et passe en **mode fenêtre** : le tableau de bord s'ouvre au lancement, reste dans la barre des tâches et se réduit au lieu de se fermer. Une note discrète explique pourquoi et mène à la page de l'extension ; « Masquer » la fait disparaître pour les lancements suivants.
+Certains bureaux n'affichent pas les icônes de la barre système (GNOME sans l'extension AppIndicator). L'app le détecte au lancement et passe en **mode fenêtre** : le tableau de bord s'ouvre au lancement, reste dans la barre des tâches et se réduit au lieu de se fermer ; on quitte par son bouton « Quitter ». Une note discrète explique pourquoi et mène à la page de l'extension ; « Masquer » la fait disparaître pour les lancements suivants.
 
 L'ouverture automatique à l'ouverture de session arrivera avec le réglage « Lancer à l'ouverture de session ».
 

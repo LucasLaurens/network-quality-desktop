@@ -18,7 +18,7 @@ use domain::Verdict;
 use infrastructure::{
     FallbackLatencyProbe, IcmpEchoSender, SystemClock, SystemTrayHost, TcpConnectionOpener,
 };
-use shell_mode::{ShellMode, TrayHint};
+use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
     ConnectionDisplayChanged, DisplayStore, ShellPresenter, create_icon_image, describe_verdict,
 };
@@ -29,7 +29,10 @@ use text_catalog::TextCatalog;
 use tokio::sync::mpsc;
 use tokio::time::MissedTickBehavior;
 use tray_menu::{MenuAction, TrayMenu, compose_menu_entries};
-use windows::{HAS_POPOVER, PopoverDismissal, apply_window_event, show_dashboard, toggle_popover};
+use windows::{
+    HAS_POPOVER, PopoverDismissal, apply_window_event, create_popover, show_dashboard,
+    toggle_popover,
+};
 
 const TRAY_ID: &str = "connection-state";
 const TICK_EVERY: Duration = Duration::from_secs(1);
@@ -46,8 +49,9 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_connection_display,
             commands::open_dashboard,
             commands::close_popover,
-            commands::read_tray_hint,
-            commands::open_tray_extension_page
+            commands::read_window_mode_texts,
+            commands::open_tray_extension_page,
+            commands::quit_app
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -62,6 +66,12 @@ pub fn run() {
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
+            // A menu-bar app: no Dock icon, whose click would find the dashboard hidden.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            if HAS_POPOVER {
+                create_popover(app.handle())?;
+            }
             start_measurement(app.handle())?;
             Ok(())
         })
@@ -77,7 +87,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     let initial = ConnectionDisplay::create_initial(&catalog);
     let mode = ShellMode::detect(&SystemTrayHost);
     app.manage(mode);
-    app.manage(TrayHint::compose(mode, &catalog));
+    app.manage(WindowModeTexts::compose(mode, &catalog));
     app.manage(PopoverDismissal::default());
     let store = DisplayStore::new(initial.clone());
     app.manage(store.clone());

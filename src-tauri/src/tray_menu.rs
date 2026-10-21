@@ -115,6 +115,7 @@ impl TrayMenu {
     }
 }
 
+/// O(e) for e entries.
 fn read_info_texts(entries: &[MenuEntry]) -> Vec<String> {
     entries
         .iter()
@@ -142,15 +143,12 @@ mod tests {
         assert_eq!(
             entries,
             vec![
-                MenuEntry::Info("Mesure en cours".to_owned()),
-                MenuEntry::Info("Premières mesures en cours.".to_owned()),
+                MenuEntry::Info(display.state_label.clone()),
+                MenuEntry::Info(display.cause.clone()),
                 MenuEntry::Separator,
-                MenuEntry::Action(
-                    MenuAction::OpenDashboard,
-                    "Ouvrir le tableau de bord".to_owned()
-                ),
+                MenuEntry::Action(MenuAction::OpenDashboard, display.open_dashboard_label),
                 MenuEntry::Separator,
-                MenuEntry::Action(MenuAction::Quit, "Quitter".to_owned()),
+                MenuEntry::Action(MenuAction::Quit, catalog.render("menu-quit", None)),
             ]
         );
     }

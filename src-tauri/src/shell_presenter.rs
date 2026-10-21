@@ -97,11 +97,12 @@ impl VerdictPresenter for ShellPresenter {
     fn present(&self, view: &VerdictView) {
         let display = ConnectionDisplay::from_view(view, &self.catalog);
         self.update_tray(view.verdict, &display.state_label);
+        if !self.store.replace(display.clone()) {
+            return;
+        }
         self.menu
             .update(&compose_menu_entries(&display, &self.catalog));
-        if self.store.replace(display.clone())
-            && let Err(error) = ConnectionDisplayChanged(display).emit(&self.app)
-        {
+        if let Err(error) = ConnectionDisplayChanged(display).emit(&self.app) {
             eprintln!("Publishing the connection display failed: {error}");
         }
     }

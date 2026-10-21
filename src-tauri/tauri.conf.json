@@ -22,6 +22,7 @@
       },
       {
         "label": "popover",
+        "create": false,
         "title": "État de la connexion",
         "url": "index.html?view=popover",
         "width": 320,

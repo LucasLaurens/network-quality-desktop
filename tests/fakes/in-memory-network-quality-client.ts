@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import type { AppInfo, ConnectionDisplay, MetricDisplay, TrayHint } from '../../src/bindings'
+import type { AppInfo, ConnectionDisplay, MetricDisplay, WindowModeTexts } from '../../src/bindings'
 import type { NetworkQualityClient } from '../../src/services/network-quality-client'
 
 export function createMetricDisplay(overrides: Partial<MetricDisplay> = {}): MetricDisplay {
@@ -31,11 +31,12 @@ export function createConnectionDisplay(overrides: Partial<ConnectionDisplay> = 
   }
 }
 
-export function createTrayHint(): TrayHint {
+export function createWindowModeTexts(): WindowModeTexts {
   return {
     message: faker.lorem.sentence(),
     linkLabel: faker.lorem.words(3),
     dismissLabel: faker.word.verb(),
+    quitLabel: faker.word.verb(),
   }
 }
 
@@ -47,6 +48,8 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   dashboardOpenings = 0
   popoverClosings = 0
   extensionPageOpenings = 0
+  quitRequests = 0
+  private isWindowModeReadFailing = false
   private listeners: ((display: ConnectionDisplay) => void)[] = []
   private isHoldingReads = false
   private heldReads: (() => void)[] = []
@@ -54,7 +57,7 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   constructor(
     private readonly appInfo: AppInfo = { name: faker.word.noun(), version: faker.system.semver() },
     private display: ConnectionDisplay = createConnectionDisplay(),
-    private readonly trayHint: TrayHint | null = null,
+    private readonly windowModeTexts: WindowModeTexts | null = null,
   ) {}
 
   get listenerCount(): number {
@@ -104,8 +107,18 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     return Promise.resolve()
   }
 
-  readTrayHint(): Promise<TrayHint | null> {
-    return Promise.resolve(this.trayHint)
+  readWindowModeTexts(): Promise<WindowModeTexts | null> {
+    if (this.isWindowModeReadFailing) return Promise.reject(new Error('the core did not answer'))
+    return Promise.resolve(this.windowModeTexts)
+  }
+
+  failWindowModeRead(): void {
+    this.isWindowModeReadFailing = true
+  }
+
+  quitApp(): Promise<void> {
+    this.quitRequests += 1
+    return Promise.resolve()
   }
 
   openTrayExtensionPage(): Promise<void> {

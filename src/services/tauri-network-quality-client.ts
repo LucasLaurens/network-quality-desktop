@@ -1,4 +1,4 @@
-import { commands, events, type AppInfo, type ConnectionDisplay, type TrayHint } from '../bindings'
+import { commands, events, type AppInfo, type ConnectionDisplay, type WindowModeTexts } from '../bindings'
 import type { NetworkQualityClient } from './network-quality-client'
 
 /** Production adapter: talks to the Rust core through the generated Tauri bindings. */
@@ -25,11 +25,15 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
     return commands.closePopover()
   }
 
-  readTrayHint(): Promise<TrayHint | null> {
-    return commands.readTrayHint()
+  readWindowModeTexts(): Promise<WindowModeTexts | null> {
+    return commands.readWindowModeTexts()
   }
 
   openTrayExtensionPage(): Promise<void> {
     return commands.openTrayExtensionPage()
+  }
+
+  quitApp(): Promise<void> {
+    return commands.quitApp()
   }
 }

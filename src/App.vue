@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { inject, onMounted, ref } from 'vue'
-import type { TrayHint } from './bindings'
+import type { WindowModeTexts } from './bindings'
 import { NETWORK_QUALITY_CLIENT_KEY } from './services/network-quality-client'
 
 // Remembered in the webview's own storage: a convenience, losing it only shows the note again.
@@ -10,7 +10,8 @@ const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
 
 const version = ref('…')
-const trayHint = ref<TrayHint | null>(null)
+const windowMode = ref<WindowModeTexts | null>(null)
+const isTrayHintVisible = ref(false)
 
 const isTrayHintDismissed = (): boolean => {
   try {
@@ -21,7 +22,7 @@ const isTrayHintDismissed = (): boolean => {
 }
 
 const dismissTrayHint = (): void => {
-  trayHint.value = null
+  isTrayHintVisible.value = false
   try {
     localStorage.setItem(TRAY_HINT_DISMISSED_KEY, new Date().toISOString())
   } catch {
@@ -33,33 +34,54 @@ const openTrayExtensionPage = async (): Promise<void> => {
   await client.openTrayExtensionPage()
 }
 
-onMounted(async () => {
-  if (!isTrayHintDismissed()) trayHint.value = await client.readTrayHint()
+const quitApp = async (): Promise<void> => {
+  await client.quitApp()
+}
+
+const loadWindowMode = async (): Promise<void> => {
+  try {
+    windowMode.value = await client.readWindowModeTexts()
+    isTrayHintVisible.value = !isTrayHintDismissed()
+  } catch (error) {
+    console.error('Reading the window mode failed', error)
+  }
+}
+
+const loadVersion = async (): Promise<void> => {
   try {
     version.value = (await client.readAppInfo()).version
   } catch (error) {
     console.error('Reading the app version failed', error)
     version.value = 'inconnue'
   }
+}
+
+onMounted(async () => {
+  await Promise.all([loadWindowMode(), loadVersion()])
 })
 </script>
 
 <template>
   <main class="window">
-    <aside v-if="trayHint" class="hint" data-tray-hint>
-      <p>{{ trayHint.message }}</p>
+    <aside v-if="windowMode && isTrayHintVisible" class="hint" data-tray-hint>
+      <p>{{ windowMode.message }}</p>
       <div class="hint-actions">
         <button type="button" class="link" data-tray-hint-link @click="openTrayExtensionPage">
-          {{ trayHint.linkLabel }}
+          {{ windowMode.linkLabel }}
         </button>
         <button type="button" class="link" data-tray-hint-dismiss @click="dismissTrayHint">
-          {{ trayHint.dismissLabel }}
+          {{ windowMode.dismissLabel }}
         </button>
       </div>
     </aside>
     <h1>Qualité de connexion</h1>
     <p class="empty">La mesure de la connexion arrive dans une prochaine version.</p>
-    <footer class="foot">Version {{ version }}</footer>
+    <footer class="foot">
+      <span>Version {{ version }}</span>
+      <button v-if="windowMode" type="button" class="link" data-quit @click="quitApp">
+        {{ windowMode.quitLabel }}
+      </button>
+    </footer>
   </main>
 </template>
 
@@ -112,6 +134,9 @@ h1 {
 }
 
 .foot {
+  display: flex;
+  gap: var(--s4);
+  align-items: baseline;
   margin-top: var(--s7);
   color: var(--muted);
   font-size: var(--t-xs);

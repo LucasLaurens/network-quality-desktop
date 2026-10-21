@@ -23,10 +23,10 @@ Deux pages hors build, servies par `pnpm dev:web`, affichent les écrans avec de
 
 La barre système Linux dépend du bureau et ne peut pas être testée en CI. À vérifier à la main avant chaque version :
 
-| Bureau                                                             | Attendu                                                                                                                                                  | Dernière vérification |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| Ubuntu GNOME, extension AppIndicator active (installée par défaut) | Pastille visible ; tout clic ouvre le menu (état, constat, tableau de bord, Quitter) ; état et constat suivent la connexion ; pas de popover             | pas encore vérifié    |
-| Fedora GNOME, sans extension                                       | Mode fenêtre : tableau de bord ouvert au lancement, présent dans la barre des tâches, réduit à la fermeture ; note avec lien vers l'extension, masquable | pas encore vérifié    |
-| KDE Plasma                                                         | Pastille visible et menu comme sous Ubuntu                                                                                                               | pas encore vérifié    |
+| Bureau                                                             | Attendu                                                                                                                                                                           | Dernière vérification |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| Ubuntu GNOME, extension AppIndicator active (installée par défaut) | Pastille visible ; tout clic ouvre le menu (état, constat, tableau de bord, Quitter) ; état et constat suivent la connexion ; pas de popover                                      | pas encore vérifié    |
+| Fedora GNOME, sans extension                                       | Mode fenêtre : tableau de bord ouvert au lancement, présent dans la barre des tâches, réduit à la fermeture, « Quitter » ferme l'app ; note avec lien vers l'extension, masquable | pas encore vérifié    |
+| KDE Plasma                                                         | Pastille visible et menu comme sous Ubuntu                                                                                                                                        | pas encore vérifié    |
 
 Le test `asks_the_session_bus_without_failing` (crate `infrastructure`, ignoré par défaut) interroge le vrai bus de session : `cargo test -p infrastructure -- --ignored`.

@@ -5,7 +5,7 @@ use specta::Type;
 use tauri::{AppHandle, Manager, State};
 
 use crate::display::ConnectionDisplay;
-use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, TrayHint};
+use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
 use crate::shell_presenter::DisplayStore;
 use crate::windows::{POPOVER_WINDOW, report_failure, show_dashboard};
 
@@ -71,7 +71,7 @@ pub fn close_popover(app: AppHandle) {
     clippy::needless_pass_by_value,
     reason = "Tauri injects command arguments by value"
 )]
-pub fn read_tray_hint(hint: State<'_, Option<TrayHint>>) -> Option<TrayHint> {
+pub fn read_window_mode_texts(hint: State<'_, Option<WindowModeTexts>>) -> Option<WindowModeTexts> {
     hint.inner().clone()
 }
 
@@ -82,6 +82,17 @@ pub fn open_tray_extension_page() {
     if let Err(error) = tauri_plugin_opener::open_url(APPINDICATOR_EXTENSION_URL, None::<&str>) {
         eprintln!("Opening the extension page failed: {error}");
     }
+}
+
+/// Quits from the dashboard, the only way out in window mode.
+#[tauri::command]
+#[specta::specta]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn quit_app(app: AppHandle) {
+    app.exit(0);
 }
 
 #[cfg(test)]
