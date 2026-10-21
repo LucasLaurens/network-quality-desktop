@@ -274,3 +274,114 @@ fn keeps_the_last_hour_second_by_second() {
     assert_eq!(points.len(), 3);
     assert_eq!(points[2].utc, SOME_HOUR + 2);
 }
+
+#[test]
+fn closes_the_hours_of_a_network_left_before_the_hour_ended() {
+    // Arrange
+    let home = create_key(10);
+    let office = create_key(11);
+    let mut writer = HistoryWriter::new(InMemoryMeasurementRepository::default());
+    save_minute(&mut writer, &home, SOME_HOUR + 10 * MINUTE);
+
+    // Act
+    save_minute(&mut writer, &office, SOME_HOUR + 3600 + 59 * MINUTE);
+
+    // Assert
+    let repository = writer.into_repository();
+    assert_eq!(
+        repository
+            .list_aggregates(&home, Granularity::Hour, SOME_HOUR, SOME_HOUR + 3600)
+            .expect("hours")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn counts_the_seconds_before_any_network_under_no_network() {
+    // Arrange
+    let recorder = InMemoryHistoryRecorder::default();
+    let mut tracker = HistoryTracker::default();
+    tracker.record_second(
+        &create_second(SOME_HOUR, Verdict::Offline),
+        None,
+        None,
+        &recorder,
+    );
+
+    // Act
+    tracker.record_second(
+        &create_second(SOME_HOUR + 1, Verdict::Measuring),
+        Some(create_context(12)),
+        None,
+        &recorder,
+    );
+
+    // Assert
+    let minutes = recorder.list_saved_minutes();
+    assert_eq!(minutes.len(), 1);
+    assert_eq!(minutes[0].0.kind, ConnectionKind::Other);
+    assert_eq!(minutes[0].2.seconds.offline, 1);
+    assert_eq!(tracker.list_last_hour().len(), 2);
+}
+
+#[test]
+fn keeps_the_gateway_learnt_earlier_when_a_reading_misses_it() {
+    // Arrange
+    let recorder = InMemoryHistoryRecorder::default();
+    let mut tracker = HistoryTracker::default();
+    let solid = Verdict::Graded(Grade::Solid);
+    tracker.record_second(
+        &create_second(SOME_HOUR, solid),
+        Some(create_context(13)),
+        None,
+        &recorder,
+    );
+    let missed = ConnectionContext {
+        gateway: None,
+        ..create_context(13)
+    };
+
+    // Act
+    tracker.record_second(
+        &create_second(SOME_HOUR + 1, solid),
+        Some(missed),
+        None,
+        &recorder,
+    );
+    tracker.record_second(
+        &create_second(SOME_HOUR + 60, solid),
+        Some(missed),
+        None,
+        &recorder,
+    );
+
+    // Assert
+    assert_eq!(recorder.list_saved_minutes()[0].0, create_key(13));
+}
+
+#[test]
+fn measures_no_jitter_across_a_gap() {
+    // Arrange
+    let recorder = InMemoryHistoryRecorder::default();
+    let mut tracker = HistoryTracker::default();
+    let context = Some(create_context(14));
+    let solid = Verdict::Graded(Grade::Solid);
+    tracker.record_second(&create_second(SOME_HOUR, solid), context, None, &recorder);
+    let after_sleep = MeasuredSecond {
+        latency: Some(Duration::from_millis(400)),
+        ..create_second(SOME_HOUR + 30, solid)
+    };
+
+    // Act
+    tracker.record_second(&after_sleep, context, None, &recorder);
+    tracker.record_second(
+        &create_second(SOME_HOUR + 60, solid),
+        context,
+        None,
+        &recorder,
+    );
+
+    // Assert
+    assert_eq!(recorder.list_saved_minutes()[0].2.jitter_count, 0);
+}

@@ -1,13 +1,22 @@
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use application::{EventKind, HistoryEvent, MeasurementRepository, NetworkKey, RepositoryError};
 use domain::{Aggregate, ConnectionKind, Granularity, LatencyHistogram, MacAddress, StateSeconds};
-use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
+use rusqlite::{Connection, ErrorCode, OptionalExtension, Row, Transaction, params};
 use rusqlite_migration::{M, Migrations};
 
-const MIGRATIONS: &[M<'static>] = &[M::up(include_str!("migrations/0001_create_history.sql"))];
+const MIGRATIONS: &[M<'static>] = &[
+    M::up(include_str!("migrations/0001_create_history.sql")),
+    M::up(include_str!(
+        "migrations/0002_index_purge_and_unreadable_gateways.sql"
+    )),
+];
 const MINUTE: i64 = 0;
 const HOUR: i64 = 1;
+const SECONDS_PER_HOUR: i64 = Granularity::Hour.to_seconds();
+/// Another process holding the file briefly (a backup tool) is waited for, not taken for damage.
+const BUSY_TIMEOUT: Duration = Duration::from_secs(2);
 const AGGREGATE_COLUMNS: &str = "latency_hist, jitter_sum_us, jitter_count, probes_sent, \
      probes_lost, s_solid, s_unstable, s_degraded, s_offline";
 
@@ -22,32 +31,30 @@ pub struct SqliteMeasurementRepository {
 }
 
 impl SqliteMeasurementRepository {
-    /// Opens `path`; a file that is not a readable history is renamed next to it, kept, and a
-    /// new history starts.
+    /// Opens `path`. A damaged file (not a database, or failing its integrity check) is renamed
+    /// next to it with its journals, kept, and a new history starts. Any other failure (busy,
+    /// no permission, a schema from a newer version) is returned and the file left untouched.
+    /// O(file) for the integrity check.
     ///
     /// # Errors
     ///
-    /// Neither the file nor a fresh one could be opened.
+    /// The file could not be opened for another reason than damage, or a fresh one neither.
     pub fn open(path: &Path, now_utc: i64) -> Result<OpenedHistory, RepositoryError> {
         match Self::open_checked(path) {
             Ok(repository) => Ok(OpenedHistory {
                 repository,
                 set_aside: None,
             }),
-            Err(error) if path.exists() => {
-                eprintln!("The history is unreadable, it is set aside: {}", error.0);
-                let set_aside = path.with_file_name(format!("history.corrupt-{now_utc}.sqlite3"));
-                std::fs::rename(path, &set_aside).map_err(to_error)?;
-                for suffix in ["-wal", "-shm"] {
-                    // Journal files of the old file are useless without it.
-                    let _ = std::fs::remove_file(append_to_name(path, suffix));
-                }
+            Err(OpenFailure::Damaged(reason)) => {
+                eprintln!("The history is damaged, it is set aside: {reason}");
+                let set_aside = move_aside(path, now_utc).map_err(to_error)?;
+                let repository = Self::open_checked(path).map_err(OpenFailure::into_error)?;
                 Ok(OpenedHistory {
-                    repository: Self::open_checked(path)?,
+                    repository,
                     set_aside: Some(set_aside),
                 })
             }
-            Err(error) => Err(error),
+            Err(OpenFailure::Other(error)) => Err(error),
         }
     }
 
@@ -60,15 +67,18 @@ impl SqliteMeasurementRepository {
         Self::prepare(Connection::open_in_memory().map_err(to_error)?)
     }
 
-    fn open_checked(path: &Path) -> Result<Self, RepositoryError> {
-        let connection = Connection::open(path).map_err(to_error)?;
+    fn open_checked(path: &Path) -> Result<Self, OpenFailure> {
+        let connection = Connection::open(path).map_err(OpenFailure::classify)?;
+        connection
+            .busy_timeout(BUSY_TIMEOUT)
+            .map_err(OpenFailure::classify)?;
         let check: String = connection
             .query_row("PRAGMA quick_check", [], |row| row.get(0))
-            .map_err(to_error)?;
+            .map_err(OpenFailure::classify)?;
         if check != "ok" {
-            return Err(RepositoryError(format!("integrity check: {check}")));
+            return Err(OpenFailure::Damaged(format!("integrity check: {check}")));
         }
-        Self::prepare(connection)
+        Self::prepare(connection).map_err(OpenFailure::Other)
     }
 
     fn prepare(mut connection: Connection) -> Result<Self, RepositoryError> {
@@ -171,33 +181,38 @@ impl MeasurementRepository for SqliteMeasurementRepository {
         rows.collect::<rusqlite::Result<_>>().map_err(to_error)
     }
 
+    /// O(m log m) for the m minutes kept (30 days at most), each checked on the primary key.
     fn list_unmerged_hours(&self, before: i64) -> Result<Vec<(NetworkKey, i64)>, RepositoryError> {
         let mut statement = self
             .connection
             .prepare(
                 "SELECT DISTINCT n.gateway_mac, n.connection_kind, n.label, \
-                 a.start - a.start % 3600 AS hour FROM aggregates a \
+                 a.start - a.start % ?2 AS hour FROM aggregates a \
                  JOIN networks n ON n.id = a.network_id \
-                 WHERE a.granularity = 0 AND a.start < ?1 AND NOT EXISTS ( \
+                 WHERE a.granularity = ?3 AND a.start < ?1 AND NOT EXISTS ( \
                      SELECT 1 FROM aggregates h WHERE h.network_id = a.network_id \
-                     AND h.granularity = 1 AND h.start = a.start - a.start % 3600) \
+                     AND h.granularity = ?4 AND h.start = a.start - a.start % ?2) \
                  ORDER BY hour",
             )
             .map_err(to_error)?;
         let rows = statement
-            .query_map(params![before], |row| {
+            .query_map(params![before, SECONDS_PER_HOUR, MINUTE, HOUR], |row| {
                 Ok((read_network(row, 0)?, row.get(3)?))
             })
             .map_err(to_error)?;
         rows.collect::<rusqlite::Result<_>>().map_err(to_error)
     }
 
-    /// A range delete on the primary key.
+    /// Only minutes whose hour is kept go. O(log n + k) through the (granularity, start) index,
+    /// each hour checked on the primary key.
     fn purge_minutes_before(&mut self, utc: i64) -> Result<(), RepositoryError> {
         self.write(|transaction| {
             transaction.execute(
-                "DELETE FROM aggregates WHERE granularity = 0 AND start < ?1",
-                params![utc],
+                "DELETE FROM aggregates WHERE granularity = ?2 AND start < ?1 AND EXISTS ( \
+                     SELECT 1 FROM aggregates h WHERE h.network_id = aggregates.network_id \
+                     AND h.granularity = ?3 \
+                     AND h.start = aggregates.start - aggregates.start % ?4)",
+                params![utc, MINUTE, HOUR, SECONDS_PER_HOUR],
             )?;
             Ok(())
         })
@@ -236,7 +251,8 @@ impl MeasurementRepository for SqliteMeasurementRepository {
     }
 }
 
-/// Keeps a name learnt later; a network without a readable name keeps the one it had.
+/// Keeps a name learnt later; a network without a readable name keeps the one it had. O(log n)
+/// on the unique indexes.
 fn find_or_create_network(
     transaction: &Transaction<'_>,
     network: &NetworkKey,
@@ -373,10 +389,51 @@ fn from_event_text(text: &str) -> EventKind {
     }
 }
 
+/// Renames the file and its journals with a date, next to it. O(1).
+fn move_aside(path: &Path, now_utc: i64) -> std::io::Result<PathBuf> {
+    let stem = path
+        .file_stem()
+        .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned());
+    let set_aside = path.with_file_name(format!("{stem}.corrupt-{now_utc}.sqlite3"));
+    std::fs::rename(path, &set_aside)?;
+    for suffix in ["-wal", "-shm"] {
+        // The journal may hold committed writes: it goes with the file it belongs to.
+        let journal = append_to_name(path, suffix);
+        if journal.exists() {
+            std::fs::rename(&journal, append_to_name(&set_aside, suffix))?;
+        }
+    }
+    Ok(set_aside)
+}
+
 fn append_to_name(path: &Path, suffix: &str) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
     name.push(suffix);
     PathBuf::from(name)
+}
+
+/// Damage sets the file aside; anything else leaves it alone.
+enum OpenFailure {
+    Damaged(String),
+    Other(RepositoryError),
+}
+
+impl OpenFailure {
+    fn classify(error: rusqlite::Error) -> Self {
+        match error.sqlite_error_code() {
+            Some(ErrorCode::NotADatabase | ErrorCode::DatabaseCorrupt) => {
+                Self::Damaged(error.to_string())
+            }
+            _ => Self::Other(to_error(error)),
+        }
+    }
+
+    fn into_error(self) -> RepositoryError {
+        match self {
+            Self::Damaged(reason) => RepositoryError(reason),
+            Self::Other(error) => error,
+        }
+    }
 }
 
 fn to_error(error: impl std::fmt::Display) -> RepositoryError {
@@ -391,12 +448,13 @@ mod tests {
 
     use super::*;
 
-    fn create_temporary_directory() -> PathBuf {
+    /// One folder per test: tests run in parallel and the clock alone may not tell them apart.
+    fn create_temporary_directory(test: &str) -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |since| since.as_nanos());
         let directory =
-            std::env::temp_dir().join(format!("history-test-{}-{nanos}", std::process::id()));
+            std::env::temp_dir().join(format!("history-{test}-{}-{nanos}", std::process::id()));
         std::fs::create_dir_all(&directory).expect("a temporary directory");
         directory
     }
@@ -414,9 +472,53 @@ mod tests {
     }
 
     #[test]
+    fn keeps_the_journal_of_a_damaged_history_next_to_it() {
+        // Arrange
+        let directory =
+            create_temporary_directory("keeps_the_journal_of_a_damaged_history_next_to_it");
+        let path = directory.join("history.sqlite3");
+        std::fs::write(&path, b"not a database").expect("a broken file");
+        std::fs::write(append_to_name(&path, "-wal"), b"journal").expect("a journal");
+
+        // Act
+        let set_aside = move_aside(&path, 1_700_000_000).expect("moved aside");
+
+        // Assert
+        assert_eq!(
+            std::fs::read(append_to_name(&set_aside, "-wal")).expect("journal kept"),
+            b"journal"
+        );
+        assert!(!path.exists());
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn leaves_a_history_from_a_newer_version_untouched() {
+        // Arrange
+        let directory =
+            create_temporary_directory("leaves_a_history_from_a_newer_version_untouched");
+        let path = directory.join("history.sqlite3");
+        {
+            let connection = Connection::open(&path).expect("a database");
+            connection
+                .pragma_update(None, "user_version", 999)
+                .expect("a newer schema");
+        }
+
+        // Act
+        let opened = SqliteMeasurementRepository::open(&path, 1_700_000_000);
+
+        // Assert
+        assert!(opened.is_err());
+        assert!(path.exists());
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
     fn sets_an_unreadable_history_aside_and_starts_a_new_one() {
         // Arrange
-        let directory = create_temporary_directory();
+        let directory =
+            create_temporary_directory("sets_an_unreadable_history_aside_and_starts_a_new_one");
         let path = directory.join("history.sqlite3");
         std::fs::write(&path, b"not a database at all, just bytes").expect("a broken file");
 
@@ -442,7 +544,7 @@ mod tests {
     #[test]
     fn reopens_a_healthy_history_as_it_was() {
         // Arrange
-        let directory = create_temporary_directory();
+        let directory = create_temporary_directory("reopens_a_healthy_history_as_it_was");
         let path = directory.join("history.sqlite3");
         let event = HistoryEvent {
             utc: 1_700_000_000,

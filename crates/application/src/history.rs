@@ -57,12 +57,17 @@ pub struct RepositoryError(pub String);
 /// Applies history commands; the only owner of the repository, on a thread of its own.
 pub struct HistoryWriter<R> {
     repository: R,
+    /// The hour of the last minute saved: a minute of a later hour closes every earlier one.
+    last_hour: Option<i64>,
 }
 
 impl<R: MeasurementRepository> HistoryWriter<R> {
     #[must_use]
     pub const fn new(repository: R) -> Self {
-        Self { repository }
+        Self {
+            repository,
+            last_hour: None,
+        }
     }
 
     /// Gives the repository back, e.g. to read what was written.
@@ -71,8 +76,9 @@ impl<R: MeasurementRepository> HistoryWriter<R> {
         self.repository
     }
 
-    /// The last minute of an hour closes that hour and purges old minutes. O(60·B) at worst,
-    /// B = 24 histogram buckets.
+    /// The last minute of an hour closes that hour; the first minute of a new hour closes every
+    /// earlier hour of every network (left before its end, or interrupted by a sleep), then
+    /// purges old minutes. O(60·B) per hour closed, B = 24 histogram buckets.
     ///
     /// # Errors
     ///
@@ -89,8 +95,11 @@ impl<R: MeasurementRepository> HistoryWriter<R> {
                 if start + Granularity::Minute.to_seconds() == hour + Granularity::Hour.to_seconds()
                 {
                     self.close_hour(&network, hour)?;
-                    self.purge_old_minutes(now_utc)?;
                 }
+                if self.last_hour.is_some_and(|last| last < hour) {
+                    self.finish_pending_hours(now_utc)?;
+                }
+                self.last_hour = Some(hour);
                 Ok(())
             }
             HistoryCommand::RecordEvent(event) => self.repository.record_event(&event),
@@ -130,25 +139,48 @@ impl<R: MeasurementRepository> HistoryWriter<R> {
         self.repository.save_hour(network, hour, &merged)
     }
 
+    /// Only minutes whose hour is kept go: the repository checks it.
     fn purge_old_minutes(&mut self, now_utc: i64) -> Result<(), RepositoryError> {
         let retention = i64::try_from(MINUTE_RETENTION.as_secs()).unwrap_or(i64::MAX);
         self.repository.purge_minutes_before(now_utc - retention)
     }
 }
 
+/// Seconds measured before any network was seen (no route at launch) count under this key.
+const NO_NETWORK: NetworkKey = NetworkKey {
+    gateway: None,
+    kind: ConnectionKind::Other,
+    name: None,
+};
+
 /// Builds the history from the engine's seconds: minutes, events and the last hour.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct HistoryTracker {
     accumulator: MinuteAccumulator,
     ring: SecondRing,
-    previous_latency: Option<Duration>,
-    network: Option<(ConnectionContext, NetworkKey)>,
+    /// The previous second, to measure jitter between consecutive seconds only.
+    previous: Option<(i64, Duration)>,
+    context: Option<ConnectionContext>,
+    network: NetworkKey,
     was_offline: bool,
 }
 
+impl Default for HistoryTracker {
+    fn default() -> Self {
+        Self {
+            accumulator: MinuteAccumulator::default(),
+            ring: SecondRing::default(),
+            previous: None,
+            context: None,
+            network: NO_NETWORK,
+            was_offline: false,
+        }
+    }
+}
+
 impl HistoryTracker {
-    /// Records one second and sends what it completes. Without a route, the seconds still
-    /// count for the last network seen. O(1).
+    /// Records one second and sends what it completes. Without a route, the seconds count for
+    /// the last network seen. O(1).
     pub fn record_second(
         &mut self,
         second: &MeasuredSecond,
@@ -159,15 +191,12 @@ impl HistoryTracker {
         if let Some(context) = context {
             self.follow_network(second.utc, context, name, recorder);
         }
-        let Some((_, network)) = &self.network else {
-            return;
-        };
         let state = to_counted_state(second.verdict);
         let is_offline = state == Some(CountedState::Offline);
         if is_offline != self.was_offline {
             recorder.record(HistoryCommand::RecordEvent(HistoryEvent {
                 utc: second.utc,
-                network: network.clone(),
+                network: self.network.clone(),
                 kind: if is_offline {
                     EventKind::OfflineStarted
                 } else {
@@ -180,13 +209,15 @@ impl HistoryTracker {
             latency: second.latency,
             jitter: second
                 .latency
-                .zip(self.previous_latency)
-                .map(|(latency, previous)| latency.abs_diff(previous)),
+                .zip(self.previous)
+                .and_then(|(latency, (utc, previous))| {
+                    (second.utc - utc == 1).then(|| latency.abs_diff(previous))
+                }),
             probes_sent: second.probes_sent,
             probes_lost: second.probes_lost,
             state,
         };
-        self.previous_latency = second.latency;
+        self.previous = second.latency.map(|latency| (second.utc, latency));
         self.ring.record(SecondPoint {
             utc: second.utc,
             latency: second.latency,
@@ -194,7 +225,7 @@ impl HistoryTracker {
         });
         if let Some((start, aggregate)) = self.accumulator.record_second(second.utc, &sample) {
             recorder.record(HistoryCommand::SaveMinute {
-                network: network.clone(),
+                network: self.network.clone(),
                 start,
                 aggregate,
             });
@@ -213,6 +244,8 @@ impl HistoryTracker {
         self.ring.list_points()
     }
 
+    /// Same network: keeps what was learnt (a MAC resolved, a name read later). Another one:
+    /// closes the minute under the old one and notes the change. O(1).
     fn follow_network(
         &mut self,
         utc: i64,
@@ -220,37 +253,37 @@ impl HistoryTracker {
         name: Option<String>,
         recorder: &impl HistoryRecorder,
     ) {
-        let key = NetworkKey {
+        if let Some(previous) = self
+            .context
+            .filter(|previous| previous.is_same_network(&context))
+        {
+            let completed = context.complete_with(&previous);
+            self.network.gateway = completed.gateway;
+            if name.is_some() {
+                self.network.name = name;
+            }
+            self.context = Some(completed);
+            return;
+        }
+        self.save_current_minute(recorder);
+        self.network = NetworkKey {
             gateway: context.gateway,
             kind: context.kind,
             name,
         };
-        match &self.network {
-            Some((previous, _)) if previous.is_same_network(&context) => {
-                // Same network: keep what was learnt (a name read later, a MAC resolved later).
-                self.network = Some((context.complete_with(previous), key));
-            }
-            previous => {
-                if previous.is_some() {
-                    self.save_current_minute(recorder);
-                }
-                recorder.record(HistoryCommand::RecordEvent(HistoryEvent {
-                    utc,
-                    network: key.clone(),
-                    kind: EventKind::NetworkChanged,
-                }));
-                self.previous_latency = None;
-                self.network = Some((context, key));
-            }
-        }
+        self.context = Some(context);
+        self.previous = None;
+        recorder.record(HistoryCommand::RecordEvent(HistoryEvent {
+            utc,
+            network: self.network.clone(),
+            kind: EventKind::NetworkChanged,
+        }));
     }
 
     fn save_current_minute(&mut self, recorder: &impl HistoryRecorder) {
-        if let (Some((start, aggregate)), Some((_, network))) =
-            (self.accumulator.take_current(), &self.network)
-        {
+        if let Some((start, aggregate)) = self.accumulator.take_current() {
             recorder.record(HistoryCommand::SaveMinute {
-                network: network.clone(),
+                network: self.network.clone(),
                 start,
                 aggregate,
             });

@@ -193,7 +193,7 @@ impl HistoryRecorder for InMemoryHistoryRecorder {
     }
 }
 
-/// Minutes, hours and events in plain vectors. Linear scans: a test keeps a few rows.
+/// Minutes, hours and events in plain vectors. Quadratic scans at worst: a test keeps few rows.
 #[derive(Debug, Default)]
 pub struct InMemoryMeasurementRepository {
     rows: Vec<(NetworkKey, Granularity, i64, Aggregate)>,
@@ -226,6 +226,13 @@ impl InMemoryMeasurementRepository {
             .filter(|(key, ..)| is_same_identity(key, network))
         {
             key.name.clone_from(&network.name);
+        }
+        for event in self
+            .events
+            .iter_mut()
+            .filter(|event| is_same_identity(&event.network, network))
+        {
+            event.network.name.clone_from(&network.name);
         }
     }
 }
@@ -312,24 +319,37 @@ impl MeasurementRepository for InMemoryMeasurementRepository {
     }
 
     fn purge_minutes_before(&mut self, utc: i64) -> Result<(), RepositoryError> {
-        self.rows.retain(|(_, granularity, start, _)| {
-            *granularity != Granularity::Minute || *start >= utc
+        let kept_hours: Vec<(NetworkKey, i64)> = self
+            .rows
+            .iter()
+            .filter(|(_, granularity, ..)| *granularity == Granularity::Hour)
+            .map(|(key, _, start, _)| (key.clone(), *start))
+            .collect();
+        self.rows.retain(|(key, granularity, start, _)| {
+            let is_hour_kept = kept_hours.iter().any(|(hour_key, hour)| {
+                is_same_identity(hour_key, key) && *hour == Granularity::Hour.find_start(*start)
+            });
+            *granularity != Granularity::Minute || *start >= utc || !is_hour_kept
         });
         Ok(())
     }
 
     fn record_event(&mut self, event: &HistoryEvent) -> Result<(), RepositoryError> {
         self.events.push(event.clone());
+        self.remember_name(&event.network);
         Ok(())
     }
 
+    /// Oldest first, each with the network's current name, as the database answers.
     fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
-        Ok(self
+        let mut events: Vec<HistoryEvent> = self
             .events
             .iter()
             .filter(|event| (from..to).contains(&event.utc))
             .cloned()
-            .collect())
+            .collect();
+        events.sort_by_key(|event| event.utc);
+        Ok(events)
     }
 }
 

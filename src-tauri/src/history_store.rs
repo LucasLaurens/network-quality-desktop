@@ -1,7 +1,7 @@
 //! Where the history file lives, and what the user is told when it cannot be used as is.
 
 use fluent_bundle::FluentArgs;
-use infrastructure::{SqliteHistoryRecorder, SqliteMeasurementRepository};
+use infrastructure::{SqliteHistoryRecorder, SqliteMeasurementRepository, SystemClock};
 use tauri::{AppHandle, Manager};
 
 use crate::text_catalog::TextCatalog;
@@ -38,7 +38,7 @@ pub fn open_history(
                 catalog.render("history-set-aside", Some(&args))
             });
             (
-                SqliteHistoryRecorder::start(opened.repository),
+                SqliteHistoryRecorder::start(opened.repository, SystemClock::start()),
                 HistoryNotice(notice),
             )
         }
@@ -46,7 +46,10 @@ pub fn open_history(
             eprintln!("Opening the history failed, it is kept in memory: {error}");
             let notice = HistoryNotice(Some(catalog.render("history-not-saved", None)));
             match SqliteMeasurementRepository::open_in_memory() {
-                Ok(repository) => (SqliteHistoryRecorder::start(repository), notice),
+                Ok(repository) => (
+                    SqliteHistoryRecorder::start(repository, SystemClock::start()),
+                    notice,
+                ),
                 Err(error) => panic!("an in-memory history cannot fail to open: {}", error.0),
             }
         }

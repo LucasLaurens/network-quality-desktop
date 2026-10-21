@@ -31,7 +31,7 @@ pub enum EngineMessage {
     /// The system reports an interface or address change: read the connection at the next tick.
     /// A burst of events within one second costs a single reading.
     NetworkChanged,
-    /// Closing or going to sleep: write the minute in progress, then answer.
+    /// Closing: write the minute in progress, then answer.
     Flush(SyncSender<()>),
     /// The last hour, second by second, for the one-hour chart.
     ReadLastHour(oneshot::Sender<Vec<SecondPoint>>),
@@ -186,6 +186,8 @@ where
     }
 
     async fn measure_one_second(&mut self) {
+        // Read before the probes: they may take a second, and two ticks must not share one.
+        let utc = self.clock.read_utc_seconds();
         let is_context_due = self.seconds_since_context >= CONTEXT_REFRESH_SECONDS;
         let gateway = self.find_gateway();
         // The context and the gateway are read alongside the probes: none delays the others.
@@ -228,7 +230,7 @@ where
         self.seconds_since_context += 1;
         let (latency, probes_lost) = self.record_outcomes(&outcomes);
         let view = self.compute_view(&outcomes);
-        self.record_history(latency, probes_lost, &view);
+        self.record_history(utc, latency, probes_lost, &view);
         self.presenter.present(&view);
     }
 
@@ -312,7 +314,13 @@ where
     }
 
     /// The Wi-Fi name labels the network only when Wi-Fi carries the traffic. O(1).
-    fn record_history(&mut self, latency: Option<Duration>, probes_lost: u32, view: &VerdictView) {
+    fn record_history(
+        &mut self,
+        utc: i64,
+        latency: Option<Duration>,
+        probes_lost: u32,
+        view: &VerdictView,
+    ) {
         let name = self
             .wifi
             .as_ref()
@@ -322,7 +330,7 @@ where
             })
             .and_then(|link| link.name.clone());
         let second = MeasuredSecond {
-            utc: self.clock.read_utc_seconds(),
+            utc,
             latency,
             probes_sent: u32::try_from(self.targets.len()).unwrap_or(u32::MAX),
             probes_lost,

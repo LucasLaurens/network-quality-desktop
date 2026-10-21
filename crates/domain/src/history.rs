@@ -225,7 +225,7 @@ impl MinuteAccumulator {
         finished
     }
 
-    /// Hands over the minute in progress (closing, sleep, new network). O(1).
+    /// Hands over the minute in progress (closing, new network). O(1).
     pub fn take_current(&mut self) -> Option<(i64, Aggregate)> {
         self.current.take()
     }

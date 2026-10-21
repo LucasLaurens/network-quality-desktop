@@ -13,7 +13,7 @@ mod tray_icon;
 mod tray_menu;
 mod windows;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use application::{
     Clock, EngineMessage, EnginePorts, MeasurementEngine, NetworkChangeWatcher,
@@ -45,6 +45,7 @@ const TRAY_ID: &str = "connection-state";
 const TICK_EVERY: Duration = Duration::from_secs(1);
 /// How long quitting waits for the last minute to be written.
 const FLUSH_TIMEOUT: Duration = Duration::from_secs(2);
+const FLUSH_RETRY_EVERY: Duration = Duration::from_millis(20);
 /// A few pending ticks at most: if the engine falls behind, older ticks are not worth replaying.
 const ENGINE_INBOX_CAPACITY: usize = 4;
 
@@ -99,15 +100,30 @@ pub fn run() {
 /// The measurement actor's inbox, for messages that come from outside its clock.
 struct EngineInbox(mpsc::Sender<EngineMessage>);
 
-/// Writes the minute in progress before the app quits, waiting a moment for the writer.
+/// Writes the minute in progress before the app quits; quitting never waits more than
+/// `FLUSH_TIMEOUT`, even with a full inbox or a writer that is gone.
 fn flush_history(app: &tauri::AppHandle) {
     let Some(inbox) = app.try_state::<EngineInbox>() else {
         return;
     };
+    let deadline = Instant::now() + FLUSH_TIMEOUT;
     let (answer, answered) = std::sync::mpsc::sync_channel(1);
-    if inbox.0.blocking_send(EngineMessage::Flush(answer)).is_ok()
-        && answered.recv_timeout(FLUSH_TIMEOUT).is_err()
-    {
+    let mut message = EngineMessage::Flush(answer);
+    loop {
+        match inbox.0.try_send(message) {
+            Ok(()) => break,
+            Err(mpsc::error::TrySendError::Full(returned)) if Instant::now() < deadline => {
+                message = returned;
+                std::thread::sleep(FLUSH_RETRY_EVERY);
+            }
+            Err(_) => {
+                eprintln!("The last minute could not reach the measurement engine");
+                return;
+            }
+        }
+    }
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if answered.recv_timeout(remaining).is_err() {
         eprintln!("The history writer did not confirm the last minute in time");
     }
 }

@@ -46,8 +46,12 @@ pub fn check_contract<R: MeasurementRepository>(create: impl Fn() -> R) {
     keeps_networks_apart(&mut create());
     finds_hours_left_open(&mut create());
     purges_only_old_minutes(&mut create());
+    keeps_old_minutes_whose_hour_is_not_kept(&mut create());
     records_events_in_order(&mut create());
     keeps_a_name_learnt_later(&mut create());
+    keeps_a_name_when_seen_again_without_it(&mut create());
+    learns_a_name_from_an_event(&mut create());
+    groups_networks_without_a_readable_gateway_by_kind(&mut create());
 }
 
 fn adds_to_a_minute_already_kept(repository: &mut impl MeasurementRepository) {
@@ -233,4 +237,97 @@ fn keeps_a_name_learnt_later(repository: &mut impl MeasurementRepository) {
         .list_unmerged_hours(SOME_HOUR + HOUR)
         .expect("open hours");
     assert_eq!(open[0].0.name.as_deref(), Some("Livebox"));
+}
+
+fn keeps_a_name_when_seen_again_without_it(repository: &mut impl MeasurementRepository) {
+    // Arrange
+    let named = create_network(10, Some("Livebox"));
+    let unnamed = create_network(10, None);
+    repository
+        .add_minute(&named, SOME_HOUR, &create_aggregate(60, 15))
+        .expect("named");
+
+    // Act
+    repository
+        .add_minute(&unnamed, SOME_HOUR + MINUTE, &create_aggregate(60, 15))
+        .expect("unnamed");
+
+    // Assert
+    let open = repository
+        .list_unmerged_hours(SOME_HOUR + HOUR)
+        .expect("open hours");
+    assert_eq!(open[0].0.name.as_deref(), Some("Livebox"));
+}
+
+fn learns_a_name_from_an_event(repository: &mut impl MeasurementRepository) {
+    // Arrange
+    let unnamed = create_network(11, None);
+    repository
+        .add_minute(&unnamed, SOME_HOUR, &create_aggregate(60, 15))
+        .expect("unnamed");
+    let event = HistoryEvent {
+        utc: SOME_HOUR + MINUTE,
+        network: create_network(11, Some("Bureau")),
+        kind: EventKind::NetworkChanged,
+    };
+
+    // Act
+    repository.record_event(&event).expect("event");
+
+    // Assert
+    let open = repository
+        .list_unmerged_hours(SOME_HOUR + HOUR)
+        .expect("open hours");
+    assert_eq!(open[0].0.name.as_deref(), Some("Bureau"));
+}
+
+fn groups_networks_without_a_readable_gateway_by_kind(repository: &mut impl MeasurementRepository) {
+    // Arrange
+    let unreadable = NetworkKey {
+        gateway: None,
+        kind: ConnectionKind::Ethernet,
+        name: None,
+    };
+    repository
+        .add_minute(&unreadable, SOME_HOUR, &create_aggregate(20, 15))
+        .expect("first");
+
+    // Act
+    repository
+        .add_minute(&unreadable, SOME_HOUR, &create_aggregate(40, 15))
+        .expect("second");
+
+    // Assert
+    let rows = repository
+        .list_aggregates(
+            &unreadable,
+            Granularity::Minute,
+            SOME_HOUR,
+            SOME_HOUR + MINUTE,
+        )
+        .expect("rows");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].1.seconds.solid, 60);
+}
+
+fn keeps_old_minutes_whose_hour_is_not_kept(repository: &mut impl MeasurementRepository) {
+    // Arrange
+    let network = create_network(12, None);
+    repository
+        .add_minute(&network, SOME_HOUR, &create_aggregate(60, 15))
+        .expect("minute of an open hour");
+
+    // Act
+    repository
+        .purge_minutes_before(SOME_HOUR + HOUR)
+        .expect("purge");
+
+    // Assert
+    assert_eq!(
+        repository
+            .list_aggregates(&network, Granularity::Minute, 0, i64::MAX)
+            .expect("minutes")
+            .len(),
+        1
+    );
 }
