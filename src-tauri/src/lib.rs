@@ -12,12 +12,12 @@ mod windows;
 
 use std::time::Duration;
 
-use application::{EngineMessage, MeasurementEngine, list_default_targets};
+use application::{EngineMessage, MeasurementEngine, NetworkChangeWatcher, list_default_targets};
 use display::ConnectionDisplay;
 use domain::Verdict;
 use infrastructure::{
-    FallbackLatencyProbe, IcmpEchoSender, NetdevContextReader, SystemClock, SystemTrayHost,
-    TcpConnectionOpener,
+    FallbackLatencyProbe, IcmpEchoSender, InterfaceChangeWatcher, NetdevContextReader, SystemClock,
+    SystemTrayHost, TcpConnectionOpener,
 };
 use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
@@ -136,6 +136,11 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         NetdevContextReader::new(route_reference),
         targets,
     );
+    let change_sender = sender.clone();
+    InterfaceChangeWatcher.watch(move || {
+        // A full inbox already holds a tick that will read the connection soon enough.
+        let _ = change_sender.try_send(EngineMessage::NetworkChanged);
+    });
     tauri::async_runtime::spawn(engine.run(inbox));
     tauri::async_runtime::spawn(send_ticks(sender));
     Ok(())

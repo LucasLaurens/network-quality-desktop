@@ -14,6 +14,12 @@ pub trait ConnectionContextReader {
     fn read_context(&self) -> impl Future<Output = Option<ConnectionContext>> + Send;
 }
 
+/// Reports changes of network interfaces or addresses, for the life of the app. Noise included
+/// (a virtual interface coming and going): the engine checks whether the network really changed.
+pub trait NetworkChangeWatcher {
+    fn watch(self, on_change: impl FnMut() + Send + 'static);
+}
+
 /// Monotonic time source, replaced by a manual clock in tests.
 pub trait Clock {
     fn read_now(&self) -> Timestamp;

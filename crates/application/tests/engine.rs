@@ -1,5 +1,6 @@
 //! Engine seam: messages in, presented verdicts out, with in-memory ports and a manual clock.
 
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use application::test_support::{
@@ -7,8 +8,8 @@ use application::test_support::{
 };
 use application::{CONTEXT_REFRESH_SECONDS, EngineMessage, MeasurementEngine, VerdictView};
 use domain::{
-    ConnectionContext, ConnectionKind, Diagnosis, Grade, MacAddress, Metric, ProbeOutcome, Target,
-    Verdict,
+    ConnectionContext, ConnectionKind, Diagnosis, Grade, MacAddress, MeasuringCause, Metering,
+    Metric, ProbeOutcome, Target, Verdict,
 };
 
 // Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
@@ -502,7 +503,8 @@ async fn reports_warm_up_progress_while_measuring() {
         harness.read_last_view().diagnosis,
         Diagnosis::Measuring {
             collected: 6,
-            needed: WARM_UP
+            needed: WARM_UP,
+            cause: MeasuringCause::FirstMeasures,
         }
     );
 }
@@ -583,6 +585,8 @@ fn create_context(kind: ConnectionKind, last_octet: u8) -> ConnectionContext {
         kind,
         is_vpn: false,
         gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, last_octet]),
+        gateway_address: Some(Ipv4Addr::new(192, 168, last_octet, 1)),
+        metering: Metering::Unknown,
     }
 }
 
@@ -660,4 +664,79 @@ async fn reads_the_connection_again_right_after_an_outage() {
 
     // Assert
     assert_eq!(harness.read_last_view().context, Some(ethernet));
+}
+
+// Network changes
+
+#[tokio::test]
+async fn measures_again_as_soon_as_the_network_changes() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 6)));
+    harness.warm_up_with_latency(FAST).await;
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 7)));
+    harness.engine.handle(EngineMessage::NetworkChanged).await;
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    let view = harness.read_last_view();
+    assert_eq!(view.verdict, Verdict::Measuring);
+    assert_eq!(
+        view.diagnosis,
+        // The second that saw the change already measured the new network.
+        Diagnosis::Measuring {
+            collected: 1,
+            needed: WARM_UP,
+            cause: MeasuringCause::NewNetwork,
+        }
+    );
+}
+
+#[tokio::test]
+async fn keeps_its_verdict_when_a_change_leaves_the_network_as_it_was() {
+    // Arrange
+    let mut harness = create_harness();
+    let wifi = create_context(ConnectionKind::WiFi, 8);
+    harness.connection.set_context(Some(wifi));
+    harness.warm_up_with_latency(FAST).await;
+    harness.connection.set_context(Some(ConnectionContext {
+        metering: Metering::Metered,
+        ..wifi
+    }));
+    harness.engine.handle(EngineMessage::NetworkChanged).await;
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(
+        harness.read_presented_verdict(),
+        Verdict::Graded(Grade::Solid)
+    );
+}
+
+#[tokio::test]
+async fn notices_a_new_network_at_the_next_reading_without_any_event() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::Ethernet, 9)));
+    harness.warm_up_with_latency(FAST).await;
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 10)));
+    // The warm-up read the connection at its first second: the next reading is due now.
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(harness.read_presented_verdict(), Verdict::Measuring);
 }
