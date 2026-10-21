@@ -28,3 +28,10 @@ Le code est en anglais, l'interface et la documentation en français. Chaque con
 | Histogramme de latence | `LatencyHistogram`  | 24 tranches additionnables, d'où les percentiles de toute période                          |
 | Dernière heure         | `SecondRing`        | Une mesure par seconde sur une heure, en mémoire                                           |
 | Événement              | `HistoryEvent`      | Changement de réseau, début ou fin de coupure                                              |
+| Mémoire vive           | `LiveHistory`       | Dernière heure en mémoire et réseau courant, lus auprès du moteur                          |
+| Période                | `Period`            | 1 h, 24 h, 7 j ou 30 j : l'étendue d'une courbe et la largeur de ses points                |
+| Évolution              | `Evolution`         | Les points d'une période, ses changements de réseau et sa couverture                       |
+| Couverture             | `coverage`          | Part d'une période réellement mesurée                                                      |
+| Coupure                | `Outage`            | Du début à la fin d'un passage Hors ligne ; sans fin connue si l'app s'est arrêtée         |
+| Pire moment            | `worst_minute`      | La minute du jour la plus pénible pour un appel                                            |
+| Bilan d'un réseau      | `NetworkSummary`    | 30 jours d'un réseau : temps par état, latence p90, perte, actuel, le plus fiable          |

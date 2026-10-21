@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod commands;
+mod dashboard_display;
 mod display;
 mod history_store;
 mod network_display;
@@ -21,6 +22,7 @@ use application::{
 };
 use display::ConnectionDisplay;
 use domain::Verdict;
+use history_store::EngineInbox;
 use infrastructure::{
     FallbackLatencyProbe, IcmpEchoSender, IcmpGatewayProbe, InterfaceChangeWatcher,
     NetdevContextReader, SystemClock, SystemTrayHost, SystemWifiReader, TcpConnectionOpener,
@@ -63,7 +65,9 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::open_tray_extension_page,
             commands::quit_app,
             commands::reveal_network_name,
-            commands::read_history_notice
+            commands::read_history_notice,
+            commands::read_dashboard_summary,
+            commands::read_evolution
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -97,9 +101,6 @@ pub fn run() {
         });
 }
 
-/// The measurement actor's inbox, for messages that come from outside its clock.
-struct EngineInbox(mpsc::Sender<EngineMessage>);
-
 /// Writes the minute in progress before the app quits; quitting never waits more than
 /// `FLUSH_TIMEOUT`, even with a full inbox or a writer that is gone.
 fn flush_history(app: &tauri::AppHandle) {
@@ -132,6 +133,8 @@ fn flush_history(app: &tauri::AppHandle) {
 /// with its 1 Hz clock, all on the Rust side.
 fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     let catalog = TextCatalog::load();
+    // The dashboard commands word their figures with their own copy.
+    app.manage(TextCatalog::load());
     let initial = ConnectionDisplay::create_initial(&catalog);
     let mode = ShellMode::detect(&SystemTrayHost);
     app.manage(mode);
@@ -175,9 +178,10 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         .first()
         .expect("the default targets are listed")
         .address();
-    let (history_recorder, history_notice) =
+    let (history_recorder, history_notice, dashboard_history) =
         history_store::open_history(app, &catalog, SystemClock::start().read_utc_seconds());
     app.manage(history_notice);
+    app.manage(dashboard_history);
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
     app.manage(EngineInbox(sender.clone()));
     let engine = MeasurementEngine::new(

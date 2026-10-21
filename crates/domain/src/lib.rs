@@ -25,7 +25,8 @@ pub use diagnosis::{Diagnosis, MeasuringCause, Metric};
 pub use grade::{Grade, GradeBounds, Scalable, Thresholds};
 pub use history::{
     Aggregate, CountedState, Granularity, LATENCY_BUCKETS, LatencyHistogram, MinuteAccumulator,
-    RING_SECONDS, SecondPoint, SecondRing, SecondSample, StateSeconds,
+    RING_SECONDS, SECONDS_PER_DAY, SECONDS_PER_HOUR, SECONDS_PER_MINUTE, SecondPoint, SecondRing,
+    SecondSample, StateSeconds,
 };
 pub use hysteresis::Hysteresis;
 pub use latency_window::{LatencyWindow, compute_median};

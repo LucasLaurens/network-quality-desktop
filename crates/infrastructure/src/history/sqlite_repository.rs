@@ -1,9 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use application::{EventKind, HistoryEvent, MeasurementRepository, NetworkKey, RepositoryError};
+use application::{
+    EventKind, HistoryEvent, HistoryReader, MeasurementRepository, NetworkKey, RepositoryError,
+};
 use domain::{Aggregate, ConnectionKind, Granularity, LatencyHistogram, MacAddress, StateSeconds};
-use rusqlite::{Connection, ErrorCode, OptionalExtension, Row, Transaction, params};
+use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension, Row, Transaction, params};
 use rusqlite_migration::{M, Migrations};
 
 const MIGRATIONS: &[M<'static>] = &[
@@ -65,6 +67,19 @@ impl SqliteMeasurementRepository {
     /// The migrations failed.
     pub fn open_in_memory() -> Result<Self, RepositoryError> {
         Self::prepare(Connection::open_in_memory().map_err(to_error)?)
+    }
+
+    /// A second connection to a history the writer already opened, for the dashboard: it reads
+    /// alongside the writer (WAL) and can write nothing.
+    ///
+    /// # Errors
+    ///
+    /// The file could not be opened.
+    pub fn open_read_only(path: &Path) -> Result<Self, RepositoryError> {
+        let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(to_error)?;
+        connection.busy_timeout(BUSY_TIMEOUT).map_err(to_error)?;
+        Ok(Self { connection })
     }
 
     fn open_checked(path: &Path) -> Result<Self, OpenFailure> {
@@ -228,7 +243,37 @@ impl MeasurementRepository for SqliteMeasurementRepository {
             Ok(())
         })
     }
+}
 
+impl HistoryReader for SqliteMeasurementRepository {
+    /// O(log n + k) through the (granularity, start) index.
+    fn list_all_aggregates(
+        &self,
+        granularity: Granularity,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(NetworkKey, i64, Aggregate)>, RepositoryError> {
+        let mut statement = self
+            .connection
+            .prepare(&format!(
+                "SELECT n.gateway_mac, n.connection_kind, n.label, a.start, {AGGREGATE_COLUMNS} \
+                 FROM aggregates a JOIN networks n ON n.id = a.network_id \
+                 WHERE a.granularity = ?1 AND a.start >= ?2 AND a.start < ?3 ORDER BY a.start"
+            ))
+            .map_err(to_error)?;
+        let rows = statement
+            .query_map(params![to_granularity_code(granularity), from, to], |row| {
+                Ok((
+                    read_network(row, 0)?,
+                    row.get(3)?,
+                    read_aggregate_from(row, 4)?,
+                ))
+            })
+            .map_err(to_error)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(to_error)
+    }
+
+    /// O(log n + k) through the time index.
     fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
         let mut statement = self
             .connection
@@ -573,6 +618,39 @@ mod tests {
                 .expect("events"),
             vec![event]
         );
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn reads_what_the_writer_keeps_without_writing_itself() {
+        // Arrange
+        let directory =
+            create_temporary_directory("reads_what_the_writer_keeps_without_writing_itself");
+        let path = directory.join("history.sqlite3");
+        let event = HistoryEvent {
+            utc: 1_700_000_000,
+            network: NetworkKey {
+                gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, 0x49]),
+                kind: ConnectionKind::WiFi,
+                name: Some("Box".to_owned()),
+            },
+            kind: EventKind::NetworkChanged,
+        };
+        let mut writer = SqliteMeasurementRepository::open(&path, 0)
+            .expect("a history")
+            .repository;
+        let mut reader =
+            SqliteMeasurementRepository::open_read_only(&path).expect("a second connection");
+
+        // Act
+        writer.record_event(&event).expect("an event");
+
+        // Assert
+        assert_eq!(
+            reader.list_events(0, i64::MAX).expect("events"),
+            vec![event.clone()]
+        );
+        assert!(reader.record_event(&event).is_err());
         let _ = std::fs::remove_dir_all(directory);
     }
 }

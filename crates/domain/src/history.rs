@@ -4,14 +4,17 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
+use crate::{LossRate, Metric, Thresholds};
+
 /// Latency histogram buckets: one under 1 ms, 22 log-spaced up to 2 s, one beyond.
 pub const LATENCY_BUCKETS: usize = 24;
 const FIRST_EDGE: Duration = Duration::from_millis(1);
 const LAST_EDGE: Duration = Duration::from_secs(2);
 /// Log-spaced buckets between the first and the last edge.
 const INNER_BUCKETS: f64 = 22.0;
-const SECONDS_PER_MINUTE: i64 = 60;
-const SECONDS_PER_HOUR: i64 = 3600;
+pub const SECONDS_PER_MINUTE: i64 = 60;
+pub const SECONDS_PER_HOUR: i64 = 3600;
+pub const SECONDS_PER_DAY: i64 = 86_400;
 /// The ring keeps one point per second for the last hour.
 pub const RING_SECONDS: usize = 3600;
 
@@ -104,8 +107,8 @@ fn compute_upper_edge(bucket: usize) -> Duration {
     FIRST_EDGE.mul_f64(LAST_EDGE.div_duration_f64(FIRST_EDGE).powf(exponent))
 }
 
-/// The state shown during a second, as it is counted in the history.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The state shown during a second, as it is counted in the history. Ordered from best to worst.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CountedState {
     Solid,
     Unstable,
@@ -131,6 +134,42 @@ pub struct StateSeconds {
     pub unstable: u32,
     pub degraded: u32,
     pub offline: u32,
+}
+
+impl StateSeconds {
+    /// The seconds counted in a state; measuring seconds are not. O(1).
+    #[must_use]
+    pub const fn count_total(&self) -> u32 {
+        self.solid
+            .saturating_add(self.unstable)
+            .saturating_add(self.degraded)
+            .saturating_add(self.offline)
+    }
+
+    #[must_use]
+    pub const fn count(&self, state: CountedState) -> u32 {
+        match state {
+            CountedState::Solid => self.solid,
+            CountedState::Unstable => self.unstable,
+            CountedState::Degraded => self.degraded,
+            CountedState::Offline => self.offline,
+        }
+    }
+
+    /// The state that lasted longest, the worse one on a tie; `None` without counted seconds.
+    /// O(1).
+    #[must_use]
+    pub fn compute_dominant(&self) -> Option<CountedState> {
+        [
+            CountedState::Solid,
+            CountedState::Unstable,
+            CountedState::Degraded,
+            CountedState::Offline,
+        ]
+        .into_iter()
+        .filter(|state| self.count(*state) > 0)
+        .max_by_key(|state| (self.count(*state), *state))
+    }
 }
 
 /// Everything kept of a minute or an hour. Merging two gives the aggregate of both.
@@ -166,6 +205,71 @@ impl Aggregate {
             None => return,
         };
         *counter = counter.saturating_add(1);
+    }
+
+    /// The seconds counted in a state; measuring seconds are not. O(1).
+    #[must_use]
+    pub const fn count_measured_seconds(&self) -> u32 {
+        self.seconds.count_total()
+    }
+
+    /// The state that lasted longest, the worse one on a tie. O(1).
+    #[must_use]
+    pub fn compute_dominant_state(&self) -> Option<CountedState> {
+        self.seconds.compute_dominant()
+    }
+
+    /// The 90th percentile of latency, as the live gauge. O(B).
+    #[must_use]
+    pub fn compute_latency_p90(&self) -> Option<Duration> {
+        self.latency.compute_percentile(90.0)
+    }
+
+    /// O(1).
+    #[must_use]
+    pub fn compute_mean_jitter(&self) -> Option<Duration> {
+        (self.jitter_count > 0)
+            .then(|| Duration::from_micros(self.jitter_sum_us / u64::from(self.jitter_count)))
+    }
+
+    /// O(1).
+    #[must_use]
+    pub fn compute_loss(&self) -> Option<LossRate> {
+        (self.probes_sent > 0).then(|| {
+            LossRate::from_percent(
+                f64::from(self.probes_lost) * 100.0 / f64::from(self.probes_sent),
+            )
+        })
+    }
+
+    /// The metric furthest beyond its Instable threshold, relative to it; `None` without any
+    /// measure. O(B).
+    #[must_use]
+    pub fn compute_worst_metric(&self, thresholds: &Thresholds) -> Option<Metric> {
+        let ratios = [
+            (
+                Metric::Latency,
+                self.compute_latency_p90().map(|latency| {
+                    latency.div_duration_f64(thresholds.latency.read_unstable_from())
+                }),
+            ),
+            (
+                Metric::Jitter,
+                self.compute_mean_jitter()
+                    .map(|jitter| jitter.div_duration_f64(thresholds.jitter.read_unstable_from())),
+            ),
+            (
+                Metric::Loss,
+                self.compute_loss().map(|loss| {
+                    loss.to_percent() / thresholds.loss.read_unstable_from().to_percent()
+                }),
+            ),
+        ];
+        ratios
+            .into_iter()
+            .filter_map(|(metric, ratio)| ratio.map(|ratio| (metric, ratio)))
+            .max_by(|(_, first), (_, second)| first.total_cmp(second))
+            .map(|(metric, _)| metric)
     }
 
     /// O(B).
@@ -235,8 +339,7 @@ impl MinuteAccumulator {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SecondPoint {
     pub utc: i64,
-    pub latency: Option<Duration>,
-    pub state: Option<CountedState>,
+    pub sample: SecondSample,
 }
 
 /// The last hour, second by second; the oldest point leaves when a new one comes. O(1) per
@@ -385,8 +488,7 @@ mod tests {
         for utc in 0..3_605 {
             ring.record(SecondPoint {
                 utc,
-                latency: None,
-                state: None,
+                sample: create_sample(20, CountedState::Solid),
             });
         }
 
@@ -394,6 +496,75 @@ mod tests {
         let points = ring.list_points();
         assert_eq!(points.len(), RING_SECONDS);
         assert_eq!(points.first().map(|point| point.utc), Some(5));
+    }
+
+    #[test]
+    fn names_the_state_that_lasted_longest_and_the_worse_on_a_tie() {
+        // Arrange
+        let mostly_solid = StateSeconds {
+            solid: 50,
+            unstable: 10,
+            ..StateSeconds::default()
+        };
+        let tie = StateSeconds {
+            solid: 30,
+            degraded: 30,
+            ..StateSeconds::default()
+        };
+
+        // Act & Assert
+        assert_eq!(mostly_solid.compute_dominant(), Some(CountedState::Solid));
+        assert_eq!(tie.compute_dominant(), Some(CountedState::Degraded));
+        assert_eq!(StateSeconds::default().compute_dominant(), None);
+        assert_eq!(tie.count_total(), 60);
+    }
+
+    #[test]
+    fn computes_the_metrics_of_a_period_from_its_aggregate() {
+        // Arrange
+        let mut aggregate = Aggregate::default();
+        for latency in [20, 40] {
+            aggregate.record_second(&SecondSample {
+                probes_lost: 1,
+                ..create_sample(latency, CountedState::Solid)
+            });
+        }
+
+        // Act
+        let jitter = aggregate.compute_mean_jitter();
+        let loss = aggregate.compute_loss();
+        let p90 = aggregate.compute_latency_p90();
+
+        // Assert
+        assert_eq!(jitter, Some(Duration::from_millis(2)));
+        assert_eq!(loss.map(LossRate::to_percent), Some(50.0));
+        assert!(p90.is_some_and(|p90| p90 >= Duration::from_millis(40)));
+        assert_eq!(Aggregate::default().compute_mean_jitter(), None);
+        assert_eq!(Aggregate::default().compute_loss(), None);
+    }
+
+    #[test]
+    fn blames_the_metric_furthest_beyond_its_threshold() {
+        // Arrange
+        let mut aggregate = Aggregate::default();
+        // Latency at 80 % of its threshold, loss at 300 % of its own.
+        aggregate.record_second(&SecondSample {
+            latency: Some(Duration::from_millis(80)),
+            jitter: Some(Duration::from_millis(3)),
+            probes_sent: 100,
+            probes_lost: 3,
+            state: Some(CountedState::Unstable),
+        });
+
+        // Act
+        let worst = aggregate.compute_worst_metric(&Thresholds::for_video_calls());
+
+        // Assert
+        assert_eq!(worst, Some(Metric::Loss));
+        assert_eq!(
+            Aggregate::default().compute_worst_metric(&Thresholds::for_video_calls()),
+            None
+        );
     }
 
     #[test]

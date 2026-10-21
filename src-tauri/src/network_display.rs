@@ -29,14 +29,7 @@ impl NetworkDisplay {
         wifi: Option<&WifiLink>,
         catalog: &TextCatalog,
     ) -> Self {
-        let (label_key, connection_key) = match (context.kind, context.is_vpn) {
-            (ConnectionKind::Ethernet, _) => ("network-ethernet", "connection-ethernet"),
-            (ConnectionKind::WiFi, _) => ("network-wifi", "connection-wifi"),
-            (ConnectionKind::Cellular, _) => ("network-cellular", "connection-cellular"),
-            (ConnectionKind::PhoneHotspot, _) => ("network-hotspot", "connection-hotspot"),
-            (ConnectionKind::Other, true) => ("network-vpn", "connection-vpn"),
-            (ConnectionKind::Other, false) => ("network-other", "connection-other"),
-        };
+        let (label_key, connection_key) = select_kind_keys(context.kind, context.is_vpn);
         let wifi = wifi.filter(|_| context.is_carried_by_wifi());
         let label = match wifi {
             Some(WifiLink {
@@ -70,6 +63,23 @@ impl NetworkDisplay {
                 .then(|| catalog.render("action-reveal-name", None)),
         }
     }
+}
+
+/// The catalogue keys of a network's generic name and of how it is reached. O(1).
+pub const fn select_kind_keys(kind: ConnectionKind, is_vpn: bool) -> (&'static str, &'static str) {
+    match (kind, is_vpn) {
+        (ConnectionKind::Ethernet, _) => ("network-ethernet", "connection-ethernet"),
+        (ConnectionKind::WiFi, _) => ("network-wifi", "connection-wifi"),
+        (ConnectionKind::Cellular, _) => ("network-cellular", "connection-cellular"),
+        (ConnectionKind::PhoneHotspot, _) => ("network-hotspot", "connection-hotspot"),
+        (ConnectionKind::Other, true) => ("network-vpn", "connection-vpn"),
+        (ConnectionKind::Other, false) => ("network-other", "connection-other"),
+    }
+}
+
+/// The keys for a network read from the history, which keeps no VPN flag. O(1).
+pub const fn select_stored_network_keys(kind: ConnectionKind) -> (&'static str, &'static str) {
+    select_kind_keys(kind, false)
 }
 
 /// `None` when the system gave none of the three values. O(1).

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { inject, onMounted, ref } from 'vue'
 import type { WindowModeTexts } from './bindings'
+import DashboardView from './components/DashboardView.vue'
 import { NETWORK_QUALITY_CLIENT_KEY } from './services/network-quality-client'
 
 // Remembered in the webview's own storage: a convenience, losing it only shows the note again.
@@ -85,7 +86,7 @@ onMounted(async () => {
     </aside>
     <p v-if="historyNotice" class="hint" data-history-notice>{{ historyNotice }}</p>
     <h1>Qualité de connexion</h1>
-    <p class="empty">La mesure de la connexion arrive dans une prochaine version.</p>
+    <DashboardView />
     <footer class="foot">
       <span>Version {{ version }}</span>
       <button v-if="windowMode" type="button" class="link" data-quit @click="quitApp">
@@ -106,12 +107,6 @@ h1 {
   font-size: var(--t-2xl);
   font-weight: 600;
   letter-spacing: -0.01em;
-}
-
-.empty {
-  margin: var(--s4) 0 0;
-  color: var(--muted);
-  font-size: var(--t-lg);
 }
 
 .hint {

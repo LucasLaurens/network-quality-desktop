@@ -5,15 +5,15 @@ use std::time::Duration;
 use domain::{
     ConnectionContext, ConnectionKind, Diagnosis, Fault, GatewayWindow, Grade, GradeBounds,
     Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause, Metric,
-    OfflineDetector, ProbeOutcome, Scalable, SecondPoint, Target, Thresholds, Unmeasurable,
-    Verdict, WifiLink, compute_median,
+    OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Unmeasurable, Verdict, WifiLink,
+    compute_median,
 };
 use futures_util::future::{join, join_all, join3};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryRecorder, HistoryTracker, LatencyProbe,
-    MeasuredSecond, VerdictPresenter, WifiReader,
+    LiveHistory, MeasuredSecond, VerdictPresenter, WifiReader,
 };
 
 /// Seconds with an answer needed before the first verdict.
@@ -33,8 +33,8 @@ pub enum EngineMessage {
     NetworkChanged,
     /// Closing: write the minute in progress, then answer.
     Flush(SyncSender<()>),
-    /// The last hour, second by second, for the one-hour chart.
-    ReadLastHour(oneshot::Sender<Vec<SecondPoint>>),
+    /// The last hour and the current network, for the dashboard.
+    ReadLiveHistory(oneshot::Sender<LiveHistory>),
 }
 
 /// One metric as shown to the user: its value, its grade and whether it is close to getting worse.
@@ -171,9 +171,9 @@ where
             EngineMessage::Tick => self.measure_one_second().await,
             EngineMessage::NetworkChanged => self.seconds_since_context = CONTEXT_REFRESH_SECONDS,
             EngineMessage::Flush(answer) => self.history.flush(answer, &self.history_recorder),
-            EngineMessage::ReadLastHour(answer) => {
+            EngineMessage::ReadLiveHistory(answer) => {
                 // The asker may have given up waiting: nothing to do then.
-                let _ = answer.send(self.history.list_last_hour());
+                let _ = answer.send(self.history.read_live());
             }
         }
     }

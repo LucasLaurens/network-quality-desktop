@@ -2,9 +2,16 @@ import { faker } from '@faker-js/faker'
 import type {
   AppInfo,
   ConnectionDisplay,
+  DashboardSummaryDisplay,
+  DisplayState,
+  EvolutionDisplay,
   MetricDisplay,
+  NetworkRowDisplay,
+  OverviewDisplay,
   PathDisplay,
+  PeriodChoice,
   SegmentDisplay,
+  SeriesDisplay,
   WindowModeTexts,
 } from '../../src/bindings'
 import type { NetworkQualityClient } from '../../src/services/network-quality-client'
@@ -12,6 +19,7 @@ import type { NetworkQualityClient } from '../../src/services/network-quality-cl
 export function createMetricDisplay(overrides: Partial<MetricDisplay> = {}): MetricDisplay {
   return {
     name: faker.word.noun(),
+    definition: faker.lorem.sentence(),
     method: faker.word.words(2),
     value: `${String(faker.number.int({ min: 1, max: 400 }))} ms`,
     gauge: {
@@ -71,6 +79,68 @@ export function createWindowModeTexts(): WindowModeTexts {
   }
 }
 
+export function createOverviewDisplay(overrides: Partial<OverviewDisplay> = {}): OverviewDisplay {
+  return {
+    today: faker.lorem.words(4),
+    outages: faker.lorem.words(2),
+    worstMoment: faker.lorem.words(3),
+    onNetworkSince: faker.lorem.words(2),
+    ...overrides,
+  }
+}
+
+export function createNetworkRowDisplay(overrides: Partial<NetworkRowDisplay> = {}): NetworkRowDisplay {
+  const solid = faker.number.int({ min: 40, max: 90 })
+  return {
+    label: faker.company.name(),
+    connection: faker.lorem.words(2),
+    shares: { solid, unstable: 100 - solid, degraded: 0, offline: 0 },
+    solidLabel: `${String(solid)} % Solide`,
+    sharesLabel: faker.lorem.sentence(),
+    latencyP90: `${String(faker.number.int({ min: 5, max: 300 }))} ms`,
+    loss: `${String(faker.number.int({ min: 0, max: 5 }))} %`,
+    isCurrent: false,
+    isMostReliable: false,
+    ...overrides,
+  }
+}
+
+export function createDashboardSummary(overrides: Partial<DashboardSummaryDisplay> = {}): DashboardSummaryDisplay {
+  return { overview: createOverviewDisplay(), networks: [createNetworkRowDisplay()], ...overrides }
+}
+
+export function createSeriesDisplay(values: (number | null)[]): SeriesDisplay {
+  return {
+    values,
+    texts: values.map((value) => (value === null ? null : `${String(Math.round(value))} ms`)),
+    unstableFrom: 100,
+    degradedAbove: 300,
+    unstableLabel: faker.lorem.words(2),
+    degradedLabel: faker.lorem.words(2),
+  }
+}
+
+/** A chart whose latency, jitter and loss follow `values`, scaled apart so each series is recognisable. */
+export function createEvolutionDisplay(
+  values: (number | null)[] = Array.from({ length: 12 }, () => faker.number.int({ min: 10, max: 200 })),
+): EvolutionDisplay {
+  const states: (DisplayState | null)[] = values.map((value) => (value === null ? null : 'solid'))
+  return {
+    times: values.map(() => faker.date.recent().toISOString()),
+    states,
+    latency: createSeriesDisplay(values),
+    jitter: createSeriesDisplay(values.map((value) => (value === null ? null : value / 10))),
+    loss: createSeriesDisplay(values.map((value) => (value === null ? null : value / 100))),
+    networkChanges: [],
+    stateLabels: (['solid', 'unstable', 'degraded', 'offline'] as const).map((state) => ({
+      state,
+      label: faker.word.adjective(),
+    })),
+    coverage: faker.lorem.words(4),
+    isEmpty: values.every((value) => value === null),
+  }
+}
+
 /**
  * Serves prepared data, lets the test push new displays, and records the dashboard openings.
  * Reads can be held, to replay a read that answers after a newer display was pushed.
@@ -86,6 +156,9 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private listeners: ((display: ConnectionDisplay) => void)[] = []
   private isHoldingReads = false
   private heldReads: (() => void)[] = []
+  private dashboardSummary = createDashboardSummary()
+  private evolution = createEvolutionDisplay()
+  readonly evolutionRequests: PeriodChoice[] = []
 
   constructor(
     private readonly appInfo: AppInfo = { name: faker.word.noun(), version: faker.system.semver() },
@@ -170,6 +243,23 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   openTrayExtensionPage(): Promise<void> {
     this.extensionPageOpenings += 1
     return Promise.resolve()
+  }
+
+  readDashboardSummary(): Promise<DashboardSummaryDisplay> {
+    return Promise.resolve(this.dashboardSummary)
+  }
+
+  setDashboardSummary(summary: DashboardSummaryDisplay): void {
+    this.dashboardSummary = summary
+  }
+
+  readEvolution(period: PeriodChoice): Promise<EvolutionDisplay> {
+    this.evolutionRequests.push(period)
+    return Promise.resolve(this.evolution)
+  }
+
+  setEvolution(evolution: EvolutionDisplay): void {
+    this.evolution = evolution
   }
 
   pushDisplay(display: ConnectionDisplay): void {
