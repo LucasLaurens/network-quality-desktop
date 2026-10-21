@@ -185,6 +185,8 @@ pub struct HistoryTracker {
     context: Option<ConnectionContext>,
     network: NetworkKey,
     was_offline: bool,
+    /// The last second recorded: an outage cut by a sleep nobody announced ends there.
+    last_second_utc: Option<i64>,
 }
 
 impl Default for HistoryTracker {
@@ -196,6 +198,7 @@ impl Default for HistoryTracker {
             context: None,
             network: NO_NETWORK,
             was_offline: false,
+            last_second_utc: None,
         }
     }
 }
@@ -213,6 +216,7 @@ impl HistoryTracker {
         if let Some(context) = context {
             self.follow_network(second.utc, context, name, recorder);
         }
+        self.last_second_utc = Some(second.utc);
         let state = to_counted_state(second.verdict);
         let is_offline = state == Some(CountedState::Offline);
         if is_offline != self.was_offline {
@@ -272,9 +276,15 @@ impl HistoryTracker {
         self.flush(answer, recorder);
     }
 
-    /// No jitter is measured across the sleep. O(1).
+    /// No jitter is measured across the sleep. An outage still open (the sleep came unannounced)
+    /// ends at the last second measured before it. O(1).
     pub fn record_wake(&mut self, utc: i64, recorder: &impl HistoryRecorder) {
         self.previous = None;
+        if self.was_offline {
+            let end = self.last_second_utc.unwrap_or(utc);
+            self.record_event(end, EventKind::OfflineEnded, recorder);
+            self.was_offline = false;
+        }
         self.record_event(utc, EventKind::Wake, recorder);
     }
 

@@ -14,6 +14,11 @@ use super::PowerHandler;
 const LOGIND: &str = "org.freedesktop.login1";
 const LOGIND_PATH: &str = "/org/freedesktop/login1";
 const MANAGER: &str = "org.freedesktop.login1.Manager";
+const PREPARE_FOR_SLEEP: &str = "PrepareForSleep";
+const INHIBIT: &str = "Inhibit";
+/// What the lock holds back, and how: `delay` postpones the sleep, it never blocks it.
+const LOCK_WHAT: &str = "sleep";
+const LOCK_MODE: &str = "delay";
 const CALL_TIMEOUT: Duration = Duration::from_secs(2);
 /// How long one wait for a signal lasts; the loop simply waits again.
 const LISTEN_EVERY: Duration = Duration::from_secs(60);
@@ -21,6 +26,7 @@ const LISTEN_EVERY: Duration = Duration::from_secs(60);
 const WHO: &str = "Qualité de connexion";
 const WHY: &str = "Écrire la minute en cours avant la veille";
 
+/// Starts the listening thread and returns at once. O(1).
 pub fn watch(on_event: PowerHandler) {
     let spawned = std::thread::Builder::new()
         .name("power-events".to_owned())
@@ -40,7 +46,7 @@ fn listen(on_event: &PowerHandler) -> Result<(), dbus::Error> {
     let connection = Connection::new_system()?;
     let (sender, received) = mpsc::channel();
     connection.add_match(
-        MatchRule::new_signal(MANAGER, "PrepareForSleep"),
+        MatchRule::new_signal(MANAGER, PREPARE_FOR_SLEEP),
         move |(starting,): (bool,), _: &Connection, _: &dbus::Message| {
             // The receiver lives as long as this loop: a failed send means the loop is over.
             let _ = sender.send(starting);
@@ -69,7 +75,7 @@ impl DelayLock {
     fn take(connection: &Connection) -> Self {
         let taken: Result<(OwnedFd,), dbus::Error> = connection
             .with_proxy(LOGIND, LOGIND_PATH, CALL_TIMEOUT)
-            .method_call(MANAGER, "Inhibit", ("sleep", WHO, WHY, "delay"));
+            .method_call(MANAGER, INHIBIT, (LOCK_WHAT, WHO, WHY, LOCK_MODE));
         match taken {
             Ok((descriptor,)) => Self(Some(descriptor)),
             Err(error) => {

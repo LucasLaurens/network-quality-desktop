@@ -21,6 +21,7 @@ struct Registration {
     on_event: PowerHandler,
 }
 
+/// Registers with `IOKit` and returns at once; the notices come on the power queue. O(1).
 pub fn watch(on_event: PowerHandler) {
     let registration: &'static Registration = Box::leak(Box::new(Registration {
         root_port: OnceLock::new(),
@@ -65,12 +66,21 @@ unsafe extern "C-unwind" fn on_power_change(
         return;
     };
     let notification = argument.addr().cast_signed();
+    let hand_on = |event: PowerEvent| {
+        // A panic must not unwind into IOKit: the sleep would wait for an answer that never comes.
+        let handled = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            (registration.on_event)(event);
+        }));
+        if handled.is_err() {
+            eprintln!("Handling a sleep notice failed");
+        }
+    };
     if message_type == kIOMessageCanSystemSleep {
         IOAllowPowerChange(root_port, notification);
     } else if message_type == kIOMessageSystemWillSleep {
-        (registration.on_event)(PowerEvent::WillSleep);
+        hand_on(PowerEvent::WillSleep);
         IOAllowPowerChange(root_port, notification);
     } else if message_type == kIOMessageSystemHasPoweredOn {
-        (registration.on_event)(PowerEvent::DidWake);
+        hand_on(PowerEvent::DidWake);
     }
 }

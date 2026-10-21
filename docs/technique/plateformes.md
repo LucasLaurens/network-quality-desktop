@@ -53,7 +53,10 @@ Points laissés ouverts par la recherche (#19), tranchés :
 ## Tâche de fond et App Nap
 
 - macOS : `keep_measuring_in_background` déclare au lancement une activité `NSActivityUserInitiatedAllowingIdleSystemSleep` (`NSProcessInfo`), pour toute la vie de l'app : App Nap ne peut plus espacer les ticks quand aucune fenêtre n'est visible, et le Mac peut toujours se mettre en veille quand il est inactif.
-- Mesure, binaire de développement lancé depuis un terminal, sans fenêtre visible, 6 à 7 min : 60 ticks par minute avec ou sans l'activité, environ 11 à 12 s de CPU pour 400 s (build debug). Hors LaunchServices, App Nap ne s'est pas déclenché : la comparaison ne vaut que pour l'app empaquetée lancée par le Finder, à mesurer à la main (bundle release, `open -g`, ticks par minute lus dans l'historique).
+- Mesures sur ce Mac (macOS 26), sans fenêtre visible, ticks par minute lus dans l'historique :
+  - binaire de développement lancé depuis un terminal, 6 à 7 min : 60 ticks par minute avec ou sans l'activité, 11 à 12 s de CPU pour 400 s (build debug). Hors LaunchServices, App Nap ne s'est pas déclenché ;
+  - app empaquetée (release), lancée par `open -g`, 10 min chacune : avec l'activité, 60 ticks par minute sur les 9 minutes complètes et 10,3 s de CPU pour 600 s (environ 1,7 % d'un cœur) ; sans l'activité, 60 ticks par minute aussi et 11,1 s de CPU.
+- Conclusion : sur ce Mac, sur secteur et en 10 minutes, App Nap n'a pas ralenti l'app, avec ou sans l'activité, qui ne coûte rien de mesurable. Elle reste déclarée : App Nap dépend de conditions (batterie, inactivité plus longue, version du système) qui n'ont pas été réunies ici. À remesurer sur batterie, sur une durée plus longue, avant une version.
 - Windows et Linux n'ont pas d'équivalent à App Nap pour une app de bureau.
 
 ## Icône de barre système

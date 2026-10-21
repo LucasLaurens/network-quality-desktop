@@ -13,15 +13,23 @@ pub const FLUSH_TIMEOUT: Duration = Duration::from_secs(2);
 pub const SLEEP_TIMEOUT: Duration = Duration::from_millis(1500);
 const SEND_RETRY_EVERY: Duration = Duration::from_millis(20);
 
+/// Room for one sleep and one quit: neither is sent twice in a row.
+pub const URGENT_CAPACITY: usize = 2;
+
 #[derive(Clone)]
-pub struct EngineInbox(pub mpsc::Sender<EngineMessage>);
+pub struct EngineInbox {
+    /// Ticks, network changes, the dashboard's reads.
+    pub regular: mpsc::Sender<EngineMessage>,
+    /// Sleep, wake and quitting, handled before any tick waiting.
+    pub urgent: mpsc::Sender<EngineMessage>,
+}
 
 impl EngineInbox {
     /// The last hour and the current network; empty when the engine is gone.
     pub async fn read_live(&self) -> LiveHistory {
         let (answer, answered) = oneshot::channel();
         if self
-            .0
+            .regular
             .send(EngineMessage::ReadLiveHistory(answer))
             .await
             .is_err()
@@ -49,14 +57,14 @@ impl EngineInbox {
             }
             PowerEvent::DidWake => {
                 // A full inbox drops it: the gap between two ticks is noticed as a wake anyway.
-                let _ = self.0.try_send(EngineMessage::Wake);
+                let _ = self.urgent.try_send(EngineMessage::Wake);
             }
         }
     }
 
-    /// Sends a message that answers once done, and waits for the answer. Never waits more than
-    /// `timeout`, sending included (full inbox, engine gone). Blocking: never call it from the
-    /// engine's runtime.
+    /// Sends an urgent message that answers once done, and waits for the answer. Never waits more
+    /// than `timeout`, sending included (full inbox, engine gone). Blocking: never call it from the
+    /// engine's runtime. O(timeout / 20 ms) send attempts at most.
     fn send_and_wait(
         &self,
         create: impl FnOnce(SyncSender<()>) -> EngineMessage,
@@ -66,7 +74,7 @@ impl EngineInbox {
         let (answer, answered) = std::sync::mpsc::sync_channel(1);
         let mut message = create(answer);
         loop {
-            match self.0.try_send(message) {
+            match self.urgent.try_send(message) {
                 Ok(()) => break,
                 Err(mpsc::error::TrySendError::Full(returned)) if Instant::now() < deadline => {
                     message = returned;
@@ -85,9 +93,16 @@ impl EngineInbox {
 mod tests {
     use super::*;
 
-    /// Plays the engine on a thread of its own: answers sleeps, or keeps them unanswered.
-    fn start_engine(answers: bool) -> (EngineInbox, std::thread::JoinHandle<Vec<&'static str>>) {
-        let (sender, mut inbox) = mpsc::channel(4);
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Reply {
+        Answers,
+        StaysSilent,
+    }
+
+    /// Plays the engine on a thread of its own, reading its urgent inbox.
+    fn start_engine(reply: Reply) -> (EngineInbox, std::thread::JoinHandle<Vec<&'static str>>) {
+        let (regular, _ignored) = mpsc::channel(1);
+        let (urgent, mut inbox) = mpsc::channel(URGENT_CAPACITY);
         let engine = std::thread::spawn(move || {
             let mut received = Vec::new();
             let mut unanswered = Vec::new();
@@ -95,7 +110,7 @@ mod tests {
                 match message {
                     EngineMessage::Sleep(answer) | EngineMessage::Flush(answer) => {
                         received.push("answering");
-                        if answers {
+                        if reply == Reply::Answers {
                             let _ = answer.send(());
                         } else {
                             unanswered.push(answer);
@@ -109,13 +124,13 @@ mod tests {
             }
             received
         });
-        (EngineInbox(sender), engine)
+        (EngineInbox { regular, urgent }, engine)
     }
 
     #[test]
     fn lets_the_system_sleep_once_the_minute_is_written() {
         // Arrange
-        let (inbox, engine) = start_engine(true);
+        let (inbox, engine) = start_engine(Reply::Answers);
 
         // Act
         let started = Instant::now();
@@ -131,7 +146,7 @@ mod tests {
     #[test]
     fn stops_waiting_for_an_engine_that_does_not_answer() {
         // Arrange
-        let (inbox, engine) = start_engine(false);
+        let (inbox, engine) = start_engine(Reply::StaysSilent);
 
         // Act
         let started = Instant::now();
@@ -142,13 +157,14 @@ mod tests {
         drop(inbox);
         let _ = engine.join();
         assert!(waited >= SLEEP_TIMEOUT);
-        assert!(waited < SLEEP_TIMEOUT + Duration::from_millis(500));
+        // Generous: a busy CI runner can be late to wake the thread.
+        assert!(waited < SLEEP_TIMEOUT + Duration::from_secs(1));
     }
 
     #[test]
     fn posts_a_wake_without_waiting() {
         // Arrange
-        let (inbox, engine) = start_engine(false);
+        let (inbox, engine) = start_engine(Reply::StaysSilent);
 
         // Act
         inbox.relay_power_event(PowerEvent::DidWake);

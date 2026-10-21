@@ -165,7 +165,12 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(history_notice);
     app.manage(dashboard_history);
     let (sender, inbox) = mpsc::channel(ENGINE_INBOX_CAPACITY);
-    app.manage(EngineInbox(sender.clone()));
+    let (urgent_sender, urgent) = mpsc::channel(engine_inbox::URGENT_CAPACITY);
+    let engine_inbox = EngineInbox {
+        regular: sender.clone(),
+        urgent: urgent_sender,
+    };
+    app.manage(engine_inbox.clone());
     let engine = MeasurementEngine::new(
         EnginePorts {
             probe: FallbackLatencyProbe::new(IcmpEchoSender, TcpConnectionOpener),
@@ -183,10 +188,9 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         // Dropped when the inbox is full: the periodic reading still catches the change within 10 s.
         let _ = change_sender.try_send(EngineMessage::NetworkChanged);
     });
-    let power_inbox = EngineInbox(sender.clone());
-    SystemPowerEventSource.watch(move |event| power_inbox.relay_power_event(event));
+    SystemPowerEventSource.watch(move |event| engine_inbox.relay_power_event(event));
     keep_measuring_in_background();
-    tauri::async_runtime::spawn(engine.run(inbox));
+    tauri::async_runtime::spawn(engine.run(inbox, urgent));
     tauri::async_runtime::spawn(send_ticks(sender));
     Ok(())
 }

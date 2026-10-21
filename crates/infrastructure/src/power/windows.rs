@@ -14,6 +14,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use super::PowerHandler;
 
+/// Registers the callback and returns at once. O(1).
 pub fn watch(on_event: PowerHandler) {
     let handler: &'static PowerHandler = Box::leak(Box::new(on_event));
     let parameters: &'static mut DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS =
@@ -23,7 +24,7 @@ pub fn watch(on_event: PowerHandler) {
         }));
     let mut registration: *mut c_void = std::ptr::null_mut();
     // SAFETY: the parameters and the handler they point to are leaked for the life of the app,
-    // and the registration is never cancelled.
+    // the registration is never cancelled, and `registration` is a valid local for the handle.
     let result = unsafe {
         PowerRegisterSuspendResumeNotification(
             DEVICE_NOTIFY_CALLBACK,

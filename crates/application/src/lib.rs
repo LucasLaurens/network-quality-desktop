@@ -17,7 +17,7 @@ pub use dashboard::{
 };
 pub use engine::{
     CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, MeasurementEngine, MetricReading,
-    VerdictView, WAKE_GAP_SECONDS, WARM_UP_SAMPLES,
+    VerdictView, WARM_UP_SAMPLES,
 };
 pub use history::{
     EventKind, HistoryCommand, HistoryEvent, HistoryTracker, HistoryWriter, LiveHistory,
