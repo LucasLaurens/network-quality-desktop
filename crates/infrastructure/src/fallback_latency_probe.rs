@@ -9,7 +9,8 @@ use application::LatencyProbe;
 use domain::{ProbeOutcome, Target};
 
 /// Echoes lost in a row while TCP still connects, after which ICMP is considered filtered.
-const FILTERED_AFTER_LOSSES: u32 = 3;
+/// High enough that a lossy Wi-Fi (30 % loss) almost never reaches it by chance.
+const FILTERED_AFTER_LOSSES: u32 = 10;
 
 /// Result of one ICMP echo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -230,13 +231,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn switches_to_tcp_after_three_echoes_filtered_in_a_row() {
+    async fn switches_to_tcp_after_ten_echoes_filtered_in_a_row() {
         // Arrange
         let probe = FallbackLatencyProbe::new(
             InMemoryEcho::new(EchoResult::NoAnswer),
             InMemoryTcp(Some(TCP_ROUND_TRIP)),
         );
-        for _ in 0..3 {
+        for _ in 0..FILTERED_AFTER_LOSSES {
             probe.send_probe(Target::parse(TARGET)).await;
         }
 
@@ -245,7 +246,10 @@ mod tests {
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP));
-        assert_eq!(probe.echo.sent.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            probe.echo.sent.load(Ordering::SeqCst),
+            FILTERED_AFTER_LOSSES
+        );
     }
 
     #[tokio::test]
@@ -255,13 +259,15 @@ mod tests {
             InMemoryEcho::new(EchoResult::NoAnswer),
             InMemoryTcp(Some(TCP_ROUND_TRIP)),
         );
-        for _ in 0..2 {
+        for _ in 1..FILTERED_AFTER_LOSSES {
             probe.send_probe(Target::parse(TARGET)).await;
         }
         *probe.echo.result.lock().expect("unpoisoned") = EchoResult::Answered(ECHO_ROUND_TRIP);
         probe.send_probe(Target::parse(TARGET)).await;
         *probe.echo.result.lock().expect("unpoisoned") = EchoResult::NoAnswer;
-        probe.send_probe(Target::parse(TARGET)).await;
+        for _ in 1..FILTERED_AFTER_LOSSES {
+            probe.send_probe(Target::parse(TARGET)).await;
+        }
 
         // Act
         let outcome = probe.send_probe(Target::parse(TARGET)).await;

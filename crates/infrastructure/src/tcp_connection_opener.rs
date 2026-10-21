@@ -9,8 +9,8 @@ use crate::ConnectionOpener;
 
 /// HTTPS port, open on the default targets and on most public servers.
 const PORT: u16 = 443;
-/// The echo already used up to 600 ms of the one-second tick.
-const CONNECT_TIMEOUT: Duration = Duration::from_millis(350);
+/// As long as the echo timeout: a slow link must not read as an unreachable one.
+const CONNECT_TIMEOUT: Duration = Duration::from_millis(900);
 
 /// Times a TCP handshake: roughly one round trip, without any special right.
 #[derive(Debug, Clone, Copy, Default)]
@@ -18,20 +18,18 @@ pub struct TcpConnectionOpener;
 
 impl ConnectionOpener for TcpConnectionOpener {
     async fn open_connection(&self, target: Target) -> Option<Duration> {
-        {
-            let started = Instant::now();
-            let attempt = tokio::time::timeout(
-                CONNECT_TIMEOUT,
-                TcpStream::connect(SocketAddr::new(target.address(), PORT)),
-            );
-            match attempt.await {
-                Ok(Ok(_stream)) => Some(started.elapsed()),
-                // A refusal still proves the host answered.
-                Ok(Err(error)) if error.kind() == ErrorKind::ConnectionRefused => {
-                    Some(started.elapsed())
-                }
-                Ok(Err(_)) | Err(_) => None,
+        let started = Instant::now();
+        let attempt = tokio::time::timeout(
+            CONNECT_TIMEOUT,
+            TcpStream::connect(SocketAddr::new(target.address(), PORT)),
+        );
+        match attempt.await {
+            Ok(Ok(_stream)) => Some(started.elapsed()),
+            // A refusal still proves the host answered.
+            Ok(Err(error)) if error.kind() == ErrorKind::ConnectionRefused => {
+                Some(started.elapsed())
             }
+            Ok(Err(_)) | Err(_) => None,
         }
     }
 }

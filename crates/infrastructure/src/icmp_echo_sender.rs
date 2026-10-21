@@ -6,8 +6,9 @@ use ping_async::{IcmpEchoRequestor, IcmpEchoStatus};
 
 use crate::{EchoResult, EchoSender};
 
-/// Leaves room for a TCP check in the same one-second tick.
-const ECHO_TIMEOUT: Duration = Duration::from_millis(600);
+/// A slow answer is still a latency, not a loss; a following TCP check may then overrun the tick,
+/// which only delays the next one (`MissedTickBehavior::Delay`).
+const ECHO_TIMEOUT: Duration = Duration::from_millis(900);
 
 /// Unprivileged ICMP echo: DGRAM sockets on macOS and Linux, `IcmpSendEcho2Ex` on Windows.
 #[derive(Debug, Clone, Copy, Default)]
@@ -15,22 +16,20 @@ pub struct IcmpEchoSender;
 
 impl EchoSender for IcmpEchoSender {
     async fn send_echo(&self, target: Target) -> EchoResult {
-        {
-            // shortcut: one socket per echo (two per second); cache them per target if the cost shows.
-            let requestor =
-                match IcmpEchoRequestor::new(target.address(), None, None, Some(ECHO_TIMEOUT)) {
-                    Ok(requestor) => requestor,
-                    Err(error) if error.kind() == ErrorKind::PermissionDenied => {
-                        return EchoResult::NotPermitted;
-                    }
-                    Err(_) => return EchoResult::NoAnswer,
-                };
-            match requestor.send().await {
-                Ok(reply) if reply.status() == IcmpEchoStatus::Success => {
-                    EchoResult::Answered(reply.round_trip_time())
+        // shortcut: one socket per echo (two per second); cache them per target if the cost shows.
+        let requestor =
+            match IcmpEchoRequestor::new(target.address(), None, None, Some(ECHO_TIMEOUT)) {
+                Ok(requestor) => requestor,
+                Err(error) if error.kind() == ErrorKind::PermissionDenied => {
+                    return EchoResult::NotPermitted;
                 }
-                Ok(_) | Err(_) => EchoResult::NoAnswer,
+                Err(_) => return EchoResult::NoAnswer,
+            };
+        match requestor.send().await {
+            Ok(reply) if reply.status() == IcmpEchoStatus::Success => {
+                EchoResult::Answered(reply.round_trip_time())
             }
+            Ok(_) | Err(_) => EchoResult::NoAnswer,
         }
     }
 }

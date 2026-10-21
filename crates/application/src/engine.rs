@@ -22,17 +22,17 @@ pub enum EngineMessage {
 /// One metric as shown to the user: its value, its grade and whether it is close to getting worse.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MetricReading<T> {
-    pub value: Option<T>,
-    pub grade: Option<Grade>,
+    pub value: T,
+    pub grade: Grade,
     pub is_near_next_threshold: bool,
 }
 
 impl<T: Scalable> MetricReading<T> {
-    fn compute(value: Option<T>, bounds: &GradeBounds<T>) -> Self {
+    fn compute(value: T, bounds: &GradeBounds<T>) -> Self {
         Self {
             value,
-            grade: value.map(|value| bounds.compute_grade(value)),
-            is_near_next_threshold: value.is_some_and(|value| bounds.is_near_next_threshold(value)),
+            grade: bounds.compute_grade(value),
+            is_near_next_threshold: bounds.is_near_next_threshold(value),
         }
     }
 }
@@ -41,9 +41,10 @@ impl<T: Scalable> MetricReading<T> {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VerdictView {
     pub verdict: Verdict,
-    pub latency: MetricReading<Duration>,
-    pub jitter: MetricReading<Duration>,
-    pub loss: MetricReading<LossRate>,
+    /// `None` while the metric cannot be computed yet, and while offline.
+    pub latency: Option<MetricReading<Duration>>,
+    pub jitter: Option<MetricReading<Duration>>,
+    pub loss: Option<MetricReading<LossRate>>,
 }
 
 /// Owns every piece of measurement state; nothing else mutates it.
@@ -54,6 +55,8 @@ pub struct MeasurementEngine<P, C, V> {
     targets: Vec<Target>,
     thresholds: Thresholds,
     latency: LatencyWindow,
+    /// One window per target: jitter compares a target with itself, never two targets' median.
+    jitter: Vec<LatencyWindow>,
     loss: LossWindow,
     offline: OfflineDetector,
     hysteresis: Hysteresis,
@@ -63,6 +66,7 @@ pub struct MeasurementEngine<P, C, V> {
 impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> {
     #[must_use]
     pub fn new(probe: P, clock: C, presenter: V, targets: Vec<Target>) -> Self {
+        let jitter = vec![LatencyWindow::default(); targets.len()];
         Self {
             probe,
             clock,
@@ -70,6 +74,7 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
             targets,
             thresholds: Thresholds::for_video_calls(),
             latency: LatencyWindow::default(),
+            jitter,
             loss: LossWindow::default(),
             offline: OfflineDetector::default(),
             hysteresis: Hysteresis::default(),
@@ -115,6 +120,9 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
             .collect();
         let median = compute_median(&round_trips);
         self.latency.record_second(median);
+        for (window, round_trip) in self.jitter.iter_mut().zip(&round_trips) {
+            window.record_second(*round_trip);
+        }
         let sent = u32::try_from(outcomes.len()).unwrap_or(u32::MAX);
         let lost = u32::try_from(
             round_trips
@@ -125,32 +133,49 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
         .unwrap_or(sent);
         self.loss.record_second(sent, lost);
         if median.is_some() {
-            self.samples_since_restart += 1;
+            self.samples_since_restart = self.samples_since_restart.saturating_add(1);
         }
     }
 
-    /// O(n log n) time, O(n) space, n ≤ 15 window samples.
+    /// O(k·n log n) time, O(k·n) space, k targets and n ≤ 15 window samples.
     fn compute_view(&mut self, outcomes: &[ProbeOutcome]) -> VerdictView {
         let any_reachable = outcomes
             .iter()
             .any(|outcome| *outcome != ProbeOutcome::Unreachable);
-        let latency = MetricReading::compute(self.latency.compute_p90(), &self.thresholds.latency);
-        let jitter = MetricReading::compute(self.latency.compute_jitter(), &self.thresholds.jitter);
-        let loss = MetricReading::compute(self.loss.compute_rate(), &self.thresholds.loss);
-        let verdict = if self.offline.record_second(any_reachable) {
+        if self.offline.record_second(any_reachable) {
             self.restart();
-            Verdict::Offline
-        } else if self.samples_since_restart < WARM_UP_SAMPLES {
-            Verdict::Measuring
-        } else {
-            let worst = [latency.grade, jitter.grade, loss.grade]
-                .into_iter()
-                .flatten()
-                .max();
-            match worst {
-                Some(grade) => self.hysteresis.observe(grade, self.clock.read_now()),
-                None => Verdict::Measuring,
+            return VerdictView {
+                verdict: Verdict::Offline,
+                latency: None,
+                jitter: None,
+                loss: None,
+            };
+        }
+        let thresholds = self.thresholds;
+        let latency = self
+            .latency
+            .compute_p90()
+            .map(|value| MetricReading::compute(value, &thresholds.latency));
+        let jitter = self
+            .compute_jitter()
+            .map(|value| MetricReading::compute(value, &thresholds.jitter));
+        let loss = self
+            .loss
+            .compute_rate()
+            .map(|value| MetricReading::compute(value, &thresholds.loss));
+        let worst = [
+            latency.map(|reading| reading.grade),
+            jitter.map(|reading| reading.grade),
+            loss.map(|reading| reading.grade),
+        ]
+        .into_iter()
+        .flatten()
+        .max();
+        let verdict = match worst {
+            Some(grade) if self.samples_since_restart >= WARM_UP_SAMPLES => {
+                self.hysteresis.observe(grade, self.clock.read_now())
             }
+            _ => Verdict::Measuring,
         };
         VerdictView {
             verdict,
@@ -160,9 +185,23 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter> MeasurementEngine<P, C, V> 
         }
     }
 
+    /// Mean of the per-target jitters that can be computed. O(k·n) time, O(k) space.
+    fn compute_jitter(&self) -> Option<Duration> {
+        let jitters: Vec<Duration> = self
+            .jitter
+            .iter()
+            .filter_map(LatencyWindow::compute_jitter)
+            .collect();
+        let count = u32::try_from(jitters.len())
+            .ok()
+            .filter(|count| *count > 0)?;
+        Some(jitters.iter().sum::<Duration>() / count)
+    }
+
     /// After an outage the history no longer describes the connection: measure again from scratch.
     fn restart(&mut self) {
         self.latency = LatencyWindow::default();
+        self.jitter.fill(LatencyWindow::default());
         self.loss = LossWindow::default();
         self.hysteresis = Hysteresis::default();
         self.samples_since_restart = 0;

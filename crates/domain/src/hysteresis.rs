@@ -61,10 +61,4 @@ impl Hysteresis {
         }
         self.displayed
     }
-
-    /// Forgets what was displayed: nothing measured in the whole window, so the next grade starts afresh.
-    pub fn restart(&mut self) -> Verdict {
-        *self = Self::default();
-        self.displayed
-    }
 }

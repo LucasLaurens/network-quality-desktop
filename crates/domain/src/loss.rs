@@ -3,6 +3,8 @@ use std::collections::VecDeque;
 use crate::grade::Scalable;
 
 const WINDOW_SECONDS: usize = 60;
+/// Below 60 probes (30 s with two targets) a single loss would weigh several percent.
+const MIN_PROBES: u32 = 60;
 
 /// Share of probes that got no answer, in percent.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -48,9 +50,10 @@ impl LossWindow {
         self.lost += lost;
     }
 
-    /// `None` before any probe was sent. O(1).
+    /// `None` until 60 probes were sent. O(1).
     #[must_use]
     pub fn compute_rate(&self) -> Option<LossRate> {
-        (self.sent > 0).then(|| LossRate(f64::from(self.lost) * 100.0 / f64::from(self.sent)))
+        (self.sent >= MIN_PROBES)
+            .then(|| LossRate(f64::from(self.lost) * 100.0 / f64::from(self.sent)))
     }
 }

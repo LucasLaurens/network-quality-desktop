@@ -4,10 +4,10 @@
 
 - Port `LatencyProbe` (crate `application`) : `send_probe` renvoie une `ProbeOutcome` (réponse avec son temps, perdue mais joignable, injoignable).
 - Adaptateur `FallbackLatencyProbe` (crate `infrastructure`), composé de deux briques remplaçables :
-  - `IcmpEchoSender` : ICMP sans privilège via `ping-async` (sockets DGRAM sur macOS et Linux, `IcmpSendEcho2Ex` sur Windows), délai 600 ms ;
-  - `TcpConnectionOpener` : poignée de main TCP sur le port 443, délai 350 ms ; un refus de connexion prouve aussi que l'hôte répond.
-- Pour chaque cible : l'écho d'abord. S'il est perdu, une connexion TCP dit si la cible est encore joignable (perte) ou non (injoignable). Les deux délais tiennent dans la seconde.
-- Repli TCP permanent pour une cible quand l'ICMP est refusé par le système (Linux sans `ping_group_range`) ou filtré (3 échos perdus de suite alors que TCP répond). Le temps de la poignée de main sert alors de latence. Ce repli dure jusqu'au redémarrage de l'app.
+  - `IcmpEchoSender` : ICMP sans privilège via `ping-async` (sockets DGRAM sur macOS et Linux, `IcmpSendEcho2Ex` sur Windows), délai 900 ms ;
+  - `TcpConnectionOpener` : poignée de main TCP sur le port 443, délai 900 ms ; un refus de connexion prouve aussi que l'hôte répond.
+- Pour chaque cible : l'écho d'abord. S'il est perdu, une connexion TCP dit si la cible est encore joignable (perte) ou non (injoignable). Une réponse lente reste une latence et non une perte. Quand l'écho échoue, la vérification TCP peut faire déborder la seconde : le tick suivant est simplement retardé (`MissedTickBehavior::Delay`).
+- Repli TCP permanent pour une cible quand l'ICMP est refusé par le système (Linux sans `ping_group_range`) ou filtré (10 échos perdus de suite alors que TCP répond, seuil assez haut pour qu'un Wi-Fi qui perd 30 % des paquets ne l'atteigne presque jamais). Le temps de la poignée de main sert alors de latence. Ce repli dure jusqu'au redémarrage de l'app.
 - Cibles par défaut : `1.1.1.1` et `8.8.8.8` (`list_default_targets`), sondées en parallèle à chaque seconde.
 - Les tests réels de l'ICMP et du TCP ne tournent qu'à la demande : `cargo test -p infrastructure -- --ignored`.
 

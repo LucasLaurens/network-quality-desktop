@@ -26,4 +26,5 @@ L'état affiché est celui de la **pire** des trois. Une mesure à moins de 20 %
 
 - Une **dégradation** n'apparaît qu'après **10 secondes** de suite, une **amélioration** qu'après **30 secondes**.
 - **Hors ligne** s'affiche dès 5 secondes sans aucun serveur joignable. Au retour, l'app repart de zéro : Mesure en cours, puis le premier état mesuré s'affiche aussitôt.
-- Un ping perdu alors que le serveur répond encore en TCP compte comme une **perte**, pas comme une coupure.
+- Un ping perdu alors que le serveur répond encore en TCP compte comme une **perte**, pas comme une coupure. Une coupure de moins de 5 secondes compte aussi comme perte.
+- La perte n'est notée qu'après 30 secondes de mesure : avant, une seule perte suffirait à faire passer l'état à Instable.

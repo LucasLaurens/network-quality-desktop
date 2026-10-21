@@ -13,4 +13,4 @@ Les faux en mémoire sont des implémentations concrètes des ports (`crates/app
 
 ## Preuve que les tests détectent les erreurs
 
-Chaque règle a été cassée volontairement pour vérifier qu'un test échoue : délais d'hystérésis raccourcis (2 tests rouges), p50 au lieu de p90 (3 tests rouges), couleur modifiée dans `tokens.css` (1 test rouge), seuil de repli TCP abaissé à 2 (2 tests rouges), cible injoignable classée « perdue » (1 test rouge).
+Chaque règle a été cassée volontairement pour vérifier qu'un test échoue : délais d'hystérésis raccourcis (2 tests rouges), p50 au lieu de p90 (3 tests rouges), couleur modifiée dans `tokens.css` (1 test rouge), seuil de bascule TCP abaissé (2 tests rouges), cible injoignable classée « perdue » (1 test rouge), perte notée dès la première sonde (1 test rouge), gigue calculée sur la médiane des cibles (1 test rouge).

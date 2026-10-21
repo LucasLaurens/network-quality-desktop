@@ -15,14 +15,14 @@ Les seuils des trois métriques vivent dans un seul objet du domaine, `Threshold
 ## Calcul à chaque seconde
 
 1. Chaque cible donne une issue (`ProbeOutcome`) : réponse avec son temps, perdue mais joignable en TCP, ou injoignable.
-2. La médiane des réponses entre dans `LatencyWindow` (15 s) ; envoyées et perdues entrent dans `LossWindow` (60 s, totaux tenus à jour).
-3. `OfflineDetector` compte les secondes sans aucune cible joignable : à 5, le verdict est Hors ligne et le moteur repart de zéro (fenêtres, hystérésis, compteur de démarrage).
+2. La médiane des réponses entre dans `LatencyWindow` (15 s) ; chaque cible a aussi sa propre fenêtre pour la gigue ; envoyées et perdues entrent dans `LossWindow` (60 s, totaux tenus à jour). La perte n'a de valeur qu'à partir de 60 sondes (30 s avec deux cibles) : avant, une seule perte pèserait plusieurs pour cent.
+3. `OfflineDetector` compte les secondes sans aucune cible joignable : à 5, le verdict est Hors ligne, la vue ne porte plus aucune mesure, et le moteur repart de zéro (fenêtres, hystérésis, compteur de démarrage).
 4. Tant que moins de 10 secondes ont reçu une réponse depuis le (re)démarrage, le verdict est « Mesure en cours ».
 5. Sinon, le pire niveau des trois métriques passe par l'hystérésis.
 
 ## Fenêtre et percentile
 
-Le p90 utilise le rang le plus proche : sur 15 échantillons, c'est le 14e plus petit. Il faut donc au moins deux secondes lentes dans la fenêtre pour que le p90 devienne lent. La gigue est l'écart moyen entre deux secondes successives ayant chacune une réponse, la grandeur qu'estime la gigue de la RFC 3550.
+Le p90 utilise le rang le plus proche : sur 15 échantillons, c'est le 14e plus petit. Il faut donc au moins deux secondes lentes dans la fenêtre pour que le p90 devienne lent. La gigue est l'écart moyen entre deux secondes successives ayant chacune une réponse, calculé **par cible** puis moyenné : comparer la médiane de deux cibles inventerait de la gigue dès qu'une cible perd un paquet. C'est la grandeur qu'estime la gigue de la RFC 3550, sans son lissage exponentiel.
 
 ## Hystérésis
 
