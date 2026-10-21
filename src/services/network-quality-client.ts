@@ -4,6 +4,7 @@ import type {
   ConnectionDisplay,
   DashboardSummaryDisplay,
   EvolutionDisplay,
+  ExportPeriodChoice,
   PeriodChoice,
   ProfileChoice,
   SettingsForm,
@@ -41,6 +42,10 @@ export interface NetworkQualityClient {
    * sentence explaining why it did not run.
    */
   runThroughputTest(profile: ProfileChoice, isConfirmed: boolean, utcOffsetSeconds: number): Promise<ThroughputOutcome>
+  /** Writes three CSV files into Downloads; resolves to where, rejects with why not. */
+  exportHistory(period: ExportPeriodChoice, utcOffsetSeconds: number): Promise<string>
+  /** Erases measures, events and throughput tests; the settings stay. */
+  eraseHistory(): Promise<string>
 }
 
 export const NETWORK_QUALITY_CLIENT_KEY: InjectionKey<NetworkQualityClient> = Symbol('NetworkQualityClient')

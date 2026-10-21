@@ -2,6 +2,7 @@
 //! access.
 #![forbid(unsafe_code)]
 
+mod calendar;
 mod connection;
 mod degradation;
 mod diagnosis;
@@ -20,6 +21,7 @@ mod timestamp;
 mod verdict;
 mod wifi;
 
+pub use calendar::CivilDate;
 pub use connection::{
     ConnectionContext, ConnectionKind, Gateway, InterfaceSnapshot, MacAddress, Medium, Metering,
     NetworkIdentity,

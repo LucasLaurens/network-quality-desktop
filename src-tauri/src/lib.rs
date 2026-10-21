@@ -7,6 +7,7 @@ pub mod commands;
 mod dashboard_display;
 mod display;
 mod engine_inbox;
+mod history_export;
 mod history_store;
 mod network_display;
 mod path_display;
@@ -79,7 +80,9 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_settings,
             commands::save_settings,
             commands::read_throughput_panel,
-            commands::run_throughput_test
+            commands::run_throughput_test,
+            commands::export_history,
+            commands::erase_history
         ])
         .events(collect_events![ConnectionDisplayChanged])
 }
@@ -138,6 +141,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(stores.notice);
     app.manage(stores.dashboard);
     app.manage(stores.settings);
+    app.manage(stores.location);
     let mode = ShellMode::detect(&SystemTrayHost);
     app.manage(mode);
     app.manage(WindowModeTexts::compose(mode, &catalog));

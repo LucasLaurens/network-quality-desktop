@@ -14,9 +14,9 @@ use domain::{
 
 use crate::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryCommand, HistoryEvent, HistoryReader,
-    HistoryRecorder, LatencyProbe, MeasurementRepository, NetworkKey, Notifier, RepositoryError,
-    SettingsRepository, ThroughputFailure, ThroughputProbe, ThroughputRecord, VerdictPresenter,
-    VerdictView, WifiReader,
+    HistoryRecorder, HistoryStream, LatencyProbe, MeasurementRepository, NetworkKey, Notifier,
+    RepositoryError, SettingsRepository, ThroughputFailure, ThroughputProbe, ThroughputRecord,
+    VerdictPresenter, VerdictView, WifiReader,
 };
 
 /// The manual clock's wall-clock start: an arbitrary UTC second, on an hour boundary.
@@ -172,6 +172,7 @@ impl InMemoryHistoryRecorder {
                 } => Some((network.clone(), *start, *aggregate)),
                 HistoryCommand::RecordEvent(_)
                 | HistoryCommand::RecordThroughput(_)
+                | HistoryCommand::EraseAll
                 | HistoryCommand::Flush(_) => None,
             })
             .collect()
@@ -187,6 +188,7 @@ impl InMemoryHistoryRecorder {
                 HistoryCommand::RecordEvent(event) => Some(event.clone()),
                 HistoryCommand::SaveMinute { .. }
                 | HistoryCommand::RecordThroughput(_)
+                | HistoryCommand::EraseAll
                 | HistoryCommand::Flush(_) => None,
             })
             .collect()
@@ -202,6 +204,7 @@ impl InMemoryHistoryRecorder {
                 HistoryCommand::RecordThroughput(record) => Some(record.clone()),
                 HistoryCommand::SaveMinute { .. }
                 | HistoryCommand::RecordEvent(_)
+                | HistoryCommand::EraseAll
                 | HistoryCommand::Flush(_) => None,
             })
             .collect()
@@ -380,6 +383,11 @@ impl MeasurementRepository for InMemoryMeasurementRepository {
         self.remember_name(&record.network);
         Ok(())
     }
+
+    fn erase_history(&mut self) -> Result<(), RepositoryError> {
+        *self = Self::default();
+        Ok(())
+    }
 }
 
 /// Oldest first, each with the network's current name, as the database answers.
@@ -426,6 +434,42 @@ impl HistoryReader for InMemoryMeasurementRepository {
             .collect();
         events.sort_by_key(|event| event.utc);
         Ok(events)
+    }
+}
+
+/// Streams what the lists answer: a test keeps few rows.
+impl HistoryStream for InMemoryMeasurementRepository {
+    fn stream_all_aggregates<E: From<RepositoryError>>(
+        &self,
+        granularity: Granularity,
+        from: i64,
+        to: i64,
+        mut visit: impl FnMut(&NetworkKey, i64, &Aggregate) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.list_all_aggregates(granularity, from, to)?
+            .iter()
+            .try_for_each(|(network, start, aggregate)| visit(network, *start, aggregate))
+    }
+
+    fn stream_events<E: From<RepositoryError>>(
+        &self,
+        from: i64,
+        to: i64,
+        visit: impl FnMut(&HistoryEvent) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.list_events(from, to)?.iter().try_for_each(visit)
+    }
+
+    fn stream_throughput_tests<E: From<RepositoryError>>(
+        &self,
+        from: i64,
+        to: i64,
+        visit: impl FnMut(&ThroughputRecord) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.list_throughput_tests(from, to)?
+            .iter()
+            .rev()
+            .try_for_each(visit)
     }
 }
 

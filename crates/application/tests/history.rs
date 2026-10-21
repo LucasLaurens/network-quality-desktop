@@ -424,3 +424,67 @@ fn writes_a_throughput_test_under_its_network() {
         vec![record]
     );
 }
+
+#[test]
+fn erases_everything_written_before() {
+    // Arrange
+    let mut writer = HistoryWriter::new(InMemoryMeasurementRepository::default());
+    let network = create_key(30);
+    save_minute(&mut writer, &network, SOME_HOUR);
+
+    // Act
+    writer
+        .apply(HistoryCommand::EraseAll, SOME_HOUR + MINUTE)
+        .expect("an erase");
+
+    // Assert
+    let repository = writer.into_repository();
+    let minutes = repository
+        .list_aggregates(&network, Granularity::Minute, 0, SOME_HOUR + MINUTE)
+        .expect("minutes");
+    assert!(minutes.is_empty());
+}
+
+#[test]
+fn starts_afresh_on_erase_without_the_minute_in_progress() {
+    // Arrange
+    let recorder = InMemoryHistoryRecorder::default();
+    let mut tracker = HistoryTracker::default();
+    let context = Some(create_context(31));
+    tracker.record_second(
+        &create_second(SOME_HOUR, Verdict::Offline),
+        context,
+        None,
+        &recorder,
+    );
+    let (answer, answered) = mpsc::sync_channel(1);
+
+    // Act
+    tracker.erase(answer, &recorder);
+
+    // Assert
+    tracker.record_second(
+        &create_second(SOME_HOUR + 1, Verdict::Offline),
+        context,
+        None,
+        &recorder,
+    );
+    let kinds: Vec<EventKind> = recorder
+        .list_events()
+        .iter()
+        .map(|event| event.kind)
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            EventKind::NetworkChanged,
+            EventKind::OfflineStarted,
+            EventKind::NetworkChanged,
+            EventKind::OfflineStarted,
+        ],
+        "the outage and the network are noted again after the erase"
+    );
+    assert!(recorder.list_saved_minutes().is_empty());
+    assert_eq!(tracker.list_last_hour().len(), 1);
+    assert!(answered.recv().is_ok());
+}

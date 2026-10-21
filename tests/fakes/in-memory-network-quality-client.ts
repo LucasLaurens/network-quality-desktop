@@ -5,6 +5,7 @@ import type {
   DashboardSummaryDisplay,
   DisplayState,
   EvolutionDisplay,
+  ExportPeriodChoice,
   MetricDisplay,
   NetworkRowDisplay,
   OverviewDisplay,
@@ -182,6 +183,12 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   readonly evolutionRequests: PeriodChoice[] = []
   readonly savedForms: SettingsForm[] = []
   readonly throughputRuns: ProfileChoice[] = []
+  readonly exports: ExportPeriodChoice[] = []
+  readonly exportConfirmation = faker.lorem.sentence()
+  readonly eraseConfirmation = faker.lorem.sentence()
+  erases = 0
+  /** Empty while exports and erases succeed. */
+  private dataRefusal = ''
   private throughputPanel = createThroughputPanel()
   private readonly nextThroughputRow = createThroughputRow()
   /** Empty while tests run. */
@@ -394,6 +401,23 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   finishThroughputTest(): void {
     this.isHoldingThroughput = false
     this.releaseThroughputTest()
+  }
+
+  exportHistory(period: ExportPeriodChoice): Promise<string> {
+    if (this.dataRefusal !== '') return Promise.reject(new Error(this.dataRefusal))
+    this.exports.push(period)
+    return Promise.resolve(this.exportConfirmation)
+  }
+
+  eraseHistory(): Promise<string> {
+    if (this.dataRefusal !== '') return Promise.reject(new Error(this.dataRefusal))
+    this.erases += 1
+    return Promise.resolve(this.eraseConfirmation)
+  }
+
+  /** Every export and erase is refused with `refusal`. */
+  refuseDataActions(refusal: string): void {
+    this.dataRefusal = refusal
   }
 
   readNextThroughputRow(): ThroughputRow {

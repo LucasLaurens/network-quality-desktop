@@ -79,6 +79,23 @@ export const commands = {
 	 *  that did not answer.
 	 */
 	runThroughputTest: (profile: ProfileChoice, isConfirmed: boolean, utcOffsetSeconds: number) => typedError<ThroughputOutcome, string>(__TAURI_INVOKE("run_throughput_test", { profile, isConfirmed, utcOffsetSeconds })),
+	/**
+	 *  Writes the history of `period` as three CSV files into a new folder of Downloads, on a thread
+	 *  of its own, then shows the folder.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The sentence shown under the button: a history kept in memory, or a failed export.
+	 */
+	exportHistory: (period: ExportPeriodChoice, utcOffsetSeconds: number) => typedError<string, string>(__TAURI_INVOKE("export_history", { period, utcOffsetSeconds })),
+	/**
+	 *  Erases every measure, event and throughput test; the settings stay.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The sentence shown under the button when the erase did not finish.
+	 */
+	eraseHistory: () => typedError<string, string>(__TAURI_INVOKE("erase_history")),
 };
 
 /** Events */
@@ -136,6 +153,8 @@ export type EvolutionDisplay = {
 	/**  Nothing measured in the period yet: a sentence replaces the chart. */
 	isEmpty: boolean,
 };
+
+export type ExportPeriodChoice = "lastDay" | "lastWeek" | "lastMonth" | "all";
 
 /**
  *  Positions on a gauge, as fractions of its length (0 = left end, 1 = right end), and the

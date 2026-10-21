@@ -6,7 +6,7 @@ use application::{
     DayOverview, Evolution, NetworkKey, NetworkStay, NetworkSummary, OutageEnd, Period,
 };
 use domain::{
-    Aggregate, CountedState, LossRate, Metric, SECONDS_PER_DAY, SECONDS_PER_HOUR,
+    Aggregate, CivilDate, CountedState, LossRate, Metric, SECONDS_PER_DAY, SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE, Thresholds,
 };
 use fluent_bundle::FluentArgs;
@@ -16,10 +16,6 @@ use specta::Type;
 use crate::display::{DisplayState, Displayable, to_lower_name_key};
 use crate::network_display::select_stored_network_keys;
 use crate::text_catalog::TextCatalog;
-
-/// Days from 0000-03-01 to 1970-01-01, for the civil calendar below.
-const DAYS_TO_EPOCH: i64 = 719_468;
-const DAYS_PER_ERA: i64 = 146_097;
 
 /// The period picked above the chart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Type)]
@@ -491,7 +487,7 @@ pub fn format_time_of_day(utc: i64, offset: i64, catalog: &TextCatalog) -> Strin
 /// "12/10, 14 h 05" in the user's time zone. O(1).
 pub fn format_date_time(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
     let local = utc + offset;
-    let (month, day) = convert_days_to_month_day(local.div_euclid(SECONDS_PER_DAY));
+    let CivilDate { month, day, .. } = CivilDate::from_days(local.div_euclid(SECONDS_PER_DAY));
     let mut args = FluentArgs::new();
     args.set("day", format!("{day:02}"));
     args.set("month", format!("{month:02}"));
@@ -502,7 +498,7 @@ pub fn format_date_time(utc: i64, offset: i64, catalog: &TextCatalog) -> String 
 /// "12/10, 14 h" in the user's time zone. O(1).
 fn format_date_hour(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
     let local = utc + offset;
-    let (month, day) = convert_days_to_month_day(local.div_euclid(SECONDS_PER_DAY));
+    let CivilDate { month, day, .. } = CivilDate::from_days(local.div_euclid(SECONDS_PER_DAY));
     let mut args = FluentArgs::new();
     args.set("day", format!("{day:02}"));
     args.set("month", format!("{month:02}"));
@@ -511,26 +507,6 @@ fn format_date_hour(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
         (local.rem_euclid(SECONDS_PER_DAY) / SECONDS_PER_HOUR).to_string(),
     );
     catalog.render("date-hour", Some(&args))
-}
-
-/// The month and day of a day counted from 1970-01-01, in the proleptic Gregorian calendar
-/// (H. Hinnant's `civil_from_days`). O(1).
-const fn convert_days_to_month_day(days: i64) -> (i64, i64) {
-    let shifted = days + DAYS_TO_EPOCH;
-    let day_of_era = shifted.rem_euclid(DAYS_PER_ERA);
-    let year_of_era = (day_of_era - day_of_era / 1460 + day_of_era / 36_524
-        - day_of_era / (DAYS_PER_ERA - 1))
-        / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    // Months counted from March, so that February comes last.
-    let month_from_march = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_from_march + 2) / 5 + 1;
-    let month = if month_from_march < 10 {
-        month_from_march + 3
-    } else {
-        month_from_march - 9
-    };
-    (month, day)
 }
 
 /// The two largest units: "42 s", "12 min", "3 h 12 min", "2 j 5 h". O(1).
@@ -637,12 +613,10 @@ mod tests {
         // Act
         let time = format_time_of_day(MIDNIGHT + 13 * 3600 + 5 * 60, PARIS, &catalog);
         let date = format_date_hour(MIDNIGHT + 23 * 3600, PARIS, &catalog);
-        let leap_day = convert_days_to_month_day(19_782);
 
         // Assert
         assert_eq!(time, insert_no_break_spaces("14~h~05"));
         assert_eq!(date, insert_no_break_spaces("15/11, 0~h"));
-        assert_eq!(leap_day, (2, 29));
     }
 
     #[test]

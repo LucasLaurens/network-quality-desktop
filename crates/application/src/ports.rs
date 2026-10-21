@@ -133,6 +133,13 @@ pub trait MeasurementRepository {
     ///
     /// The storage failed; nothing was written.
     fn record_throughput_test(&mut self, record: &ThroughputRecord) -> Result<(), RepositoryError>;
+
+    /// Deletes every minute, hour, event, throughput test and network; the settings stay.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed; nothing was deleted.
+    fn erase_history(&mut self) -> Result<(), RepositoryError>;
 }
 
 /// Reads the history for the dashboard, apart from the writer.
@@ -167,6 +174,47 @@ pub trait HistoryReader {
         from: i64,
         to: i64,
     ) -> Result<Vec<ThroughputRecord>, RepositoryError>;
+}
+
+/// Reads the history row by row, oldest first, for an export that never holds it whole. Each
+/// visit may stop the reading with its own error; a storage failure converts into it.
+pub trait HistoryStream {
+    /// The rows of every network starting in `[from, to)`, each with the network's current name.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed, or a visit did.
+    fn stream_all_aggregates<E: From<RepositoryError>>(
+        &self,
+        granularity: Granularity,
+        from: i64,
+        to: i64,
+        visit: impl FnMut(&NetworkKey, i64, &Aggregate) -> Result<(), E>,
+    ) -> Result<(), E>;
+
+    /// The events in `[from, to)`.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed, or a visit did.
+    fn stream_events<E: From<RepositoryError>>(
+        &self,
+        from: i64,
+        to: i64,
+        visit: impl FnMut(&HistoryEvent) -> Result<(), E>,
+    ) -> Result<(), E>;
+
+    /// The throughput tests in `[from, to)`.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed, or a visit did.
+    fn stream_throughput_tests<E: From<RepositoryError>>(
+        &self,
+        from: i64,
+        to: i64,
+        visit: impl FnMut(&ThroughputRecord) -> Result<(), E>,
+    ) -> Result<(), E>;
 }
 
 /// Where the settings are kept: one row, defaults until the first save.

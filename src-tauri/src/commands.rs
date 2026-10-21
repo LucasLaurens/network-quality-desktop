@@ -1,5 +1,6 @@
 //! Typed commands exposed to the front end. Tauri cannot export `pub` commands from the crate root.
 
+use fluent_bundle::FluentArgs;
 use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Manager, State};
@@ -14,6 +15,7 @@ use crate::dashboard_display::{
 };
 use crate::display::ConnectionDisplay;
 use crate::engine_inbox::EngineInbox;
+use crate::history_export::{ExportPeriodChoice, HistoryLocation, write_export};
 use crate::history_store::{DashboardHistory, HistoryNotice};
 use crate::settings_effects::apply_settings;
 use crate::settings_form::{SettingsForm, format_save_confirmation};
@@ -341,6 +343,79 @@ pub async fn run_throughput_test(
             &catalog,
         ),
     })
+}
+
+/// Writes the history of `period` as three CSV files into a new folder of Downloads, on a thread
+/// of its own, then shows the folder.
+///
+/// # Errors
+///
+/// The sentence shown under the button: a history kept in memory, or a failed export.
+#[tauri::command]
+#[specta::specta]
+pub async fn export_history(
+    period: ExportPeriodChoice,
+    utc_offset_seconds: i32,
+    app: AppHandle,
+    location: State<'_, HistoryLocation>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<String, String> {
+    let HistoryLocation::OnDisk(history) = location.inner() else {
+        return Err(catalog.render("export-unavailable", None));
+    };
+    let failed = || catalog.render("export-failed", None);
+    let downloads = app.path().download_dir().map_err(|error| {
+        eprintln!("The Downloads folder cannot be found: {error}");
+        failed()
+    })?;
+    let history = history.clone();
+    let now = SystemClock::start().read_utc_seconds();
+    let offset = i64::from(utc_offset_seconds);
+    let folder = tauri::async_runtime::spawn_blocking(move || {
+        write_export(&history, &downloads, period.into(), now, offset)
+    })
+    .await
+    .map_err(|error| {
+        eprintln!("The export thread failed: {error}");
+        failed()
+    })?
+    .map_err(|error| {
+        eprintln!("The export failed: {error:?}");
+        failed()
+    })?;
+    if let Err(error) = tauri_plugin_opener::reveal_item_in_dir(&folder) {
+        eprintln!("Showing the export failed: {error}");
+    }
+    let mut args = FluentArgs::new();
+    args.set(
+        "folder",
+        folder
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
+    );
+    Ok(catalog.render("export-done", Some(&args)))
+}
+
+/// Erases every measure, event and throughput test; the settings stay.
+///
+/// # Errors
+///
+/// The sentence shown under the button when the erase did not finish.
+#[tauri::command]
+#[specta::specta]
+pub async fn erase_history(
+    inbox: State<'_, EngineInbox>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<String, String> {
+    let inbox = inbox.inner().clone();
+    let is_erased = tauri::async_runtime::spawn_blocking(move || inbox.erase_history())
+        .await
+        .unwrap_or(false);
+    if is_erased {
+        Ok(catalog.render("history-erased", None))
+    } else {
+        Err(catalog.render("history-not-erased", None))
+    }
 }
 
 #[cfg(test)]

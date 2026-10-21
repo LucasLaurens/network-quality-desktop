@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { inject, onMounted, ref } from 'vue'
-import type { AppearanceChoice, SettingsForm } from '../bindings'
+import type { AppearanceChoice, ExportPeriodChoice, SettingsForm } from '../bindings'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
 
@@ -13,6 +13,13 @@ const APPEARANCES = [
   { value: 'light', label: 'Clair' },
   { value: 'dark', label: 'Sombre' },
 ] as const satisfies readonly { value: AppearanceChoice; label: string }[]
+
+const EXPORT_PERIODS = [
+  { value: 'lastDay', label: '24 dernières heures' },
+  { value: 'lastWeek', label: '7 derniers jours' },
+  { value: 'lastMonth', label: '30 derniers jours' },
+  { value: 'all', label: 'Tout' },
+] as const satisfies readonly { value: ExportPeriodChoice; label: string }[]
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
@@ -51,6 +58,33 @@ const saveChange = (): Promise<void> => queue(savedServer)
 const saveTypedServer = (): Promise<void> => queue(typedServer.value)
 
 // The public servers need nothing more; an own server waits for its address.
+const exportPeriod = ref<ExportPeriodChoice>('lastMonth')
+const isErasing = ref(false)
+const isBusy = ref(false)
+const dataStatus = ref('')
+const dataRefusal = ref('')
+
+const runDataAction = async (action: () => Promise<string>): Promise<void> => {
+  isBusy.value = true
+  dataRefusal.value = ''
+  dataStatus.value = ''
+  try {
+    dataStatus.value = await action()
+  } catch (error) {
+    dataRefusal.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    isBusy.value = false
+  }
+}
+
+const exportHistory = (): Promise<void> =>
+  runDataAction(() => client.exportHistory(exportPeriod.value, readUtcOffsetSeconds()))
+
+const eraseHistory = (): Promise<void> => {
+  isErasing.value = false
+  return runDataAction(() => client.eraseHistory())
+}
+
 const chooseServers = async (): Promise<void> => {
   refusal.value = ''
   if (servers.value === PUBLIC_SERVERS) await queue(null)
@@ -178,6 +212,49 @@ onMounted(async () => {
       </div>
     </div>
 
+    <div class="group">
+      <h3>Données</h3>
+      <div class="rows">
+        <div class="setting">
+          <label for="setting-export">Exporter l'historique</label>
+          <div class="actions">
+            <select id="setting-export" v-model="exportPeriod" data-export-period>
+              <option v-for="period in EXPORT_PERIODS" :key="period.value" :value="period.value">
+                {{ period.label }}
+              </option>
+            </select>
+            <button type="button" class="secondary" :disabled="isBusy" data-export @click="exportHistory">
+              Exporter
+            </button>
+          </div>
+          <span class="hint">
+            Trois fichiers CSV dans Téléchargements&nbsp;: mesures, événements, tests de débit. Sans adresse matérielle
+            de la box.
+          </span>
+        </div>
+        <div class="setting">
+          <span class="label">Effacer l'historique</span>
+          <button type="button" class="secondary" :disabled="isBusy" data-erase @click="isErasing = true">
+            Effacer…
+          </button>
+          <div v-if="isErasing" class="warning" role="alertdialog" aria-labelledby="erase-warning" data-erase-warning>
+            <p id="erase-warning">
+              Toutes les mesures (minutes et heures), les événements (coupures, changements de réseau, veilles) et les
+              tests de débit seront supprimés, sans retour possible. Les réglages sont conservés.
+            </p>
+            <div class="actions">
+              <button type="button" class="secondary" data-erase-confirm @click="eraseHistory">
+                Effacer l'historique
+              </button>
+              <button type="button" class="link" data-erase-cancel @click="isErasing = false">Annuler</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p v-if="dataRefusal" class="refused" role="alert" data-data-refused>{{ dataRefusal }}</p>
+      <p class="saved" role="status" data-data-status>{{ dataStatus }}</p>
+    </div>
+
     <p v-if="refusal" class="refused" role="alert" data-refused>{{ refusal }}</p>
     <p class="saved" role="status" data-saved>{{ saved }}</p>
   </section>
@@ -279,6 +356,53 @@ input[type='checkbox'][role='switch']:checked {
 
 input[type='checkbox'][role='switch']:checked::after {
   left: 17px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+}
+
+.secondary {
+  min-height: 28px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-nested);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.secondary:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.warning {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-nested);
+}
+
+.warning p {
+  margin: 0;
 }
 
 .radios {

@@ -206,3 +206,10 @@ unit-percent = { $value } %
 unit-dbm = −{ $value } dBm
 unit-megabytes = { $value } Mo
 unit-megabits = { $value } Mbit/s
+
+## Données : export et effacement de l'historique.
+export-done = Export enregistré dans Téléchargements : { $folder }.
+export-failed = L'export n'a pas pu être écrit.
+export-unavailable = L'historique n'est pas enregistré sur le disque pendant cette session : il n'y a rien à exporter.
+history-erased = Historique effacé.
+history-not-erased = L'historique n'a pas pu être effacé.
