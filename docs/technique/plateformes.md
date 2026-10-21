@@ -13,7 +13,8 @@ La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le gr
 ## Contexte de connexion
 
 - `netdev` donne sur les trois systèmes le type d'interface, l'interface par défaut, sa passerelle et l'adresse MAC de celle-ci (zéros quand elle n'est pas résolue).
-- macOS : la table ARP est filtrée par la protection « Réseau local ». Un binaire lancé depuis un terminal ou un test peut ne voir aucune adresse MAC alors que `arp` en voit une dans le terminal ; le réseau est alors « non reconnu ». L'app déclare `NSLocalNetworkUsageDescription` (`src-tauri/Info.plist`, fusionné dans le bundle) pour que macOS demande l'autorisation. À vérifier sur l'app empaquetée.
+- macOS : la table ARP est filtrée par la protection « Réseau local ». Un binaire lancé depuis un terminal ou un test peut ne voir aucune adresse MAC alors que `arp` en voit une dans le terminal : le réseau garde son nom générique, mais il n'est plus reconnaissable et l'indice « adresse aléatoire » du partage de connexion manque. L'app déclare `NSLocalNetworkUsageDescription` (`src-tauri/Info.plist`, fusionné dans le bundle) pour que macOS demande l'autorisation. À vérifier sur l'app empaquetée.
+- Windows : le nom système d'une interface est un GUID ; les VPN sont reconnus par leur type ou par leur description (WireGuard, Wintun, TAP-Windows, OpenVPN, Tailscale). Un VPN au nom inconnu, présenté comme une carte Ethernet, passe pour une connexion Ethernet.
 
 ## Icône de barre système
 

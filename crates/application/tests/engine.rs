@@ -640,3 +640,24 @@ async fn keeps_the_connection_while_offline() {
     assert_eq!(view.verdict, Verdict::Offline);
     assert_eq!(view.context, Some(context));
 }
+
+#[tokio::test]
+async fn reads_the_connection_again_right_after_an_outage() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 4)));
+    harness.warm_up_with_latency(FAST).await;
+    harness.set_every_target(ProbeOutcome::Unreachable);
+    harness.run_seconds(5).await;
+    let ethernet = create_context(ConnectionKind::Ethernet, 5);
+    harness.connection.set_context(Some(ethernet));
+    harness.set_latency(FAST);
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(harness.read_last_view().context, Some(ethernet));
+}

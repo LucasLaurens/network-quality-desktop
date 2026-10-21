@@ -93,22 +93,20 @@ impl NetworkDisplay {
     /// The Wi-Fi name will replace the generic label once it can be read. O(1).
     #[must_use]
     pub fn from_context(context: &ConnectionContext, catalog: &TextCatalog) -> Self {
-        let (label_key, connection_key) = match context.kind {
-            ConnectionKind::Ethernet => ("network-ethernet", "connection-ethernet"),
-            ConnectionKind::WiFi => ("network-wifi", "connection-wifi"),
-            ConnectionKind::Cellular => ("network-cellular", "connection-cellular"),
-            ConnectionKind::PhoneHotspot => ("network-hotspot", "connection-hotspot"),
-            ConnectionKind::Other if context.is_vpn => ("network-other", "connection-vpn"),
-            ConnectionKind::Other => ("network-other", "connection-other"),
+        let (label_key, connection_key) = match (context.kind, context.is_vpn) {
+            (ConnectionKind::Ethernet, _) => ("network-ethernet", "connection-ethernet"),
+            (ConnectionKind::WiFi, _) => ("network-wifi", "connection-wifi"),
+            (ConnectionKind::Cellular, _) => ("network-cellular", "connection-cellular"),
+            (ConnectionKind::PhoneHotspot, _) => ("network-hotspot", "connection-hotspot"),
+            (ConnectionKind::Other, true) => ("network-vpn", "connection-vpn"),
+            (ConnectionKind::Other, false) => ("network-other", "connection-other"),
         };
-        let physical = catalog.render(connection_key, None);
-        let connection = if context.is_vpn && context.kind != ConnectionKind::Other {
+        let mut connection = catalog.render(connection_key, None);
+        if context.is_vpn && context.kind != ConnectionKind::Other {
             let mut args = FluentArgs::new();
-            args.set("connection", physical);
-            catalog.render("connection-through-vpn", Some(&args))
-        } else {
-            physical
-        };
+            args.set("connection", connection);
+            connection = catalog.render("connection-through-vpn", Some(&args));
+        }
         Self {
             label: catalog.render(label_key, None),
             connection,
@@ -563,7 +561,10 @@ mod tests {
 
         // Assert
         assert_eq!(over_ethernet.connection, "Ethernet, via un VPN");
-        assert_eq!(hidden.connection, "VPN");
+        assert_eq!(
+            (hidden.label.as_str(), hidden.connection.as_str()),
+            ("Réseau via un VPN", "VPN")
+        );
     }
 
     #[test]

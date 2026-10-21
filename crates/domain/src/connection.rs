@@ -1,6 +1,5 @@
 //! Which network the computer is on, and through what: the connection context.
 
-use std::fmt;
 use std::net::Ipv4Addr;
 
 /// Gateways handed out by phones sharing their connection. A hint only: a home router may use
@@ -14,14 +13,6 @@ const PHONE_GATEWAYS: [Ipv4Addr; 4] = [
 /// An iPhone shares its connection on 172.20.10.0/28.
 const IPHONE_NETWORK: Ipv4Addr = Ipv4Addr::new(172, 20, 10, 0);
 const IPHONE_PREFIX: u8 = 28;
-/// Words found in the interface names of a phone plugged over USB.
-const PHONE_NAME_HINTS: [&str; 5] = [
-    "iphone",
-    "android",
-    "rndis",
-    "remote ndis",
-    "apple mobile device",
-];
 /// How many independent signals make a phone hotspot.
 const HOTSPOT_SIGNALS_NEEDED: usize = 2;
 
@@ -35,22 +26,10 @@ impl MacAddress {
         (octets != [0; 6]).then_some(Self(octets))
     }
 
-    #[must_use]
-    pub const fn to_octets(self) -> [u8; 6] {
-        self.0
-    }
-
     /// Phones and some mesh systems use random addresses; routers keep their maker's.
     #[must_use]
     pub const fn is_locally_administered(self) -> bool {
         self.0[0] & 0b10 != 0
-    }
-}
-
-impl fmt::Display for MacAddress {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let hexadecimal: Vec<String> = self.0.iter().map(|octet| format!("{octet:02x}")).collect();
-        formatter.write_str(&hexadecimal.join(":"))
     }
 }
 
@@ -61,26 +40,40 @@ pub enum Medium {
     WiFi,
     /// A cellular modem built into the computer.
     Cellular,
-    /// A VPN tunnel.
+    /// A VPN tunnel, known as such.
     Tunnel,
+    /// A point-to-point link: a VPN when another link carries it, else a PPP connection (DSL,
+    /// cellular dongle) that is itself the physical link.
+    PointToPoint,
     Other,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Gateway {
-    pub ipv4: Ipv4Addr,
+    /// `None` on an IPv6-only network: the gateway is still there, and so may be its address.
+    pub ipv4: Option<Ipv4Addr>,
     pub mac: Option<MacAddress>,
 }
 
 /// What the system says about one interface: the input of the classification.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InterfaceSnapshot {
     pub medium: Medium,
-    /// System name, display name and description, as available.
-    pub names: Vec<String>,
+    /// The system names it after a phone plugged over USB (read by the OS adapter).
+    pub has_phone_name: bool,
     /// First IPv4 address and its prefix length.
     pub ipv4: Option<(Ipv4Addr, u8)>,
     pub gateway: Option<Gateway>,
+}
+
+impl InterfaceSnapshot {
+    const fn is_tunnel_like(&self) -> bool {
+        matches!(self.medium, Medium::Tunnel | Medium::PointToPoint)
+    }
+
+    const fn has_resolved_gateway(&self) -> bool {
+        matches!(self.gateway, Some(Gateway { mac: Some(_), .. }))
+    }
 }
 
 /// The kind of connection the user recognises.
@@ -111,24 +104,23 @@ pub struct ConnectionContext {
 }
 
 impl ConnectionContext {
-    /// `default` carries the default route; `others` are the other interfaces that are up, where
-    /// the physical link under a VPN is looked for. O(i·n) time for i interfaces of n names.
+    /// `measured` carries the traffic to the measurement targets; `others` are the other
+    /// interfaces that are up, where the physical link under a VPN is looked for. O(i) time and
+    /// O(1) space for i interfaces.
     #[must_use]
-    pub fn classify(default: &InterfaceSnapshot, others: &[InterfaceSnapshot]) -> Self {
-        if default.medium != Medium::Tunnel {
-            return Self::describe_physical(default, false);
+    pub fn classify(measured: &InterfaceSnapshot, others: &[InterfaceSnapshot]) -> Self {
+        if !measured.is_tunnel_like() {
+            return Self::describe_physical(measured, false);
         }
-        others
-            .iter()
-            .find(|snapshot| snapshot.medium != Medium::Tunnel && snapshot.gateway.is_some())
-            .map_or(
-                Self {
-                    kind: ConnectionKind::Other,
-                    is_vpn: true,
-                    gateway: None,
-                },
-                |physical| Self::describe_physical(physical, true),
-            )
+        match (find_physical_link(others), measured.medium) {
+            (Some(physical), _) => Self::describe_physical(physical, true),
+            (None, Medium::PointToPoint) => Self::describe_physical(measured, false),
+            (None, _) => Self {
+                kind: ConnectionKind::Other,
+                is_vpn: true,
+                gateway: None,
+            },
+        }
     }
 
     /// `None` while the gateway address is unknown: such a network cannot be recognised later.
@@ -140,6 +132,7 @@ impl ConnectionContext {
         })
     }
 
+    /// O(1).
     fn describe_physical(snapshot: &InterfaceSnapshot, is_vpn: bool) -> Self {
         let kind = if count_hotspot_signals(snapshot) >= HOTSPOT_SIGNALS_NEEDED {
             ConnectionKind::PhoneHotspot
@@ -148,7 +141,7 @@ impl ConnectionContext {
                 Medium::Ethernet => ConnectionKind::Ethernet,
                 Medium::WiFi => ConnectionKind::WiFi,
                 Medium::Cellular => ConnectionKind::Cellular,
-                Medium::Tunnel | Medium::Other => ConnectionKind::Other,
+                Medium::Tunnel | Medium::PointToPoint | Medium::Other => ConnectionKind::Other,
             }
         };
         Self {
@@ -159,27 +152,33 @@ impl ConnectionContext {
     }
 }
 
-/// Independent hints that a phone shares its connection. No single one is trusted. O(n) for n
-/// names.
+/// The link under a VPN: a non-tunnel interface with a gateway, preferring one whose gateway
+/// address is resolved. shortcut: with several such links (Wi-Fi and Ethernet), the first one
+/// listed wins; asking the route to the VPN server would be exact. O(i) for i interfaces.
+fn find_physical_link(others: &[InterfaceSnapshot]) -> Option<&InterfaceSnapshot> {
+    others
+        .iter()
+        .filter(|snapshot| !snapshot.is_tunnel_like() && snapshot.gateway.is_some())
+        .min_by_key(|snapshot| !snapshot.has_resolved_gateway())
+}
+
+/// Independent hints that a phone shares its connection. The addressing plan counts once: a
+/// router may be configured like a phone. O(1).
 fn count_hotspot_signals(snapshot: &InterfaceSnapshot) -> usize {
     let has_phone_gateway = snapshot
         .gateway
-        .is_some_and(|gateway| PHONE_GATEWAYS.contains(&gateway.ipv4));
+        .and_then(|gateway| gateway.ipv4)
+        .is_some_and(|address| PHONE_GATEWAYS.contains(&address));
     let is_on_iphone_network = snapshot.ipv4.is_some_and(|(address, prefix)| {
         prefix == IPHONE_PREFIX && mask(address, IPHONE_PREFIX) == IPHONE_NETWORK
-    });
-    let has_phone_name = snapshot.names.iter().any(|name| {
-        let name = name.to_lowercase();
-        PHONE_NAME_HINTS.iter().any(|hint| name.contains(hint))
     });
     let has_random_gateway = snapshot
         .gateway
         .and_then(|gateway| gateway.mac)
         .is_some_and(MacAddress::is_locally_administered);
     [
-        has_phone_gateway,
-        is_on_iphone_network,
-        has_phone_name,
+        has_phone_gateway || is_on_iphone_network,
+        snapshot.has_phone_name,
         has_random_gateway,
     ]
     .into_iter()
@@ -204,12 +203,21 @@ mod tests {
     fn create_snapshot(medium: Medium, gateway: [u8; 4], mac: [u8; 6]) -> InterfaceSnapshot {
         InterfaceSnapshot {
             medium,
-            names: vec!["en0".to_owned()],
+            has_phone_name: false,
             ipv4: Some((Ipv4Addr::new(gateway[0], gateway[1], gateway[2], 42), 24)),
             gateway: Some(Gateway {
-                ipv4: Ipv4Addr::from(gateway),
+                ipv4: Some(Ipv4Addr::from(gateway)),
                 mac: MacAddress::from_octets(mac),
             }),
+        }
+    }
+
+    fn create_tunnel(medium: Medium) -> InterfaceSnapshot {
+        InterfaceSnapshot {
+            medium,
+            has_phone_name: false,
+            ipv4: Some((Ipv4Addr::new(10, 8, 0, 2), 32)),
+            gateway: None,
         }
     }
 
@@ -231,9 +239,9 @@ mod tests {
     }
 
     #[test]
-    fn recognises_an_iphone_hotspot_from_its_gateway_and_network() {
+    fn recognises_an_iphone_hotspot_from_its_addressing_and_random_gateway() {
         // Arrange
-        let mut snapshot = create_snapshot(Medium::WiFi, [172, 20, 10, 1], ROUTER_MAC);
+        let mut snapshot = create_snapshot(Medium::WiFi, [172, 20, 10, 1], RANDOM_MAC);
         snapshot.ipv4 = Some((Ipv4Addr::new(172, 20, 10, 3), IPHONE_PREFIX));
 
         // Act
@@ -244,24 +252,28 @@ mod tests {
     }
 
     #[test]
-    fn never_calls_a_hotspot_from_the_gateway_address_alone() {
+    fn never_calls_a_hotspot_from_the_addressing_alone() {
         // Arrange
-        let snapshot = create_snapshot(Medium::WiFi, [192, 168, 43, 1], ROUTER_MAC);
+        let mut iphone_like = create_snapshot(Medium::WiFi, [172, 20, 10, 1], ROUTER_MAC);
+        iphone_like.ipv4 = Some((Ipv4Addr::new(172, 20, 10, 3), IPHONE_PREFIX));
+        let android_like = create_snapshot(Medium::WiFi, [192, 168, 43, 1], ROUTER_MAC);
 
-        // Act
-        let context = ConnectionContext::classify(&snapshot, &[]);
-
-        // Assert
-        assert_eq!(context.kind, ConnectionKind::WiFi);
+        // Act & Assert
+        assert_eq!(
+            ConnectionContext::classify(&iphone_like, &[]).kind,
+            ConnectionKind::WiFi
+        );
+        assert_eq!(
+            ConnectionContext::classify(&android_like, &[]).kind,
+            ConnectionKind::WiFi
+        );
     }
 
     #[test]
     fn recognises_a_phone_plugged_over_usb() {
         // Arrange
         let mut snapshot = create_snapshot(Medium::Ethernet, [192, 168, 42, 129], ROUTER_MAC);
-        snapshot
-            .names
-            .push("Remote NDIS based Internet Sharing Device".to_owned());
+        snapshot.has_phone_name = true;
 
         // Act
         let context = ConnectionContext::classify(&snapshot, &[]);
@@ -271,35 +283,29 @@ mod tests {
     }
 
     #[test]
-    fn counts_a_random_gateway_address_as_one_hint_among_others() {
+    fn keeps_the_gateway_of_an_ipv6_only_network() {
         // Arrange
-        let random_only = create_snapshot(Medium::WiFi, [192, 168, 152, 167], RANDOM_MAC);
-        let random_and_known_gateway = create_snapshot(Medium::WiFi, [192, 168, 43, 1], RANDOM_MAC);
+        let mut snapshot = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+        snapshot.ipv4 = None;
+        snapshot.gateway = Some(Gateway {
+            ipv4: None,
+            mac: MacAddress::from_octets(ROUTER_MAC),
+        });
 
-        // Act & Assert
-        assert_eq!(
-            ConnectionContext::classify(&random_only, &[]).kind,
-            ConnectionKind::WiFi
-        );
-        assert_eq!(
-            ConnectionContext::classify(&random_and_known_gateway, &[]).kind,
-            ConnectionKind::PhoneHotspot
-        );
+        // Act
+        let context = ConnectionContext::classify(&snapshot, &[]);
+
+        // Assert
+        assert_eq!(context.gateway, MacAddress::from_octets(ROUTER_MAC));
     }
 
     #[test]
     fn shows_the_physical_link_under_a_vpn() {
         // Arrange
-        let tunnel = InterfaceSnapshot {
-            medium: Medium::Tunnel,
-            names: vec!["utun4".to_owned()],
-            ipv4: Some((Ipv4Addr::new(10, 8, 0, 2), 32)),
-            gateway: None,
-        };
         let wifi = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
 
         // Act
-        let context = ConnectionContext::classify(&tunnel, &[wifi]);
+        let context = ConnectionContext::classify(&create_tunnel(Medium::Tunnel), &[wifi]);
 
         // Assert
         assert_eq!(
@@ -313,22 +319,55 @@ mod tests {
     }
 
     #[test]
-    fn keeps_measuring_through_a_vpn_whose_physical_link_is_hidden() {
+    fn prefers_a_link_whose_gateway_is_resolved_under_a_vpn() {
         // Arrange
-        let tunnel = InterfaceSnapshot {
-            medium: Medium::Tunnel,
-            names: vec!["wg0".to_owned()],
-            ipv4: None,
-            gateway: None,
-        };
+        let mut unresolved = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+        unresolved.gateway = Some(Gateway {
+            ipv4: Some(Ipv4Addr::new(192, 168, 1, 1)),
+            mac: None,
+        });
+        let ethernet = create_snapshot(Medium::Ethernet, [10, 0, 0, 1], ROUTER_MAC);
 
         // Act
-        let context = ConnectionContext::classify(&tunnel, &[]);
+        let context =
+            ConnectionContext::classify(&create_tunnel(Medium::Tunnel), &[unresolved, ethernet]);
+
+        // Assert
+        assert_eq!(context.kind, ConnectionKind::Ethernet);
+    }
+
+    #[test]
+    fn keeps_measuring_through_a_vpn_whose_physical_link_is_hidden() {
+        // Act
+        let context = ConnectionContext::classify(&create_tunnel(Medium::Tunnel), &[]);
 
         // Assert
         assert_eq!(context.kind, ConnectionKind::Other);
         assert!(context.is_vpn);
         assert_eq!(context.identify(), None);
+    }
+
+    #[test]
+    fn treats_a_lone_point_to_point_link_as_the_connection_itself() {
+        // Act
+        let context = ConnectionContext::classify(&create_tunnel(Medium::PointToPoint), &[]);
+
+        // Assert
+        assert!(!context.is_vpn);
+        assert_eq!(context.kind, ConnectionKind::Other);
+    }
+
+    #[test]
+    fn treats_a_point_to_point_link_over_another_link_as_a_vpn() {
+        // Arrange
+        let wifi = create_snapshot(Medium::WiFi, [192, 168, 1, 1], ROUTER_MAC);
+
+        // Act
+        let context = ConnectionContext::classify(&create_tunnel(Medium::PointToPoint), &[wifi]);
+
+        // Assert
+        assert!(context.is_vpn);
+        assert_eq!(context.kind, ConnectionKind::WiFi);
     }
 
     #[test]
@@ -353,14 +392,5 @@ mod tests {
     fn treats_an_all_zero_address_as_unresolved() {
         // Act & Assert
         assert_eq!(MacAddress::from_octets([0; 6]), None);
-    }
-
-    #[test]
-    fn writes_a_mac_address_in_lowercase_hexadecimal() {
-        // Arrange
-        let mac = MacAddress::from_octets(RANDOM_MAC).expect("a resolved address");
-
-        // Act & Assert
-        assert_eq!(mac.to_string(), "06:a1:ee:39:03:1d");
     }
 }

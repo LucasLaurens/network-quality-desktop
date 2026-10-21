@@ -48,8 +48,8 @@ describe('ConnectionPopover', () => {
 
     // Assert
     const where = wrapper.get('[data-network]')
-    expect(where.text()).toBe(network.label)
-    expect(where.attributes('title')).toBe(network.connection)
+    expect(where.text()).toContain(network.label)
+    expect(where.text()).toContain(network.connection)
   })
 
   it('names no network without a default route', async () => {

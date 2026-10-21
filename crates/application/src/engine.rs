@@ -5,7 +5,7 @@ use domain::{
     LossWindow, Metric, OfflineDetector, ProbeOutcome, Scalable, Target, Thresholds, Verdict,
     compute_median,
 };
-use futures_util::future::join_all;
+use futures_util::future::{join, join_all};
 use tokio::sync::mpsc;
 
 use crate::{Clock, ConnectionContextReader, LatencyProbe, VerdictPresenter};
@@ -116,17 +116,28 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
     }
 
     async fn measure_one_second(&mut self) {
-        if self.seconds_since_context >= CONTEXT_REFRESH_SECONDS {
-            self.context = self.context_reader.read_context().await;
+        let is_context_due = self.seconds_since_context >= CONTEXT_REFRESH_SECONDS;
+        // The context is read alongside the probes, so a slow read never delays the measurement.
+        let (outcomes, context) = join(
+            join_all(
+                self.targets
+                    .iter()
+                    .map(|target| self.probe.send_probe(*target)),
+            ),
+            async {
+                if is_context_due {
+                    Some(self.context_reader.read_context().await)
+                } else {
+                    None
+                }
+            },
+        )
+        .await;
+        if let Some(context) = context {
+            self.context = context;
             self.seconds_since_context = 0;
         }
         self.seconds_since_context += 1;
-        let outcomes = join_all(
-            self.targets
-                .iter()
-                .map(|target| self.probe.send_probe(*target)),
-        )
-        .await;
         self.record_outcomes(&outcomes);
         let view = self.compute_view(&outcomes);
         self.presenter.present(&view);
@@ -254,6 +265,8 @@ impl<P: LatencyProbe, C: Clock, V: VerdictPresenter, R: ConnectionContextReader>
         self.loss = LossWindow::default();
         self.hysteresis = Hysteresis::default();
         self.samples_since_restart = 0;
+        // The way back may be another network: read it at once (every second while offline).
+        self.seconds_since_context = CONTEXT_REFRESH_SECONDS;
     }
 }
 

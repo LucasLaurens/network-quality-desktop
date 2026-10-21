@@ -14,15 +14,16 @@ Survoler la pastille affiche le nom de l'état (sauf sous Linux). Un clic sur la
 
 ## Réseau et type de connexion
 
-Le popover nomme le réseau à droite de l'état ; le survol donne le type de connexion.
+Le popover nomme le réseau à droite de l'état, avec le type de connexion en dessous.
 
-| Type                                | Nom affiché                   | Comment l'app le reconnaît                                                                                                                         |
-| ----------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ethernet                            | Réseau Ethernet               | type d'interface                                                                                                                                   |
-| Wi-Fi                               | Réseau Wi-Fi                  | type d'interface                                                                                                                                   |
-| Modem cellulaire                    | Réseau mobile                 | modem intégré à l'ordinateur                                                                                                                       |
-| Partage de connexion d'un téléphone | Partage de connexion          | au moins deux indices concordants (adresse de passerelle, réseau iPhone, nom d'interface, adresse de passerelle aléatoire), jamais l'adresse seule |
-| VPN                                 | selon la connexion en dessous | la mesure passe par le VPN ; le type affiché est « Wi-Fi, via un VPN » quand la connexion physique est connue, sinon « VPN »                       |
+| Type                                | Nom affiché                                             | Comment l'app le reconnaît                                                                                                                                            |
+| ----------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ethernet                            | Réseau Ethernet                                         | type d'interface                                                                                                                                                      |
+| Wi-Fi                               | Réseau Wi-Fi                                            | type d'interface                                                                                                                                                      |
+| Modem cellulaire                    | Réseau mobile                                           | modem intégré à l'ordinateur                                                                                                                                          |
+| Partage de connexion d'un téléphone | Partage de connexion                                    | au moins deux indices indépendants : adressage habituel des téléphones, nom d'interface de téléphone (USB), adresse de passerelle aléatoire ; jamais l'adressage seul |
+| VPN                                 | Réseau via un VPN, ou le nom de la connexion en dessous | la mesure passe par le VPN ; le type affiché est « Wi-Fi, via un VPN » quand la connexion physique est connue, sinon « VPN »                                          |
+| Autre                               | Réseau non reconnu                                      | connexion d'un type inconnu, ou lien PPP (DSL, clé 3G)                                                                                                                |
 
 Un réseau est reconnu par l'adresse MAC de sa passerelle et son type ; le nom du Wi-Fi n'est qu'un libellé et remplacera le nom générique avec le ticket Wi-Fi. Le contexte est relu toutes les 10 secondes.
 

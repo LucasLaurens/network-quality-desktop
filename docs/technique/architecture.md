@@ -32,7 +32,7 @@ Les types et les signatures des commandes sont générés depuis Rust par `tauri
 
 ## Objet d'affichage et textes
 
-- Le moteur produit un `VerdictView` (verdict, `Diagnosis`, trois `MetricReading` avec leurs bornes). `ConnectionDisplay::from_view` (crate `app`) le transforme en objet prêt à afficher : libellé d'état, constat, action, détail chiffré, et pour chaque mesure son nom, sa méthode, sa valeur formatée, sa jauge (positions en fraction) et son indication « Proche du seuil ».
+- Le moteur produit un `VerdictView` (verdict, `Diagnosis`, trois `MetricReading` avec leurs bornes, `ConnectionContext`). `ConnectionDisplay::from_view` (crate `app`) le transforme en objet prêt à afficher : libellé d'état, constat, action, détail chiffré, et pour chaque mesure son nom, sa méthode, sa valeur formatée, sa jauge (positions en fraction) et son indication « Proche du seuil », et le réseau (`NetworkDisplay` : nom générique et type de connexion en mots).
 - Tous ces textes viennent du catalogue Fluent `src-tauri/locales/fr.ftl`, chargé par `TextCatalog`. Les nombres sont formatés à la française (virgule décimale, espace insécable avant l'unité).
 - Le front reçoit cet objet par la commande `read_connection_display` (à l'ouverture) et l'événement `ConnectionDisplayChanged` (à chaque changement), et l'affiche tel quel.
 - La fenêtre popover (macOS et Windows) charge la même page avec `?view=popover`. Elle s'ouvre au clic gauche sur l'icône, se place sous l'icône (macOS) ou au-dessus (Windows), et se masque quand elle perd le focus ou sur Échap. Un clic sur l'icône qui arrive moins de 300 ms après ce masquage est le même geste : il ne rouvre pas le popover. Sous Linux, le menu natif la remplace.

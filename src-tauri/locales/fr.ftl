@@ -28,6 +28,7 @@ network-wifi = Réseau Wi-Fi
 network-cellular = Réseau mobile
 network-hotspot = Partage de connexion
 network-other = Réseau non reconnu
+network-vpn = Réseau via un VPN
 connection-ethernet = Ethernet
 connection-wifi = Wi-Fi
 connection-cellular = Modem cellulaire

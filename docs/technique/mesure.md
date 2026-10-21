@@ -21,12 +21,14 @@
 
 ## Contexte de connexion
 
-- Seule l'interface de la route par défaut est mesurée. Sous VPN, la mesure passe par le VPN.
-- `NetdevContextReader` (crate `infrastructure`) lit les interfaces avec `netdev` sur un fil bloquant (`spawn_blocking`), puis les décrit au domaine (`InterfaceSnapshot` : support, noms, adresse IPv4 et préfixe, passerelle). Le classement est pur, dans `domain` (`ConnectionContext::classify`).
+- Seule l'interface qui porte les mesures est mesurée : celle de la route vers la première cible, trouvée en connectant un socket UDP (aucun paquet n'est envoyé) puis en cherchant l'interface qui possède l'adresse locale choisie. Sous VPN, la mesure passe par le VPN ; un VPN partiel qui ne route pas les cibles n'est pas signalé.
+- `NetdevContextReader` (crate `infrastructure`) lit les interfaces avec `netdev` sur un fil bloquant (`spawn_blocking`), puis les décrit au domaine (`InterfaceSnapshot` : support, nom de téléphone, adresse IPv4 et préfixe, passerelle IPv4 éventuelle et son adresse MAC). Les noms d'interface restent dans l'adaptateur ; le classement est pur, dans `domain` (`ConnectionContext::classify`).
 - Support : Wi-Fi, Ethernet, modem cellulaire intégré (`Wwan`), tunnel (type `Tunnel`, drapeaux point à point, ou noms `utun`, `tun`, `wg`, `ppp`, `ipsec`), autre.
-- VPN : quand l'interface par défaut est un tunnel, le type affiché est celui de la première autre interface active qui a une passerelle ; sans elle, « VPN » seul.
-- Partage de connexion : au moins **deux** indices parmi passerelle connue des téléphones (`172.20.10.1`, `192.168.43.1`, `192.168.42.1`, `192.168.42.129`), réseau iPhone `172.20.10.0/28`, nom d'interface de téléphone (« iPhone », « Android », « RNDIS »), adresse MAC de passerelle aléatoire (bit « administrée localement »). Jamais l'adresse IP seule. La connexion limitée s'y ajoutera avec son ticket.
-- Identité d'un réseau (`NetworkIdentity`) : MAC de la passerelle + type de connexion. Sans MAC résolue, le réseau n'est pas reconnaissable (`identify` rend `None`).
+- Support : le type cellulaire (`Wwan`) est lu en premier, car un modem est aussi point à point. Tunnel : type `Tunnel` ou « virtuel propriétaire » (WireGuard, Wintun sous Windows), noms `utun`, `tun`, `wg`, `ipsec`, ou nom affiché contenant WireGuard, Wintun, TAP-Windows, OpenVPN, Tailscale, VPN. Lien point à point (PPP, PPPoE) : un VPN si une autre interface a une passerelle, sinon la connexion elle-même.
+- VPN : le type affiché est celui de l'interface physique qui a une passerelle, de préférence avec une adresse MAC résolue ; avec plusieurs (Wi-Fi et Ethernet), la première listée l'emporte (limite connue). Sans interface physique visible : « VPN » seul.
+- Partage de connexion : au moins **deux** indices indépendants parmi : adressage de téléphone (passerelle `172.20.10.1`, `192.168.43.1`, `192.168.42.1`, `192.168.42.129`, ou réseau iPhone `172.20.10.0/28`, comptés ensemble comme un seul indice), nom d'interface de téléphone (« iPhone », « Android », « RNDIS »), adresse MAC de passerelle aléatoire (bit « administrée localement »). L'adressage seul ne suffit jamais : un partage iPhone en Wi-Fi dont la passerelle garde une adresse fixe reste « Wi-Fi » jusqu'à l'arrivée de la connexion limitée comme indice. Un routeur maillé à adresse aléatoire configuré en `192.168.43.1` serait pris pour un partage (risque accepté).
+- Identité d'un réseau (`NetworkIdentity`) : MAC de la passerelle + type de connexion, y compris sur un réseau IPv6 seul. Sans MAC résolue, le réseau garde son nom générique mais n'est pas reconnaissable d'une fois sur l'autre (`identify` rend `None`).
+- Après une coupure, le contexte est relu à chaque seconde : on peut revenir sur un autre réseau. La lecture se fait en même temps que les sondes.
 
 ## Complexité
 
