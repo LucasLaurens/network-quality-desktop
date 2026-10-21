@@ -17,10 +17,12 @@
         "width": 960,
         "height": 720,
         "minWidth": 640,
-        "minHeight": 480
+        "minHeight": 480,
+        "visible": false
       },
       {
         "label": "popover",
+        "create": false,
         "title": "État de la connexion",
         "url": "index.html?view=popover",
         "width": 320,

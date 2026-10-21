@@ -12,6 +12,17 @@ export const commands = {
 	openDashboard: () => __TAURI_INVOKE<void>("open_dashboard"),
 	/**  Closes the popover from the keyboard (Escape). */
 	closePopover: () => __TAURI_INVOKE<void>("close_popover"),
+	/**  The note shown in window mode; `None` when the tray works. */
+	readWindowModeTexts: () => __TAURI_INVOKE<{
+	message: string,
+	linkLabel: string,
+	dismissLabel: string,
+	quitLabel: string,
+} | null>("read_window_mode_texts"),
+	/**  Opens the extension page in the default browser. */
+	openTrayExtensionPage: () => __TAURI_INVOKE<void>("open_tray_extension_page"),
+	/**  Quits from the dashboard, the only way out in window mode. */
+	quitApp: () => __TAURI_INVOKE<void>("quit_app"),
 };
 
 /** Events */
@@ -61,6 +72,17 @@ export type MetricDisplay = {
 	gauge: Gauge | null,
 	/**  Shown under a metric close to its next threshold. */
 	hint: string | null,
+};
+
+/**
+ *  What window mode adds to the dashboard: a discreet note pointing to the extension, and a way
+ *  to quit, since there is no tray menu.
+ */
+export type WindowModeTexts = {
+	message: string,
+	linkLabel: string,
+	dismissLabel: string,
+	quitLabel: string,
 };
 
 /* Tauri Specta runtime */
