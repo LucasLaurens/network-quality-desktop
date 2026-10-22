@@ -46,7 +46,7 @@ pub use segment::{
     Fault, GatewayEcho, GatewayWindow, LOCAL_LATENCY_LIMIT, LOCAL_LOSS_LIMIT, LocalProblem,
     LocalSegment, Unmeasurable,
 };
-pub use settings::{Appearance, MeasurementServers, Settings};
+pub use settings::{Appearance, ColorScheme, MeasurementServers, Settings};
 pub use target::Target;
 pub use throughput::{
     Bitrate, Direction, ENOUGH_TRANSFER_TIME, Step, THROUGHPUT_CAP_DURATION, TestProfile,

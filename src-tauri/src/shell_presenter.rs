@@ -5,7 +5,9 @@ use std::sync::{Arc, Mutex, PoisonError};
 use application::{VerdictPresenter, VerdictView};
 use std::time::Duration;
 
-use domain::{ConnectionContext, Verdict, WifiLink};
+use application::ColorSchemeReader;
+use domain::{ColorScheme, ConnectionContext, Verdict, WifiLink};
+use infrastructure::SystemColorSchemeReader;
 use serde::Serialize;
 use specta::Type;
 use tauri::AppHandle;
@@ -97,11 +99,14 @@ pub struct ShellPresenter {
     menu: Arc<TrayMenu>,
     catalog: TextCatalog,
     store: DisplayStore,
-    shown: Mutex<Verdict>,
+    color_scheme: SystemColorSchemeReader,
+    /// What the icon shows: the verdict, in the colours of the system's scheme.
+    shown: Mutex<(Verdict, ColorScheme)>,
 }
 
 impl ShellPresenter {
-    /// `tray` must already show `Verdict::Measuring`, as built by `create_icon_image`.
+    /// `tray` must already show `Verdict::Measuring`, as built by `create_icon_image`, in the
+    /// colours of `scheme`.
     #[must_use]
     pub fn new(
         app: AppHandle,
@@ -110,6 +115,7 @@ impl ShellPresenter {
         catalog: TextCatalog,
         store: DisplayStore,
         connection: ConnectionStore,
+        scheme: ColorScheme,
     ) -> Self {
         Self {
             app,
@@ -118,16 +124,23 @@ impl ShellPresenter {
             menu,
             catalog,
             store,
-            shown: Mutex::new(Verdict::Measuring),
+            color_scheme: SystemColorSchemeReader,
+            shown: Mutex::new((Verdict::Measuring, scheme)),
         }
     }
 
+    /// Redrawn when the verdict or the system's scheme changes: the scheme is read each second,
+    /// so a switch to dark shows within a second, whatever the state. O(1) when nothing changed.
     fn update_tray(&self, verdict: Verdict, label: &str) {
+        let wanted = (verdict, self.color_scheme.read_color_scheme());
         let mut shown = self.shown.lock().unwrap_or_else(PoisonError::into_inner);
-        if *shown == verdict {
+        if *shown == wanted {
             return;
         }
-        if let Err(error) = self.tray.set_icon(Some(create_icon_image(verdict))) {
+        if let Err(error) = self
+            .tray
+            .set_icon(Some(create_icon_image(verdict, wanted.1)))
+        {
             eprintln!("Updating the menu-bar icon failed: {error}");
             return;
         }
@@ -135,7 +148,7 @@ impl ShellPresenter {
         if let Err(error) = self.tray.set_tooltip(Some(label)) {
             eprintln!("Updating the menu-bar tooltip failed: {error}");
         }
-        *shown = verdict;
+        *shown = wanted;
     }
 }
 
@@ -155,9 +168,9 @@ impl VerdictPresenter for ShellPresenter {
 }
 
 #[must_use]
-pub fn create_icon_image(verdict: Verdict) -> Image<'static> {
+pub fn create_icon_image(verdict: Verdict, scheme: ColorScheme) -> Image<'static> {
     Image::new_owned(
-        render_verdict_icon(verdict, ICON_SIZE),
+        render_verdict_icon(verdict, scheme, ICON_SIZE),
         ICON_SIZE,
         ICON_SIZE,
     )

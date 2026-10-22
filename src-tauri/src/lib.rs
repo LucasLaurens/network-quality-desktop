@@ -30,16 +30,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use application::{
-    Clock, EngineMessage, EnginePorts, MeasurementEngine, NetworkChangeWatcher, PowerEventSource,
-    list_default_targets, list_targets,
+    Clock, ColorSchemeReader, EngineMessage, EnginePorts, MeasurementEngine, NetworkChangeWatcher,
+    PowerEventSource, list_default_targets, list_targets,
 };
 use display::ConnectionDisplay;
 use domain::Verdict;
 use engine_inbox::EngineInbox;
 use infrastructure::{
     FallbackLatencyProbe, IcmpEchoSender, IcmpGatewayProbe, InterfaceChangeWatcher,
-    NetdevContextReader, SystemClock, SystemPowerEventSource, SystemTrayHost, SystemWifiReader,
-    TcpConnectionOpener, keep_measuring_in_background,
+    NetdevContextReader, SystemClock, SystemColorSchemeReader, SystemPowerEventSource,
+    SystemTrayHost, SystemWifiReader, TcpConnectionOpener, keep_measuring_in_background,
 };
 use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
@@ -162,11 +162,12 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(PopoverDismissal::default());
     let store = DisplayStore::new(initial.clone());
     app.manage(store.clone());
+    let scheme = SystemColorSchemeReader.read_color_scheme();
     let menu = Arc::new(TrayMenu::build(app, &initial, &settings, &catalog)?);
     app.manage(Arc::clone(&menu));
     // The icon is built in window mode too: a tray that appears later still gets its dot.
     let tray = TrayIconBuilder::with_id(TRAY_ID)
-        .icon(create_icon_image(Verdict::Measuring))
+        .icon(create_icon_image(Verdict::Measuring, scheme))
         .icon_as_template(false)
         .tooltip(describe_verdict(Verdict::Measuring, &catalog))
         .menu(menu.read_menu())
@@ -221,6 +222,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
                 catalog,
                 store,
                 connection_store,
+                scheme,
             ),
             context_reader: NetdevContextReader::new(route_reference),
             gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
