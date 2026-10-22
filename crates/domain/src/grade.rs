@@ -93,12 +93,9 @@ pub struct Thresholds {
 
 impl Thresholds {
     /// Defaults calibrated for video calls (ticket « Seuils de qualité pour la visio »).
-    #[must_use]
-    pub const fn for_video_calls() -> Self {
-        Self {
-            latency: GradeBounds::new(Duration::from_millis(100), Duration::from_millis(300)),
-            jitter: GradeBounds::new(Duration::from_millis(30), Duration::from_millis(50)),
-            loss: GradeBounds::new(LossRate::from_percent(1.0), LossRate::from_percent(5.0)),
-        }
-    }
+    pub const VIDEO_CALLS: Self = Self {
+        latency: GradeBounds::new(Duration::from_millis(100), Duration::from_millis(300)),
+        jitter: GradeBounds::new(Duration::from_millis(30), Duration::from_millis(50)),
+        loss: GradeBounds::new(LossRate::from_percent(1.0), LossRate::from_percent(5.0)),
+    };
 }

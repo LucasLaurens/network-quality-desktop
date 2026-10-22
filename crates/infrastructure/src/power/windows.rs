@@ -19,7 +19,7 @@ pub fn watch(on_event: PowerHandler) {
     let handler: &'static PowerHandler = Box::leak(Box::new(on_event));
     let parameters: &'static mut DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS =
         Box::leak(Box::new(DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS {
-            Callback: Some(on_power_change),
+            Callback: Some(relay_power_change),
             Context: std::ptr::from_ref(handler).cast_mut().cast(),
         }));
     let mut registration: *mut c_void = std::ptr::null_mut();
@@ -42,7 +42,7 @@ pub fn watch(on_event: PowerHandler) {
 /// Called by Windows on a thread of its own. The automatic resume always comes, the
 /// user-initiated one only sometimes: listening to it alone gives one wake per sleep. O(1) plus
 /// the engine's answer.
-unsafe extern "system" fn on_power_change(
+unsafe extern "system" fn relay_power_change(
     context: *const c_void,
     kind: u32,
     _setting: *const c_void,

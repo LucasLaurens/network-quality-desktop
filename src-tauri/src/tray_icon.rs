@@ -34,7 +34,7 @@ impl StateColour {
     ];
 
     #[cfg(test)]
-    pub const fn token_name(self) -> &'static str {
+    pub const fn to_token_name(self) -> &'static str {
         match self {
             Self::Solid => "--solid",
             Self::Unstable => "--unstable",
@@ -262,12 +262,12 @@ mod tests {
 
         // Act & Assert
         for colour in StateColour::ALL {
-            let declared = read_light_token(tokens, colour.token_name());
+            let declared = read_light_token(tokens, colour.to_token_name());
             assert_eq!(
                 declared,
                 colour.to_oklch(),
                 "{} drifted from tokens.css",
-                colour.token_name()
+                colour.to_token_name()
             );
         }
     }

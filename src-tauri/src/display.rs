@@ -438,7 +438,7 @@ mod tests {
     }
 
     fn create_view(verdict: Verdict, diagnosis: Diagnosis, latency: Duration) -> VerdictView {
-        let thresholds = Thresholds::for_video_calls();
+        let thresholds = Thresholds::VIDEO_CALLS;
         VerdictView {
             verdict,
             diagnosis,

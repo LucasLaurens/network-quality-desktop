@@ -48,27 +48,27 @@ fn create_aggregate(seconds: u32, latency_ms: u64) -> Aggregate {
 pub fn check_contract<R: MeasurementRepository + HistoryReader + HistoryStream>(
     create: impl Fn() -> R,
 ) {
-    adds_to_a_minute_already_kept(&mut create());
-    replaces_an_hour_already_kept(&mut create());
-    lists_rows_in_range_oldest_first(&mut create());
-    keeps_networks_apart(&mut create());
-    finds_hours_left_open(&mut create());
-    purges_only_old_minutes(&mut create());
-    keeps_old_minutes_whose_hour_is_not_kept(&mut create());
-    records_events_in_order(&mut create());
-    keeps_a_name_learnt_later(&mut create());
-    keeps_a_name_when_seen_again_without_it(&mut create());
-    learns_a_name_from_an_event(&mut create());
-    groups_networks_without_a_readable_gateway_by_kind(&mut create());
-    lists_the_rows_of_every_network_in_range(&mut create());
-    keeps_every_kind_of_event(&mut create());
-    keeps_throughput_tests_newest_first(&mut create());
-    erases_the_whole_history(&mut create());
+    check_adds_to_a_minute_already_kept(&mut create());
+    check_replaces_an_hour_already_kept(&mut create());
+    check_lists_rows_in_range_oldest_first(&mut create());
+    check_keeps_networks_apart(&mut create());
+    check_finds_hours_left_open(&mut create());
+    check_purges_only_old_minutes(&mut create());
+    check_keeps_old_minutes_whose_hour_is_not_kept(&mut create());
+    check_records_events_in_order(&mut create());
+    check_keeps_a_name_learnt_later(&mut create());
+    check_keeps_a_name_when_seen_again_without_it(&mut create());
+    check_learns_a_name_from_an_event(&mut create());
+    check_groups_networks_without_a_readable_gateway_by_kind(&mut create());
+    check_lists_the_rows_of_every_network_in_range(&mut create());
+    check_keeps_every_kind_of_event(&mut create());
+    check_keeps_throughput_tests_newest_first(&mut create());
+    check_erases_the_whole_history(&mut create());
 }
 
 /// Rates in whole kbit/s and round trips in whole milliseconds: the precision the storage keeps.
 /// The list goes newest first, for the dashboard; the stream oldest first, for an export.
-fn keeps_throughput_tests_newest_first(
+fn check_keeps_throughput_tests_newest_first(
     repository: &mut (impl MeasurementRepository + HistoryReader + HistoryStream),
 ) {
     // Arrange
@@ -121,7 +121,7 @@ fn keeps_throughput_tests_newest_first(
     assert_eq!(streamed, vec![older, newer]);
 }
 
-fn keeps_every_kind_of_event(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_keeps_every_kind_of_event(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
     let network = create_network(22, Some("Box"));
     let kinds = [
@@ -153,7 +153,7 @@ fn keeps_every_kind_of_event(repository: &mut (impl MeasurementRepository + Hist
     assert_eq!(read, kinds);
 }
 
-fn lists_the_rows_of_every_network_in_range(
+fn check_lists_the_rows_of_every_network_in_range(
     repository: &mut (impl MeasurementRepository + HistoryReader),
 ) {
     // Arrange
@@ -188,7 +188,9 @@ fn lists_the_rows_of_every_network_in_range(
     );
 }
 
-fn adds_to_a_minute_already_kept(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_adds_to_a_minute_already_kept(
+    repository: &mut (impl MeasurementRepository + HistoryReader),
+) {
     // Arrange
     let network = create_network(1, None);
     repository
@@ -208,7 +210,9 @@ fn adds_to_a_minute_already_kept(repository: &mut (impl MeasurementRepository + 
     assert_eq!(rows[0].1.seconds.solid, 60);
 }
 
-fn replaces_an_hour_already_kept(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_replaces_an_hour_already_kept(
+    repository: &mut (impl MeasurementRepository + HistoryReader),
+) {
     // Arrange
     let network = create_network(2, None);
     repository
@@ -228,7 +232,9 @@ fn replaces_an_hour_already_kept(repository: &mut (impl MeasurementRepository + 
     assert_eq!(rows, vec![(SOME_HOUR, merged)]);
 }
 
-fn lists_rows_in_range_oldest_first(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_lists_rows_in_range_oldest_first(
+    repository: &mut (impl MeasurementRepository + HistoryReader),
+) {
     // Arrange
     let network = create_network(3, None);
     for minute in [2, 0, 1] {
@@ -256,7 +262,7 @@ fn lists_rows_in_range_oldest_first(repository: &mut (impl MeasurementRepository
     assert_eq!(starts, vec![SOME_HOUR, SOME_HOUR + MINUTE]);
 }
 
-fn keeps_networks_apart(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_keeps_networks_apart(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
     let home = create_network(4, None);
     let office = create_network(5, None);
@@ -276,7 +282,7 @@ fn keeps_networks_apart(repository: &mut (impl MeasurementRepository + HistoryRe
     assert_eq!(office_rows[0].1.seconds.solid, 30);
 }
 
-fn finds_hours_left_open(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_finds_hours_left_open(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
     let network = create_network(6, None);
     repository
@@ -299,7 +305,7 @@ fn finds_hours_left_open(repository: &mut (impl MeasurementRepository + HistoryR
     assert_eq!(hours, vec![SOME_HOUR]);
 }
 
-fn purges_only_old_minutes(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_purges_only_old_minutes(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
     let network = create_network(7, None);
     repository
@@ -328,7 +334,7 @@ fn purges_only_old_minutes(repository: &mut (impl MeasurementRepository + Histor
     assert_eq!(hours.len(), 1);
 }
 
-fn records_events_in_order(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_records_events_in_order(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
     let network = create_network(8, Some("Box"));
     let started = HistoryEvent {
@@ -353,7 +359,7 @@ fn records_events_in_order(repository: &mut (impl MeasurementRepository + Histor
     assert_eq!(events, vec![started, ended]);
 }
 
-fn keeps_a_name_learnt_later(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_keeps_a_name_learnt_later(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
     let unnamed = create_network(9, None);
     let named = create_network(9, Some("Livebox"));
@@ -373,7 +379,7 @@ fn keeps_a_name_learnt_later(repository: &mut (impl MeasurementRepository + Hist
     assert_eq!(open[0].0.name.as_deref(), Some("Livebox"));
 }
 
-fn keeps_a_name_when_seen_again_without_it(
+fn check_keeps_a_name_when_seen_again_without_it(
     repository: &mut (impl MeasurementRepository + HistoryReader),
 ) {
     // Arrange
@@ -395,7 +401,9 @@ fn keeps_a_name_when_seen_again_without_it(
     assert_eq!(open[0].0.name.as_deref(), Some("Livebox"));
 }
 
-fn learns_a_name_from_an_event(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_learns_a_name_from_an_event(
+    repository: &mut (impl MeasurementRepository + HistoryReader),
+) {
     // Arrange
     let unnamed = create_network(11, None);
     repository
@@ -417,7 +425,7 @@ fn learns_a_name_from_an_event(repository: &mut (impl MeasurementRepository + Hi
     assert_eq!(open[0].0.name.as_deref(), Some("Bureau"));
 }
 
-fn groups_networks_without_a_readable_gateway_by_kind(
+fn check_groups_networks_without_a_readable_gateway_by_kind(
     repository: &mut (impl MeasurementRepository + HistoryReader),
 ) {
     // Arrange
@@ -448,7 +456,7 @@ fn groups_networks_without_a_readable_gateway_by_kind(
     assert_eq!(rows[0].1.seconds.solid, 60);
 }
 
-fn keeps_old_minutes_whose_hour_is_not_kept(
+fn check_keeps_old_minutes_whose_hour_is_not_kept(
     repository: &mut (impl MeasurementRepository + HistoryReader),
 ) {
     // Arrange
@@ -478,12 +486,12 @@ fn keeps_old_minutes_whose_hour_is_not_kept(
 ///
 /// When the repository breaks the contract.
 pub fn check_settings_contract<R: SettingsRepository>(create: impl Fn() -> R) {
-    reads_the_defaults_before_any_save(&create());
-    reads_back_what_was_saved(&mut create());
-    goes_back_to_the_public_servers(&mut create());
+    check_reads_the_defaults_before_any_save(&create());
+    check_reads_back_what_was_saved(&mut create());
+    check_goes_back_to_the_public_servers(&mut create());
 }
 
-fn reads_the_defaults_before_any_save(repository: &impl SettingsRepository) {
+fn check_reads_the_defaults_before_any_save(repository: &impl SettingsRepository) {
     // Act
     let settings = repository.read_settings().expect("settings");
 
@@ -491,7 +499,7 @@ fn reads_the_defaults_before_any_save(repository: &impl SettingsRepository) {
     assert_eq!(settings, Settings::default());
 }
 
-fn reads_back_what_was_saved(repository: &mut impl SettingsRepository) {
+fn check_reads_back_what_was_saved(repository: &mut impl SettingsRepository) {
     // Arrange
     let saved = Settings {
         launch_at_login: false,
@@ -508,7 +516,7 @@ fn reads_back_what_was_saved(repository: &mut impl SettingsRepository) {
     assert_eq!(repository.read_settings().expect("settings"), saved);
 }
 
-fn goes_back_to_the_public_servers(repository: &mut impl SettingsRepository) {
+fn check_goes_back_to_the_public_servers(repository: &mut impl SettingsRepository) {
     // Arrange
     repository
         .save_settings(&Settings {
@@ -531,7 +539,7 @@ fn goes_back_to_the_public_servers(repository: &mut impl SettingsRepository) {
     assert_eq!(settings.appearance, Appearance::Light);
 }
 
-fn erases_the_whole_history(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_erases_the_whole_history(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
     let network = create_network(24, Some("Box"));
     repository

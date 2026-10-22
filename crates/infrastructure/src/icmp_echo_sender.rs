@@ -18,7 +18,7 @@ impl EchoSender for IcmpEchoSender {
     async fn send_echo(&self, target: Target) -> EchoResult {
         // shortcut: one socket per echo (two per second); cache them per target if the cost shows.
         let requestor =
-            match IcmpEchoRequestor::new(target.address(), None, None, Some(ECHO_TIMEOUT)) {
+            match IcmpEchoRequestor::new(target.to_address(), None, None, Some(ECHO_TIMEOUT)) {
                 Ok(requestor) => requestor,
                 Err(error) if error.kind() == ErrorKind::PermissionDenied => {
                     return EchoResult::NotPermitted;

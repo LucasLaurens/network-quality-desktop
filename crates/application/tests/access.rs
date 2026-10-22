@@ -80,7 +80,7 @@ async fn takes_the_box_line_when_it_answers() {
         total_received: Some(9_000_000_000),
         total_sent: Some(700_000_000),
     };
-    let detector = InMemoryAccessDetector::answering(line);
+    let detector = InMemoryAccessDetector::from_line(line);
 
     // Act
     let reading = detect_access(&detector, &[], None, None).await;

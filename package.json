@@ -14,7 +14,7 @@
     "dev:web": "vite",
     "build:web": "vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.node.json",
-    "lint": "eslint src tests scripts vite.config.ts eslint.config.js --max-warnings 0",
+    "lint": "eslint src tests scripts vite.config.ts eslint.config.js --max-warnings 0 && node scripts/check-method-names.mjs",
     "lint:back": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings",
     "format": "prettier --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude --write . && cargo fmt --all",
     "format:check": "prettier --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude --check .",
