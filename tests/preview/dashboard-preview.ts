@@ -81,13 +81,32 @@ const evolution: EvolutionDisplay = {
 const summary: DashboardSummaryDisplay = {
   overview: {
     today: `Solide 84${NBSP}% du temps`,
+    todayCoverage: `mesuré 8${NBSP}h 40${NBSP}min sur 9${NBSP}h 12${NBSP}min`,
     outages: `1, à 13${NBSP}h${NBSP}48 (2${NBSP}min)`,
     worstMoment: `15${NBSP}h${NBSP}02, latence 210${NBSP}ms`,
     onNetworkSince: `3${NBSP}h 12${NBSP}min`,
   },
   networks: [
-    { label: 'Ethernet bureau', connection: 'Ethernet', solid: 96, unstable: 4, degraded: 0, p90: 14, loss: 0 },
-    { label: 'Livebox-4F2A', connection: 'Wi-Fi', solid: 81, unstable: 14, degraded: 5, p90: 38, loss: 0.3 },
+    {
+      label: 'Ethernet bureau',
+      connection: 'Ethernet',
+      solid: 96,
+      unstable: 4,
+      degraded: 0,
+      p90: 14,
+      loss: 0,
+      hours: 62,
+    },
+    {
+      label: 'Livebox-4F2A',
+      connection: 'Wi-Fi',
+      solid: 81,
+      unstable: 14,
+      degraded: 5,
+      p90: 38,
+      loss: 0.3,
+      hours: 140,
+    },
     {
       label: 'iPhone de Lucas',
       connection: 'Partage de connexion',
@@ -96,6 +115,7 @@ const summary: DashboardSummaryDisplay = {
       degraded: 13,
       p90: 118,
       loss: 1.1,
+      hours: 6,
     },
   ].map((network, index) => ({
     label: network.label,
@@ -105,6 +125,7 @@ const summary: DashboardSummaryDisplay = {
     sharesLabel: `${String(network.solid)}${NBSP}% Solide, ${String(network.unstable)}${NBSP}% Instable, ${String(network.degraded)}${NBSP}% Dégradée, 0${NBSP}% Hors ligne`,
     latencyP90: ms(network.p90),
     loss: percent(network.loss),
+    measured: `${String(network.hours)}${NBSP}h`,
     isCurrent: index === 1,
     isMostReliable: index === 0,
   })),
@@ -113,6 +134,7 @@ const summary: DashboardSummaryDisplay = {
 const firstRun: DashboardSummaryDisplay = {
   overview: {
     today: 'Pas encore assez de mesures',
+    todayCoverage: '',
     outages: 'Aucune',
     worstMoment: 'Pas encore assez de mesures',
     onNetworkSince: `6${NBSP}s`,

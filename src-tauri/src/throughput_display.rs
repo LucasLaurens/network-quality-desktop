@@ -251,7 +251,7 @@ mod tests {
     }
 
     #[test]
-    fn shows_a_dash_for_a_direction_not_measured() {
+    fn says_unknown_for_a_direction_not_measured() {
         // Arrange
         let catalog = TextCatalog::load();
         let record = create_record(None);
@@ -260,7 +260,7 @@ mod tests {
         let row = ThroughputRow::compose(record.utc, &record.result, PARIS, &catalog);
 
         // Assert
-        assert_eq!(row.download, "–");
+        assert_eq!(row.download, "inconnu");
     }
 
     #[test]

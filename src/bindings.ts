@@ -266,6 +266,8 @@ export type NetworkRowDisplay = {
 	sharesLabel: string,
 	latencyP90: string,
 	loss: string,
+	/**  How long the network was measured, which its shares rest on. */
+	measured: string,
 	isCurrent: boolean,
 	isMostReliable: boolean,
 };
@@ -273,6 +275,8 @@ export type NetworkRowDisplay = {
 /**  The four facts under the current state. */
 export type OverviewDisplay = {
 	today: string,
+	/**  What the share of the day rests on, « mesuré 18 h sur 24 h »; empty before any measure. */
+	todayCoverage: string,
 	outages: string,
 	worstMoment: string,
 	onNetworkSince: string,

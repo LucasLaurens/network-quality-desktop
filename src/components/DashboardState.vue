@@ -26,7 +26,10 @@ const { display, overview, updatedAt } = defineProps<{
     <dl v-if="overview" class="overview" aria-label="Vue d'ensemble">
       <div class="fact">
         <dt>Aujourd'hui</dt>
-        <dd class="num" data-fact="today">{{ overview.today }}</dd>
+        <dd class="num" data-fact="today">
+          {{ overview.today }}
+          <span v-if="overview.todayCoverage" class="coverage" data-coverage>{{ overview.todayCoverage }}</span>
+        </dd>
       </div>
       <div class="fact">
         <dt>Coupures aujourd'hui</dt>
@@ -116,5 +119,12 @@ dd {
   .overview {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+.coverage {
+  display: block;
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 400;
 }
 </style>

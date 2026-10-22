@@ -18,6 +18,7 @@ const STATES = ['solid', 'unstable', 'degraded', 'offline'] as const satisfies r
           <th>Temps par état</th>
           <th class="right">Latence p90</th>
           <th class="right">Perte</th>
+          <th class="right">Mesuré</th>
         </tr>
       </thead>
       <tbody>
@@ -46,6 +47,7 @@ const STATES = ['solid', 'unstable', 'degraded', 'offline'] as const satisfies r
           </td>
           <td class="right num">{{ network.latencyP90 }}</td>
           <td class="right num">{{ network.loss }}</td>
+          <td class="right num" data-measured>{{ network.measured }}</td>
         </tr>
       </tbody>
     </table>

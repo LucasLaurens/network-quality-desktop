@@ -133,6 +133,7 @@ duration-days = { $days } j
 duration-days-hours = { $days } j { $hours } h
 today-solid-share = Solide { $value } % du temps
 today-not-enough = Pas encore assez de mesures
+today-coverage = mesuré { $measured } sur { $elapsed }
 outages-none = Aucune
 outages-ongoing = En cours depuis { $duration }
 outages-one = 1, à { $time } ({ $duration })
@@ -150,7 +151,7 @@ chart-network-change = Changement de réseau : { $network }
 chart-coverage = Mesuré { $value } % de la période
 share-solid = { $value } % Solide
 shares = { $solid } % Solide, { $unstable } % Instable, { $degraded } % Dégradée, { $offline } % Hors ligne
-value-unknown = –
+value-unknown = inconnu
 
 ## Settings
 

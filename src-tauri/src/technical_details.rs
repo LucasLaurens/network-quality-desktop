@@ -415,7 +415,10 @@ mod tests {
         // Assert
         let rows = &details.section.rows;
         assert_eq!(rows.len(), 2, "the access and the one rate known");
-        assert_eq!(rows[1].value, insert_no_break_spaces("↓ 17~Mbit/s, ↑ –"));
+        assert_eq!(
+            rows[1].value,
+            insert_no_break_spaces("↓ 17~Mbit/s, ↑ inconnu")
+        );
     }
 
     #[test]
