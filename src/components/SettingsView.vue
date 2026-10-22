@@ -318,7 +318,6 @@ onMounted(async () => {
 
 <style scoped>
 .settings {
-  max-width: 640px;
   margin-top: var(--s5);
 }
 

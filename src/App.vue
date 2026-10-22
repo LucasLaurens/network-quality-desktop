@@ -154,6 +154,8 @@ onUnmounted(() => {
 <style scoped>
 .window {
   max-width: var(--content-max);
+  /* Centred: a maximised window keeps its column in the middle, not against the left edge. */
+  margin-inline: auto;
   padding: var(--s6);
 }
 
