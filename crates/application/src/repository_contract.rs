@@ -529,7 +529,7 @@ fn check_goes_back_to_the_public_servers(repository: &mut impl SettingsRepositor
     // Arrange
     repository
         .save_settings(&Settings {
-            servers: MeasurementServers::Custom(generate_targets(1)[0]),
+            servers: MeasurementServers::Custom(generate_targets::<1>()[0]),
             ..Settings::default()
         })
         .expect("a custom server");

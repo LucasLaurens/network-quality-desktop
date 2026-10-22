@@ -3,21 +3,29 @@
 import { expect, test, type Page } from '@playwright/test'
 import tauriConfig from '../../src-tauri/tauri.conf.json' with { type: 'json' }
 
-const [MAIN, POPOVER] = tauriConfig.app.windows
+/** A window of `tauri.conf.json`, by its label; a missing one stops the run rather than measure 0 × 0. */
+function findWindow(label: string): (typeof tauriConfig.app.windows)[number] {
+  const window = tauriConfig.app.windows.find((entry) => entry.label === label)
+  if (!window) throw new Error(`no ${label} window in tauri.conf.json`)
+  return window
+}
+
+const MAIN = findWindow('main')
+const POPOVER = findWindow('popover')
 /** Half a pixel either way: sub-pixel layout, not a misalignment. */
 const TOLERANCE = 0.5
 const POPOVER_SCENARIOS = ['degraded', 'offline', 'undetermined']
 
 /**
- * Every element that runs past the window's right edge outside a scrolling box, or whose text a
- * clipping box cuts. O(e) for e elements.
+ * Every element that runs past the window's right edge unless a box within the window clips it,
+ * and every text a clipping box cuts. O(e·d) for e elements d deep.
  */
 function findOverflows(page: Page): Promise<string[]> {
   return page.evaluate((tolerance) => {
-    const isScrolling = (element: Element): boolean => ['auto', 'scroll'].includes(getComputedStyle(element).overflowX)
-    const hasScrollingAncestor = (element: Element): boolean => {
+    const isClipping = (element: Element): boolean => getComputedStyle(element).overflowX !== 'visible'
+    const isClippedWithinTheWindow = (element: Element): boolean => {
       for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-        if (isScrolling(parent)) return true
+        if (isClipping(parent) && parent.getBoundingClientRect().right <= window.innerWidth + tolerance) return true
       }
       return false
     }
@@ -28,15 +36,22 @@ function findOverflows(page: Page): Promise<string[]> {
     for (const element of document.querySelectorAll('body *')) {
       const box = element.getBoundingClientRect()
       if (box.width === 0) continue
-      if (box.right > window.innerWidth + tolerance && !hasScrollingAncestor(element)) {
+      if (box.right > window.innerWidth + tolerance && !isClippedWithinTheWindow(element)) {
         found.push(`past the edge: ${describe(element)}`)
       }
-      if (getComputedStyle(element).overflowX === 'hidden' && element.scrollWidth > element.clientWidth + 1) {
-        found.push(`cut: ${describe(element)}`)
-      }
+      const style = getComputedStyle(element)
+      const cutsSideways = ['hidden', 'clip'].includes(style.overflowX) && element.scrollWidth > element.clientWidth + 1
+      const cutsDownwards =
+        ['hidden', 'clip'].includes(style.overflowY) && element.scrollHeight > element.clientHeight + 1
+      if (cutsSideways || cutsDownwards) found.push(`cut: ${describe(element)}`)
     }
     return found
   }, TOLERANCE)
+}
+
+/** Whether the page needs scrolling down to show everything. */
+function isTallerThanTheWindow(page: Page): Promise<boolean> {
+  return page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight)
 }
 
 /** Opens every folded part (help, technical details, chart values): folded, it measures nothing. */
@@ -54,9 +69,9 @@ function readLeftEdges(page: Page, selector: string): Promise<number[]> {
 }
 
 function expectAligned(edges: number[]): void {
-  expect(edges.length).toBeGreaterThan(1)
-  const first = edges[0] ?? 0
-  for (const edge of edges) expect(Math.abs(edge - first)).toBeLessThanOrEqual(TOLERANCE)
+  const [first, ...others] = edges
+  expect(others.length).toBeGreaterThan(0)
+  for (const edge of others) expect(Math.abs(edge - (first ?? edge))).toBeLessThanOrEqual(TOLERANCE)
 }
 
 /** Whether the page paints the theme the project asks for: a dark or a light background. */
@@ -80,22 +95,25 @@ async function expectTheme(page: Page, colorScheme: string): Promise<void> {
 for (const scenario of POPOVER_SCENARIOS) {
   test(`the popover holds in its window (${scenario})`, async ({ page }, testInfo) => {
     // Arrange
-    await page.setViewportSize({ width: POPOVER?.width ?? 0, height: POPOVER?.height ?? 0 })
+    await page.setViewportSize({ width: POPOVER.width, height: POPOVER.height })
 
     // Act
     await page.goto(`/tests/preview/popover.html?scenario=${scenario}&tests=on`)
     await page.locator('[data-primary]').waitFor()
+    const isTallerFolded = await isTallerThanTheWindow(page)
     await unfoldEverything(page)
 
     // Assert
+    // Folded, it fits its window; a help the user unfolds may scroll.
+    expect(isTallerFolded).toBe(false)
     expect(await findOverflows(page)).toEqual([])
     await expectTheme(page, String(testInfo.project.use.colorScheme))
   })
 }
 
 for (const size of [
-  { width: MAIN?.width ?? 0, height: MAIN?.height ?? 0 },
-  { width: MAIN?.minWidth ?? 0, height: MAIN?.minHeight ?? 0 },
+  { width: MAIN.width, height: MAIN.height },
+  { width: MAIN.minWidth ?? MAIN.width, height: MAIN.minHeight ?? MAIN.height },
 ]) {
   test(`the dashboard lines up its sections at ${String(size.width)} px`, async ({ page }, testInfo) => {
     // Arrange

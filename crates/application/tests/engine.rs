@@ -59,9 +59,7 @@ fn create_harness() -> Harness {
     let wifi = InMemoryWifi::default();
     let history = InMemoryHistoryRecorder::default();
     let notifier = InMemoryNotifier::default();
-    let [first_target, second_target, own_server] = generate_targets(3)[..] else {
-        unreachable!("three targets")
-    };
+    let [first_target, second_target, own_server] = generate_targets();
     let engine = MeasurementEngine::new(
         EnginePorts {
             probe: network.clone(),
@@ -1488,7 +1486,7 @@ async fn discards_the_probes_that_waited_through_a_sleep() {
     let clock = ManualClock::default();
     let network = InMemoryNetwork::default();
     let presenter = InMemoryVerdictPresenter::default();
-    let target = generate_targets(1)[0];
+    let [target] = generate_targets();
     let dozing = DozingNetwork {
         network: network.clone(),
         clock: clock.clone(),

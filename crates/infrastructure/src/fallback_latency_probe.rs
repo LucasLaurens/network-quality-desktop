@@ -175,7 +175,7 @@ mod tests {
     use super::*;
 
     /// Generated: the probe must not depend on which target it measures.
-    static TARGET: LazyLock<Target> = LazyLock::new(|| generate_targets(1)[0]);
+    static TARGET: LazyLock<Target> = LazyLock::new(|| generate_targets::<1>()[0]);
     const ECHO_ROUND_TRIP: Duration = Duration::from_millis(18);
     const TCP_ROUND_TRIP: Duration = Duration::from_millis(25);
 

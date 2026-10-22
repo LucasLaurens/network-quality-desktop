@@ -44,7 +44,7 @@ windows = { workspace = true, features = [
 
 [dev-dependencies]
 application = { workspace = true, features = ["test-support"] }
-tokio = { workspace = true, features = ["net", "macros", "rt", "time"] }
+tokio = { workspace = true, features = ["net", "macros", "rt"] }
 
 [lints]
 workspace = true

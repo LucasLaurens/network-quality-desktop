@@ -78,8 +78,6 @@ impl EngineInbox {
         }
     }
 
-    /// Before a sleep, returns once the minute in progress is written or the delay ran out; a
-    /// wake is only posted: the engine catches up at its next tick.
     /// Relays the system's network changes and power events to the engine, for the life of the app.
     pub fn follow_system_events(
         self,
@@ -94,6 +92,8 @@ impl EngineInbox {
         power.watch(move |event| self.relay_power_event(event));
     }
 
+    /// Before a sleep, returns once the minute in progress is written or the delay ran out; a
+    /// wake is only posted: the engine catches up at its next tick.
     pub fn relay_power_event(&self, event: PowerEvent) {
         match event {
             PowerEvent::WillSleep => {

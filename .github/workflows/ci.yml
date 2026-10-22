@@ -17,6 +17,8 @@ jobs:
       matrix:
         os: [ubuntu-22.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # Windows takes about 12 minutes; past an hour, something hangs.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
@@ -47,6 +49,7 @@ jobs:
   visual:
     name: Mise en page (clair et sombre)
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6

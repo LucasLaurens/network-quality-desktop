@@ -6,9 +6,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 
-use fake::faker::internet::en::IPv4;
 use fake::faker::lorem::en::Word;
 use fake::{Fake, Faker};
 
@@ -737,16 +736,24 @@ pub fn generate_network_name() -> String {
     format!("{}-{:04X}", Word().fake::<String>(), Faker.fake::<u16>())
 }
 
-/// `count` different addresses, for measurement targets or an own server. O(count²): a test asks
-/// for a handful.
+/// `N` different addresses, for measurement targets or an own server. O(N²): a test asks for a
+/// handful.
 #[must_use]
-pub fn generate_targets(count: usize) -> Vec<Target> {
-    let mut targets: Vec<Target> = Vec::with_capacity(count);
-    while targets.len() < count {
-        let target = Target::parse(&IPv4().fake::<String>());
+pub fn generate_targets<const N: usize>() -> [Target; N] {
+    let mut targets: Vec<Target> = Vec::with_capacity(N);
+    while targets.len() < N {
+        let target = Target::new(IpAddr::V4(generate_address()));
         if !targets.contains(&target) {
             targets.push(target);
         }
     }
     targets
+        .try_into()
+        .unwrap_or_else(|_| unreachable!("as many targets as asked"))
+}
+
+/// An address on the local network, a box's for instance.
+#[must_use]
+pub fn generate_address() -> Ipv4Addr {
+    Ipv4Addr::from(Faker.fake::<u32>())
 }

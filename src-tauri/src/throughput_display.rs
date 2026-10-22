@@ -184,11 +184,12 @@ pub fn format_one_decimal(value: f64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
     use std::time::Duration;
 
     use application::NetworkKey;
     use domain::{MacAddress, Medium, Metering};
+
+    use application::test_support::generate_address;
 
     use super::*;
 
@@ -207,7 +208,7 @@ mod tests {
             kind,
             is_vpn: false,
             gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, 0x31]),
-            gateway_address: Some(Ipv4Addr::new(192, 168, 1, 1)),
+            gateway_address: Some(generate_address()),
             metering,
             medium: Medium::WiFi,
         }
