@@ -51,6 +51,10 @@ Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; l
 - Les calculs sont des fonctions de la couche application (`dashboard.rs`) : `read_evolution` (seaux de largeur fixe, vides là où rien n'a été mesuré, changements de réseau, couverture), `read_day_overview` (journée, coupures, pire minute, arrivée sur le réseau courant), `list_network_summaries` (30 jours par réseau, le plus fiable). Les périodes de 7 et 30 jours lisent les heures closes puis les minutes de l'heure en cours. La dernière heure lit les minutes écrites avant le début de la mémoire, puis la mémoire, sans compter deux fois la minute où la mémoire commence.
 - Deux événements `network_changed` successifs du même type, dont l'un n'a pas de MAC (lue plus tard) et dont les noms ne diffèrent pas, ne sont pas un changement (`NetworkKey::is_likely_same`). Le regroupement par réseau suit l'identité stockée (`is_same_identity`).
 
+## Tests de débit
+
+- Table `throughput_tests` (première migration) : `ts`, réseau, `profile` (`quick`, `full`), `down_kbps`, `up_kbps`, `loaded_latency_ms` (`NULL` pour un sens non mesuré), `bytes`, `duration_ms`, `status` (`done` : seuls les tests finis sont gardés). Écrits par le fil d'écriture (`HistoryCommand::RecordThroughput`), lus par le tableau de bord (`HistoryReader::list_throughput_tests`, du plus récent au plus ancien). Les entiers passent en `i64` à la frontière SQLite. La suite de contrat les couvre.
+
 ## Réglages
 
 - La ligne typée `settings` (id 1, créée par la première migration) garde `autostart`, `theme` (`system`, `light`, `dark`), `notify` et `ping_target` (adresse IP du serveur personnalisé, `NULL` pour les serveurs publics). Une adresse illisible relue retombe sur les serveurs publics.

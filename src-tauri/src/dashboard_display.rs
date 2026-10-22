@@ -463,7 +463,7 @@ fn compose_network_name(network: &NetworkKey, catalog: &TextCatalog) -> String {
         .unwrap_or_else(|| catalog.render(name_key, None))
 }
 
-fn format_or_unknown<T: Displayable>(value: Option<T>, catalog: &TextCatalog) -> String {
+pub fn format_or_unknown<T: Displayable>(value: Option<T>, catalog: &TextCatalog) -> String {
     value.map_or_else(
         || catalog.render("value-unknown", None),
         |value| value.format(catalog),
@@ -486,6 +486,17 @@ pub fn format_time_of_day(utc: i64, offset: i64, catalog: &TextCatalog) -> Strin
         format!("{:02}", seconds % SECONDS_PER_HOUR / SECONDS_PER_MINUTE),
     );
     catalog.render("time-of-day", Some(&args))
+}
+
+/// "12/10, 14 h 05" in the user's time zone. O(1).
+pub fn format_date_time(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
+    let local = utc + offset;
+    let (month, day) = convert_days_to_month_day(local.div_euclid(SECONDS_PER_DAY));
+    let mut args = FluentArgs::new();
+    args.set("day", format!("{day:02}"));
+    args.set("month", format!("{month:02}"));
+    args.set("time", format_time_of_day(utc, offset, catalog));
+    catalog.render("date-time", Some(&args))
 }
 
 /// "12/10, 14 h" in the user's time zone. O(1).

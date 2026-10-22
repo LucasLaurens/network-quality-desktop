@@ -59,6 +59,26 @@ export const commands = {
 	 *  storage failure.
 	 */
 	saveSettings: (form: SettingsForm, utcOffsetSeconds: number) => typedError<string, string>(__TAURI_INVOKE("save_settings", { form, utcOffsetSeconds })),
+	/**
+	 *  The dashboard's throughput section: whether tests are allowed, what they may use, and the
+	 *  last tests.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The history could not be read.
+	 */
+	readThroughputPanel: (utcOffsetSeconds: number) => typedError<ThroughputPanel, string>(__TAURI_INVOKE("read_throughput_panel", { utcOffsetSeconds })),
+	/**
+	 *  Runs the test the user clicked. Where data counts, the first click only returns the warning:
+	 *  the test runs once the user confirms, the connection read again at that moment. The engine
+	 *  stops measuring while the line is full, then keeps the result.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The sentence shown under the buttons: tests not allowed, one already running, or a server
+	 *  that did not answer.
+	 */
+	runThroughputTest: (profile: ProfileChoice, isConfirmed: boolean, utcOffsetSeconds: number) => typedError<ThroughputOutcome, string>(__TAURI_INVOKE("run_throughput_test", { profile, isConfirmed, utcOffsetSeconds })),
 };
 
 /** Events */
@@ -189,6 +209,8 @@ export type PathDisplay = {
 /**  The period picked above the chart. */
 export type PeriodChoice = "hour" | "day" | "week" | "month";
 
+export type ProfileChoice = "quick" | "full";
+
 export type SegmentDisplay = {
 	/**  The link and its latency, e.g. "Wi-Fi, 4 ms". */
 	label: string,
@@ -217,6 +239,7 @@ export type SettingsForm = {
 	/**  The address typed for the user's own server; `None` for the public servers. */
 	ownServer: string | null,
 	notifiesOnDegradation: boolean,
+	allowsThroughputTests: boolean,
 };
 
 export type StateLabelDisplay = {
@@ -230,6 +253,27 @@ export type StateShares = {
 	unstable: number | null,
 	degraded: number | null,
 	offline: number | null,
+};
+
+/**  What a click on a test gives: its row, or the warning to accept first where data counts. */
+export type ThroughputOutcome = { kind: "done"; row: ThroughputRow } | { kind: "needsConfirmation"; warning: string };
+
+export type ThroughputPanel = {
+	/**  The setting « Autoriser les tests de débit ». */
+	isAllowed: boolean,
+	/**  Under the buttons: when tests leave, and how much data each may use. */
+	note: string,
+	/**  Newest first. */
+	tests: ThroughputRow[],
+};
+
+export type ThroughputRow = {
+	when: string,
+	profile: string,
+	download: string,
+	upload: string,
+	loadedLatency: string,
+	data: string,
 };
 
 /**

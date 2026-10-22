@@ -385,3 +385,42 @@ fn measures_no_jitter_across_a_gap() {
     // Assert
     assert_eq!(recorder.list_saved_minutes()[0].2.jitter_count, 0);
 }
+
+#[test]
+fn writes_a_throughput_test_under_its_network() {
+    // Arrange
+    let home = create_key(14);
+    let record = application::ThroughputRecord {
+        utc: SOME_HOUR + 30,
+        network: home,
+        result: domain::ThroughputResult {
+            profile: domain::TestProfile::Quick,
+            download: Some(domain::Bitrate::from_bits_per_second(50_000_000)),
+            upload: Some(domain::Bitrate::from_bits_per_second(12_000_000)),
+            loaded_latency: Some(Duration::from_millis(41)),
+            bytes: 4_200_000,
+            duration: Duration::from_millis(3_200),
+        },
+    };
+    let mut writer = HistoryWriter::new(InMemoryMeasurementRepository::default());
+
+    // Act
+    writer
+        .apply(
+            HistoryCommand::RecordThroughput(record.clone()),
+            SOME_HOUR + 31,
+        )
+        .expect("a write");
+
+    // Assert
+    let repository = writer.into_repository();
+    assert_eq!(
+        application::HistoryReader::list_throughput_tests(
+            &repository,
+            SOME_HOUR,
+            SOME_HOUR + MINUTE
+        )
+        .expect("tests"),
+        vec![record]
+    );
+}

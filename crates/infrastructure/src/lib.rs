@@ -2,6 +2,7 @@
 //! The only crate allowed to contain `unsafe` code, for native FFI.
 
 mod background;
+mod cloudflare_throughput_probe;
 mod fallback_latency_probe;
 mod history;
 mod icmp_echo_sender;
@@ -16,6 +17,7 @@ mod tcp_connection_opener;
 mod wifi;
 
 pub use background::keep_measuring_in_background;
+pub use cloudflare_throughput_probe::CloudflareThroughputProbe;
 pub use fallback_latency_probe::{ConnectionOpener, EchoResult, EchoSender, FallbackLatencyProbe};
 pub use history::{OpenedHistory, SqliteHistoryRecorder, SqliteMeasurementRepository};
 pub use icmp_echo_sender::IcmpEchoSender;

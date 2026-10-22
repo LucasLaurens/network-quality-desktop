@@ -5,8 +5,8 @@ use std::time::Duration;
 use domain::{
     ConnectionContext, ConnectionKind, DegradationWatch, Diagnosis, Fault, GatewayWindow, Grade,
     GradeBounds, Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause,
-    Metric, OfflineDetector, ProbeOutcome, Scalable, Settings, Target, Thresholds, Unmeasurable,
-    Verdict, WifiLink, compute_median,
+    Metric, OfflineDetector, ProbeOutcome, Scalable, Settings, THROUGHPUT_CAP_DURATION, Target,
+    Thresholds, ThroughputResult, Unmeasurable, Verdict, WifiLink, compute_median,
 };
 use futures_util::future::{join, join_all, join3};
 use tokio::sync::{mpsc, oneshot};
@@ -25,6 +25,9 @@ const GATEWAY_ANSWER_SECONDS: usize = 5;
 /// A wall-clock jump this long between two ticks, or during one, means the computer slept: a
 /// slow tick lasts a probe timeout, never this long.
 const WAKE_GAP_SECONDS: i64 = 10;
+/// Longer than any test (15 s per direction, plus the transfer in progress): past it, a test
+/// that never said it ended no longer silences the measurement.
+const THROUGHPUT_TEST_MAX_SECONDS: i64 = 60;
 
 /// Whether the engine measures: it stops at the sleep notice and starts again at the wake.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +64,12 @@ pub enum EngineMessage {
     Wake,
     /// The user saved the settings: other servers mean measuring again from scratch.
     SettingsChanged(Settings),
+    /// A throughput test the user started fills the line: the probes would measure the test, not
+    /// the connection, so nothing is measured until it ends.
+    ThroughputStarted,
+    /// The test ended, with its result unless it failed: kept, and a slow one holds the verdict
+    /// down.
+    ThroughputEnded(Option<ThroughputResult>),
 }
 
 /// One metric as shown to the user: its value, its grade and whether it is close to getting worse.
@@ -133,6 +142,13 @@ pub struct MeasurementEngine<P, C, V, R, G, W, H, N> {
     samples_since_restart: u32,
     measuring_cause: MeasuringCause,
     wakefulness: Wakefulness,
+    /// The grade a slow throughput test holds the verdict at, and since when (wall clock: the
+    /// monotonic one stops during a sleep).
+    throughput_cap: Option<(Grade, i64)>,
+    /// When the running throughput test started.
+    testing_since: Option<i64>,
+    /// The verdict measured, before any cap: what a degradation is judged on.
+    measured_verdict: Verdict,
 }
 
 /// The ports the engine talks to, gathered so the constructor stays readable.
@@ -201,6 +217,9 @@ where
             wakefulness: Wakefulness::Awake {
                 last_tick_utc: None,
             },
+            throughput_cap: None,
+            testing_since: None,
+            measured_verdict: Verdict::Measuring,
         }
     }
 
@@ -222,6 +241,15 @@ where
                 self.wakefulness = Wakefulness::Asleep { since: utc };
             }
             EngineMessage::SettingsChanged(settings) => self.apply_settings(settings),
+            EngineMessage::ThroughputStarted => {
+                self.testing_since = Some(self.clock.read_utc_seconds());
+            }
+            EngineMessage::ThroughputEnded(result) => {
+                self.testing_since = None;
+                if let Some(result) = result {
+                    self.record_throughput(result);
+                }
+            }
             // Already awake: the gap between two ticks came first, and was handled then.
             EngineMessage::Wake => {
                 if matches!(self.wakefulness, Wakefulness::Asleep { .. }) {
@@ -265,6 +293,13 @@ where
         self.wakefulness = Wakefulness::Awake {
             last_tick_utc: Some(utc),
         };
+        if self
+            .testing_since
+            .is_some_and(|since| utc - since < THROUGHPUT_TEST_MAX_SECONDS)
+        {
+            return;
+        }
+        self.testing_since = None;
         let is_context_due = self.seconds_since_context >= CONTEXT_REFRESH_SECONDS;
         let gateway = self.find_gateway();
         // The context and the gateway are read alongside the probes: none delays the others.
@@ -317,12 +352,13 @@ where
         self.present(&view);
     }
 
-    /// Shows the view, and announces a durable degradation when the user wants it. O(1).
+    /// Shows the view, and announces a durable degradation of the measured verdict when the user
+    /// wants it: a slow test the user just ran is no news. O(1).
     fn present(&mut self, view: &VerdictView) {
         self.presenter.present(view);
         let is_degraded = self
             .degradation
-            .observe(view.verdict, self.clock.read_now());
+            .observe(self.measured_verdict, self.clock.read_now());
         if is_degraded && self.notifies_on_degradation {
             self.notifier.notify_degradation(view);
         }
@@ -337,6 +373,8 @@ where
                     current.complete_with(&previous)
                 }
                 Some(_) => {
+                    // The test measured the line left behind.
+                    self.throughput_cap = None;
                     self.restart_for(MeasuringCause::NewNetwork);
                     current
                 }
@@ -439,6 +477,7 @@ where
             .any(|outcome| *outcome != ProbeOutcome::Unreachable);
         if self.offline.record_second(any_reachable) {
             self.restart();
+            self.measured_verdict = Verdict::Offline;
             return VerdictView {
                 verdict: Verdict::Offline,
                 diagnosis: self.diagnose_offline(),
@@ -500,7 +539,11 @@ where
             local,
             wifi_in_use,
         );
+        self.measured_verdict = verdict;
+        let capped = self.find_throughput_cap(verdict);
+        let verdict = capped.map_or(verdict, Verdict::Graded);
         let diagnosis = match verdict {
+            _ if capped.is_some() => Diagnosis::LowThroughput,
             Verdict::Offline => self.diagnose_offline(),
             Verdict::Measuring => self.compose_measuring_diagnosis(),
             Verdict::Graded(displayed) => diagnose_graded(displayed, &grades, fault),
@@ -514,6 +557,36 @@ where
             context: self.context,
             local,
             wifi: self.wifi.clone(),
+        }
+    }
+
+    /// Keeps the test under the network it measured; a slow one awake holds the verdict down, a
+    /// fast one lifts an earlier cap. O(1).
+    fn record_throughput(&mut self, result: ThroughputResult) {
+        let utc = self.clock.read_utc_seconds();
+        self.history
+            .record_throughput(utc, result, &self.history_recorder);
+        if matches!(self.wakefulness, Wakefulness::Asleep { .. }) {
+            return;
+        }
+        self.throughput_cap = result
+            .compute_grade()
+            .filter(|grade| *grade > Grade::Solid)
+            .map(|grade| (grade, utc));
+    }
+
+    /// The grade a recent slow test holds a measured verdict at, when it is worse; an expired cap
+    /// is dropped. O(1).
+    fn find_throughput_cap(&mut self, verdict: Verdict) -> Option<Grade> {
+        let (grade, since) = self.throughput_cap?;
+        let elapsed = Duration::from_secs((self.clock.read_utc_seconds() - since).unsigned_abs());
+        if elapsed >= THROUGHPUT_CAP_DURATION {
+            self.throughput_cap = None;
+            return None;
+        }
+        match verdict {
+            Verdict::Graded(shown) if grade > shown => Some(grade),
+            Verdict::Graded(_) | Verdict::Measuring | Verdict::Offline => None,
         }
     }
 
@@ -563,6 +636,7 @@ where
         };
         self.restart_for(MeasuringCause::Wake);
         self.offline = OfflineDetector::default();
+        self.measured_verdict = Verdict::Measuring;
         self.history.record_wake(utc, &self.history_recorder);
         self.present(&VerdictView {
             verdict: Verdict::Measuring,

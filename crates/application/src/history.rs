@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use domain::{
     Aggregate, ConnectionContext, ConnectionKind, CountedState, Granularity, MacAddress,
-    MinuteAccumulator, SecondPoint, SecondRing, SecondSample, Verdict,
+    MinuteAccumulator, SecondPoint, SecondRing, SecondSample, ThroughputResult, Verdict,
 };
 
 use crate::{HistoryRecorder, MeasurementRepository};
@@ -69,8 +69,17 @@ pub enum HistoryCommand {
         aggregate: Aggregate,
     },
     RecordEvent(HistoryEvent),
+    RecordThroughput(ThroughputRecord),
     /// Answered once every earlier command is written.
     Flush(SyncSender<()>),
+}
+
+/// A throughput test, under the network it measured.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThroughputRecord {
+    pub utc: i64,
+    pub network: NetworkKey,
+    pub result: ThroughputResult,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,6 +134,9 @@ impl<R: MeasurementRepository> HistoryWriter<R> {
                 Ok(())
             }
             HistoryCommand::RecordEvent(event) => self.repository.record_event(&event),
+            HistoryCommand::RecordThroughput(record) => {
+                self.repository.record_throughput_test(&record)
+            }
             HistoryCommand::Flush(answer) => {
                 // The asker may have given up waiting: nothing to do then.
                 let _ = answer.send(());
@@ -274,6 +286,20 @@ impl HistoryTracker {
         }
         self.record_event(utc, EventKind::Sleep, recorder);
         self.flush(answer, recorder);
+    }
+
+    /// O(1).
+    pub fn record_throughput(
+        &self,
+        utc: i64,
+        result: ThroughputResult,
+        recorder: &impl HistoryRecorder,
+    ) {
+        recorder.record(HistoryCommand::RecordThroughput(ThroughputRecord {
+            utc,
+            network: self.network.clone(),
+            result,
+        }));
     }
 
     /// No jitter is measured across the sleep. An outage still open (the sleep came unannounced)

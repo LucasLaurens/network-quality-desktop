@@ -24,6 +24,7 @@ pub struct SettingsForm {
     /// The address typed for the user's own server; `None` for the public servers.
     pub own_server: Option<String>,
     pub notifies_on_degradation: bool,
+    pub allows_throughput_tests: bool,
 }
 
 impl SettingsForm {
@@ -42,6 +43,7 @@ impl SettingsForm {
                 .to_own_target()
                 .map(|target| target.address().to_string()),
             notifies_on_degradation: settings.notifies_on_degradation,
+            allows_throughput_tests: settings.allows_throughput_tests,
         }
     }
 
@@ -66,6 +68,7 @@ impl SettingsForm {
             },
             servers,
             notifies_on_degradation: self.notifies_on_degradation,
+            allows_throughput_tests: self.allows_throughput_tests,
         })
     }
 }
@@ -108,6 +111,7 @@ mod tests {
             appearance: AppearanceChoice::Dark,
             own_server: own_server.map(str::to_owned),
             notifies_on_degradation: true,
+            allows_throughput_tests: false,
         }
     }
 

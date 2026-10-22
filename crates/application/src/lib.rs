@@ -11,6 +11,7 @@ mod settings;
 mod targets;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
+mod throughput;
 
 pub use dashboard::{
     DayOverview, Evolution, NetworkStay, NetworkSummary, Outage, OutageEnd, Period, SUMMARY_DAYS,
@@ -22,12 +23,13 @@ pub use engine::{
 };
 pub use history::{
     EventKind, HistoryCommand, HistoryEvent, HistoryTracker, HistoryWriter, LiveHistory,
-    MINUTE_RETENTION, MeasuredSecond, NetworkKey, RepositoryError,
+    MINUTE_RETENTION, MeasuredSecond, NetworkKey, RepositoryError, ThroughputRecord,
 };
 pub use ports::{
     Clock, ConnectionContextReader, GatewayProbe, HistoryReader, HistoryRecorder, LatencyProbe,
     MeasurementRepository, NetworkChangeWatcher, Notifier, PowerEvent, PowerEventSource,
-    SettingsRepository, TrayHost, VerdictPresenter, WifiReader,
+    SettingsRepository, ThroughputProbe, TrayHost, VerdictPresenter, WifiReader,
 };
 pub use settings::can_measure_against;
 pub use targets::{list_default_targets, list_targets};
+pub use throughput::{ThroughputFailure, run_throughput_test};

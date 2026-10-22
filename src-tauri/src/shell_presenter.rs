@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use application::{VerdictPresenter, VerdictView};
-use domain::Verdict;
+use domain::{ConnectionContext, Verdict};
 use serde::Serialize;
 use specta::Type;
 use tauri::AppHandle;
@@ -47,8 +47,25 @@ impl DisplayStore {
     }
 }
 
+/// The connection last measured, for the commands that depend on it (a throughput test's
+/// warning on a limited connection).
+#[derive(Clone, Default)]
+pub struct ConnectionStore(Arc<Mutex<Option<ConnectionContext>>>);
+
+impl ConnectionStore {
+    #[must_use]
+    pub fn read(&self) -> Option<ConnectionContext> {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn replace(&self, context: Option<ConnectionContext>) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = context;
+    }
+}
+
 pub struct ShellPresenter {
     app: AppHandle,
+    connection: ConnectionStore,
     tray: TrayIcon,
     menu: TrayMenu,
     catalog: TextCatalog,
@@ -65,9 +82,11 @@ impl ShellPresenter {
         menu: TrayMenu,
         catalog: TextCatalog,
         store: DisplayStore,
+        connection: ConnectionStore,
     ) -> Self {
         Self {
             app,
+            connection,
             tray,
             menu,
             catalog,
@@ -95,6 +114,7 @@ impl ShellPresenter {
 
 impl VerdictPresenter for ShellPresenter {
     fn present(&self, view: &VerdictView) {
+        self.connection.replace(view.context);
         let display = ConnectionDisplay::from_view(view, &self.catalog);
         self.update_tray(view.verdict, &display.state_label);
         if !self.store.replace(display.clone()) {
