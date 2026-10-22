@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -27,6 +28,7 @@ pub const MANUAL_CLOCK_EPOCH: i64 = 1_700_002_800;
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryNetwork {
     outcomes: Arc<Mutex<HashMap<Target, ProbeOutcome>>>,
+    forgotten_fallbacks: Arc<AtomicU32>,
 }
 
 impl InMemoryNetwork {
@@ -35,6 +37,12 @@ impl InMemoryNetwork {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(target, outcome);
+    }
+
+    /// How many times the engine asked to try ICMP again.
+    #[must_use]
+    pub fn count_forgotten_fallbacks(&self) -> u32 {
+        self.forgotten_fallbacks.load(Ordering::SeqCst)
     }
 }
 
@@ -48,6 +56,10 @@ impl LatencyProbe for InMemoryNetwork {
             .copied()
             .unwrap_or(ProbeOutcome::Unreachable);
         std::future::ready(outcome)
+    }
+
+    fn forget_fallbacks(&self) {
+        self.forgotten_fallbacks.fetch_add(1, Ordering::SeqCst);
     }
 }
 

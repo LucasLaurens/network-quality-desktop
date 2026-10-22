@@ -61,6 +61,8 @@ L'app tourne en tâche de fond : fermer le tableau de bord le cache sans arrête
 
 Avant la mise en veille, l'app écrit la minute en cours puis ne mesure plus rien. Une coupure en cours s'arrête là : la veille n'est pas comptée comme une coupure. Au réveil, elle affiche « Retour de veille, premières mesures en cours. » et repart de zéro. Si le système ne prévient pas, l'app s'en aperçoit d'elle-même : plus de 10 secondes écoulées entre deux mesures valent un réveil, et des réponses qui ont attendu pendant la veille sont écartées.
 
+Quand le ping était bloqué et que l'app mesurait par connexion TCP, elle réessaie le ping au réveil, sur un autre réseau et avec d'autres serveurs, plutôt que d'attendre son redémarrage. Tant que le ping ne répond pas, la mesure continue par TCP, sans perte ni « Hors ligne » affichés à tort.
+
 ## Les trois mesures
 
 | Mesure  | Ce qu'elle dit                                                          | Solide          | Instable     | Dégradée       |

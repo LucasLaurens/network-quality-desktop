@@ -1,6 +1,6 @@
 //! ICMP first, TCP 443 when ICMP is refused or filtered, and TCP again to tell a lost echo from an outage.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::Future;
 use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
@@ -30,11 +30,21 @@ pub trait ConnectionOpener {
     fn open_connection(&self, target: Target) -> impl Future<Output = Option<Duration>> + Send;
 }
 
+/// How a target is measured.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Route {
+    Icmp,
+    Tcp,
+    /// Back from TCP, ICMP is tried again: TCP still gives the latency, so a filtered echo
+    /// counts as no loss.
+    Retrying,
+}
+
 /// Picks, per target, between ICMP and TCP, and classifies every probe for the engine.
 pub struct FallbackLatencyProbe<E, O> {
     echo: E,
     tcp: O,
-    tcp_only: Mutex<HashSet<Target>>,
+    routes: Mutex<HashMap<Target, Route>>,
     losses_in_a_row: Mutex<HashMap<Target, u32>>,
 }
 
@@ -44,24 +54,35 @@ impl<E: EchoSender, O: ConnectionOpener> FallbackLatencyProbe<E, O> {
         Self {
             echo,
             tcp,
-            tcp_only: Mutex::default(),
+            routes: Mutex::default(),
             losses_in_a_row: Mutex::default(),
         }
     }
 
-    fn is_tcp_only(&self, target: Target) -> bool {
-        self.tcp_only
+    /// A target never switched is on ICMP. O(1).
+    fn read_route(&self, target: Target) -> Route {
+        self.routes
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .contains(&target)
+            .get(&target)
+            .copied()
+            .unwrap_or(Route::Icmp)
     }
 
-    // shortcut: a target switched to TCP stays on TCP until the app restarts; retry ICMP on network change later.
     fn switch_to_tcp(&self, target: Target) {
-        self.tcp_only
+        self.reset_losses(target);
+        self.routes
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .insert(target);
+            .insert(target, Route::Tcp);
+    }
+
+    fn switch_to_icmp(&self, target: Target) {
+        self.reset_losses(target);
+        self.routes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&target);
     }
 
     /// Counts one more loss with TCP still up and returns the streak length. O(1).
@@ -93,12 +114,17 @@ impl<E: EchoSender, O: ConnectionOpener> FallbackLatencyProbe<E, O> {
 impl<E: EchoSender + Sync, O: ConnectionOpener + Sync> LatencyProbe for FallbackLatencyProbe<E, O> {
     /// One echo, plus one TCP connection when the echo fails: at most two timeouts. O(1).
     async fn send_probe(&self, target: Target) -> ProbeOutcome {
-        if self.is_tcp_only(target) {
+        let route = self.read_route(target);
+        if route == Route::Tcp {
             return self.send_tcp_probe(target).await;
         }
         match self.echo.send_echo(target).await {
             EchoResult::Answered(round_trip) => {
-                self.reset_losses(target);
+                if route == Route::Retrying {
+                    self.switch_to_icmp(target);
+                } else {
+                    self.reset_losses(target);
+                }
                 ProbeOutcome::Answered(round_trip)
             }
             EchoResult::NotPermitted => {
@@ -106,15 +132,32 @@ impl<E: EchoSender + Sync, O: ConnectionOpener + Sync> LatencyProbe for Fallback
                 self.send_tcp_probe(target).await
             }
             EchoResult::NoAnswer => {
-                if self.tcp.open_connection(target).await.is_none() {
+                let Some(round_trip) = self.tcp.open_connection(target).await else {
                     self.reset_losses(target);
                     return ProbeOutcome::Unreachable;
-                }
+                };
                 if self.count_filtered_loss(target) >= FILTERED_AFTER_LOSSES {
                     self.switch_to_tcp(target);
                 }
-                ProbeOutcome::LostButReachable
+                match route {
+                    Route::Retrying => ProbeOutcome::Answered(round_trip),
+                    Route::Icmp | Route::Tcp => ProbeOutcome::LostButReachable,
+                }
             }
+        }
+    }
+
+    /// Only the targets on TCP change: a switch to TCP already ended their streak, and the
+    /// streaks of the others keep counting toward a fallback. O(t) for t targets.
+    fn forget_fallbacks(&self) {
+        for route in self
+            .routes
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .values_mut()
+            .filter(|route| **route == Route::Tcp)
+        {
+            *route = Route::Retrying;
         }
     }
 }
@@ -228,6 +271,149 @@ mod tests {
             1,
             "a refused ICMP is not retried"
         );
+    }
+
+    #[tokio::test]
+    async fn tries_icmp_again_once_the_fallbacks_are_forgotten() {
+        // Arrange
+        let probe = FallbackLatencyProbe::new(
+            InMemoryEcho::new(EchoResult::NotPermitted),
+            InMemoryTcp(Some(TCP_ROUND_TRIP)),
+        );
+        probe.send_probe(Target::parse(TARGET)).await;
+        *probe.echo.result.lock().expect("unpoisoned") = EchoResult::Answered(ECHO_ROUND_TRIP);
+        probe.forget_fallbacks();
+
+        // Act
+        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+
+        // Assert
+        assert_eq!(outcome, ProbeOutcome::Answered(ECHO_ROUND_TRIP));
+    }
+
+    #[tokio::test]
+    async fn falls_back_to_tcp_at_once_when_icmp_is_still_refused() {
+        // Arrange
+        let probe = FallbackLatencyProbe::new(
+            InMemoryEcho::new(EchoResult::NotPermitted),
+            InMemoryTcp(Some(TCP_ROUND_TRIP)),
+        );
+        probe.send_probe(Target::parse(TARGET)).await;
+        probe.forget_fallbacks();
+
+        // Act
+        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+
+        // Assert
+        assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP));
+        assert_eq!(probe.echo.sent.load(Ordering::SeqCst), 2);
+    }
+
+    /// A target that fell back to TCP after ten filtered echoes, then forgotten.
+    async fn create_probe_retrying_a_filtered_target()
+    -> FallbackLatencyProbe<InMemoryEcho, InMemoryTcp> {
+        let probe = FallbackLatencyProbe::new(
+            InMemoryEcho::new(EchoResult::NoAnswer),
+            InMemoryTcp(Some(TCP_ROUND_TRIP)),
+        );
+        for _ in 0..FILTERED_AFTER_LOSSES {
+            probe.send_probe(Target::parse(TARGET)).await;
+        }
+        probe.forget_fallbacks();
+        probe
+    }
+
+    #[tokio::test]
+    async fn counts_no_loss_while_retrying_a_filtered_target() {
+        // Arrange
+        let probe = create_probe_retrying_a_filtered_target().await;
+
+        // Act
+        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+
+        // Assert
+        assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP));
+        assert_eq!(
+            probe.echo.sent.load(Ordering::SeqCst),
+            FILTERED_AFTER_LOSSES + 1,
+            "the echo was tried again"
+        );
+    }
+
+    #[tokio::test]
+    async fn gives_the_retry_up_after_ten_filtered_echoes() {
+        // Arrange
+        let probe = create_probe_retrying_a_filtered_target().await;
+        for _ in 0..FILTERED_AFTER_LOSSES {
+            probe.send_probe(Target::parse(TARGET)).await;
+        }
+
+        // Act
+        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+
+        // Assert
+        assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP));
+        assert_eq!(
+            probe.echo.sent.load(Ordering::SeqCst),
+            2 * FILTERED_AFTER_LOSSES
+        );
+    }
+
+    #[tokio::test]
+    async fn counts_losses_again_once_the_retry_succeeds() {
+        // Arrange
+        let probe = create_probe_retrying_a_filtered_target().await;
+        *probe.echo.result.lock().expect("unpoisoned") = EchoResult::Answered(ECHO_ROUND_TRIP);
+        probe.send_probe(Target::parse(TARGET)).await;
+        *probe.echo.result.lock().expect("unpoisoned") = EchoResult::NoAnswer;
+
+        // Act
+        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+
+        // Assert
+        assert_eq!(outcome, ProbeOutcome::LostButReachable);
+    }
+
+    #[tokio::test]
+    async fn keeps_counting_the_filtered_echoes_of_a_target_on_icmp() {
+        // Arrange
+        let probe = FallbackLatencyProbe::new(
+            InMemoryEcho::new(EchoResult::NoAnswer),
+            InMemoryTcp(Some(TCP_ROUND_TRIP)),
+        );
+        for _ in 1..FILTERED_AFTER_LOSSES {
+            probe.send_probe(Target::parse(TARGET)).await;
+        }
+        probe.forget_fallbacks();
+        probe.send_probe(Target::parse(TARGET)).await;
+
+        // Act
+        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+
+        // Assert
+        assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP), "on TCP");
+        assert_eq!(
+            probe.echo.sent.load(Ordering::SeqCst),
+            FILTERED_AFTER_LOSSES
+        );
+    }
+
+    #[tokio::test]
+    async fn reports_an_outage_while_retrying() {
+        // Arrange
+        let probe = FallbackLatencyProbe::new(
+            InMemoryEcho::new(EchoResult::NotPermitted),
+            InMemoryTcp(None),
+        );
+        probe.send_probe(Target::parse(TARGET)).await;
+        probe.forget_fallbacks();
+        *probe.echo.result.lock().expect("unpoisoned") = EchoResult::NoAnswer;
+
+        // Act
+        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+
+        // Assert
+        assert_eq!(outcome, ProbeOutcome::Unreachable);
     }
 
     #[tokio::test]
