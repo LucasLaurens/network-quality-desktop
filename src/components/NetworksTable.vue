@@ -1,34 +1,37 @@
 <script setup lang="ts">
+import { useInterfaceTexts } from '../composables/interface-texts'
 import type { NetworkRowDisplay, StateShares } from '../bindings'
 
 const { networks } = defineProps<{ networks: NetworkRowDisplay[] }>()
+const say = useInterfaceTexts()
 
 const STATES = ['solid', 'unstable', 'degraded', 'offline'] as const satisfies readonly (keyof StateShares)[]
 </script>
 
 <template>
   <p v-if="networks.length === 0" class="empty" data-networks-empty>
-    Chaque réseau utilisé apparaîtra ici, avec le temps passé dans chaque état.
+    {{ say('ui-networks-empty') }}
   </p>
   <div v-else class="scroll">
     <table>
       <thead>
         <tr>
-          <th>Réseau</th>
-          <th>Temps par état</th>
-          <th class="right">Latence p90</th>
-          <th class="right">Perte</th>
-          <th class="right">Durée mesurée</th>
+          <th>{{ say('ui-networks-network') }}</th>
+          <th>{{ say('ui-networks-shares') }}</th>
+          <th class="right">{{ say('ui-networks-latency') }}</th>
+          <th class="right">{{ say('ui-metric-loss') }}</th>
+          <th class="right">{{ say('ui-networks-measured') }}</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="network in networks" :key="network.label" data-network-row>
           <td>
-            {{ network.label }}<span v-if="network.isCurrent" class="tag" data-current>actuel</span>
+            {{ network.label
+            }}<span v-if="network.isCurrent" class="tag" data-current>{{ say('ui-networks-current') }}</span>
             <div class="small">
               {{ network.connection
               }}<template v-if="network.isMostReliable">
-                · <strong data-most-reliable>le plus fiable pour la visio</strong></template
+                · <strong data-most-reliable>{{ say('ui-networks-most-reliable') }}</strong></template
               >
             </div>
           </td>

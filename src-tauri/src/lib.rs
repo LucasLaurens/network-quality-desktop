@@ -72,6 +72,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             commands::read_app_info,
+            commands::read_interface_texts,
             commands::read_connection_display,
             commands::open_dashboard,
             commands::open_settings,
@@ -302,6 +303,25 @@ mod tests {
     use specta_typescript::Typescript;
 
     // Rewrites the front-end bindings; `pnpm bindings:check` then fails if the committed file differs.
+    // Rewrites the texts the front-end fakes hand out, so they are the real catalogue's; `pnpm
+    // bindings:check` then fails if the committed file differs.
+    #[test]
+    fn exports_the_interface_texts_for_the_fakes() {
+        // Arrange
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tests/fakes/interface-texts.json"
+        );
+        let texts = crate::text_catalog::TextCatalog::load().list_interface_texts();
+
+        // Act
+        let json = serde_json::to_string_pretty(&texts).expect("texts as JSON");
+        let result = std::fs::write(path, json + "\n");
+
+        // Assert
+        assert!(result.is_ok(), "texts export failed: {result:?}");
+    }
+
     #[test]
     fn exports_typescript_bindings() {
         // Arrange

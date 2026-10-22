@@ -4,26 +4,30 @@ import type { AppearanceChoice, ExportPeriodChoice, SettingsForm } from '../bind
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
 import { useLoadOnFocus } from '../composables/use-load-on-focus'
+import { useInterfaceTexts } from '../composables/interface-texts'
 
 const PUBLIC_SERVERS = 'public'
 const OWN_SERVER = 'own'
 type ServersChoice = typeof PUBLIC_SERVERS | typeof OWN_SERVER
 
 const APPEARANCES = [
-  { value: 'system', label: 'Système' },
-  { value: 'light', label: 'Clair' },
-  { value: 'dark', label: 'Sombre' },
-] as const satisfies readonly { value: AppearanceChoice; label: string }[]
+  { value: 'system', labelKey: 'ui-appearance-system' },
+  { value: 'light', labelKey: 'ui-appearance-light' },
+  { value: 'dark', labelKey: 'ui-appearance-dark' },
+] as const satisfies readonly { value: AppearanceChoice; labelKey: string }[]
 
 const EXPORT_PERIODS = [
-  { value: 'lastDay', label: '24 dernières heures' },
-  { value: 'lastWeek', label: '7 derniers jours' },
-  { value: 'lastMonth', label: '30 derniers jours' },
-  { value: 'all', label: 'Tout' },
-] as const satisfies readonly { value: ExportPeriodChoice; label: string }[]
+  { value: 'lastDay', labelKey: 'ui-export-last-day' },
+  { value: 'lastWeek', labelKey: 'ui-export-last-week' },
+  { value: 'lastMonth', labelKey: 'ui-export-last-month' },
+  { value: 'all', labelKey: 'ui-export-all' },
+] as const satisfies readonly { value: ExportPeriodChoice; labelKey: string }[]
+/** Shown in the address field: a private address, as an own server usually has. */
+const SERVER_EXAMPLE = '192.168.1.10'
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
+const say = useInterfaceTexts()
 
 // The form is filled once and then belongs to the user: answers never rewrite what is typed.
 const form = ref<SettingsForm | null>(null)
@@ -147,13 +151,13 @@ onMounted(async () => {
 
 <template>
   <section v-if="form" class="settings" aria-labelledby="settings-title">
-    <h2 id="settings-title">Réglages</h2>
+    <h2 id="settings-title">{{ say('ui-settings') }}</h2>
 
     <div class="group">
-      <h3>Général</h3>
+      <h3>{{ say('ui-settings-general') }}</h3>
       <div class="rows">
         <div class="setting">
-          <label for="setting-launch">Lancer à l'ouverture de session</label>
+          <label for="setting-launch">{{ say('ui-settings-launch') }}</label>
           <input
             id="setting-launch"
             v-model="form.launchAtLogin"
@@ -162,10 +166,10 @@ onMounted(async () => {
             aria-describedby="setting-launch-hint"
             @change="saveChange"
           />
-          <span id="setting-launch-hint" class="hint">L'état reste visible dans la barre des menus.</span>
+          <span id="setting-launch-hint" class="hint">{{ say('ui-settings-launch-hint') }}</span>
         </div>
         <div class="setting">
-          <span id="setting-appearance" class="label">Apparence</span>
+          <span id="setting-appearance" class="label">{{ say('ui-settings-appearance') }}</span>
           <div class="radios" role="radiogroup" aria-labelledby="setting-appearance">
             <label v-for="appearance in APPEARANCES" :key="appearance.value">
               <input
@@ -175,27 +179,27 @@ onMounted(async () => {
                 :value="appearance.value"
                 @change="saveChange"
               />
-              {{ appearance.label }}
+              {{ say(appearance.labelKey) }}
             </label>
           </div>
-          <span class="hint">Système suit le réglage clair ou sombre de l'ordinateur.</span>
+          <span class="hint">{{ say('ui-settings-appearance-hint') }}</span>
         </div>
       </div>
     </div>
 
     <div class="group">
-      <h3>Mesure</h3>
+      <h3>{{ say('ui-settings-measure') }}</h3>
       <div class="rows">
         <div class="setting">
-          <label for="setting-servers">Serveurs de mesure</label>
+          <label for="setting-servers">{{ say('ui-settings-servers') }}</label>
           <select id="setting-servers" v-model="servers" @change="chooseServers">
-            <option :value="PUBLIC_SERVERS">Cloudflare et Google (recommandé)</option>
-            <option :value="OWN_SERVER">Serveur personnalisé</option>
+            <option :value="PUBLIC_SERVERS">{{ say('ui-servers-public') }}</option>
+            <option :value="OWN_SERVER">{{ say('ui-servers-own') }}</option>
           </select>
-          <span class="hint">Une petite requête par seconde pour mesurer latence, gigue et perte.</span>
+          <span class="hint">{{ say('ui-settings-servers-hint') }}</span>
         </div>
         <div v-if="servers === OWN_SERVER" class="setting">
-          <label for="setting-server">Adresse du serveur</label>
+          <label for="setting-server">{{ say('ui-settings-server') }}</label>
           <input
             id="setting-server"
             v-model.trim="typedServer"
@@ -203,23 +207,21 @@ onMounted(async () => {
             inputmode="decimal"
             autocomplete="off"
             spellcheck="false"
-            placeholder="ex. 192.168.1.10"
+            :placeholder="say('ui-settings-server-example', { address: SERVER_EXAMPLE })"
             aria-describedby="setting-server-hint"
             :aria-invalid="refusal !== ''"
             @change="saveTypedServer"
           />
-          <span id="setting-server-hint" class="hint"
-            >Une adresse IP qui répond au ping, ou sur le port 443. Seul ce serveur est alors mesuré.</span
-          >
+          <span id="setting-server-hint" class="hint">{{ say('ui-settings-server-hint') }}</span>
         </div>
       </div>
     </div>
 
     <div class="group">
-      <h3>Notifications</h3>
+      <h3>{{ say('ui-settings-notifications') }}</h3>
       <div class="rows">
         <div class="setting">
-          <label for="setting-notify">Prévenir quand la connexion se dégrade</label>
+          <label for="setting-notify">{{ say('ui-settings-notify') }}</label>
           <input
             id="setting-notify"
             v-model="form.notifiesOnDegradation"
@@ -228,16 +230,16 @@ onMounted(async () => {
             aria-describedby="setting-notify-hint"
             @change="saveChange"
           />
-          <span id="setting-notify-hint" class="hint">Seulement si la dégradation dure plus de 10 secondes.</span>
+          <span id="setting-notify-hint" class="hint">{{ say('ui-settings-notify-hint') }}</span>
         </div>
       </div>
     </div>
 
     <div class="group">
-      <h3>Tests de débit</h3>
+      <h3>{{ say('ui-settings-throughput') }}</h3>
       <div class="rows">
         <div class="setting">
-          <label for="setting-throughput">Autoriser les tests de débit</label>
+          <label for="setting-throughput">{{ say('ui-settings-throughput-allow') }}</label>
           <input
             id="setting-throughput"
             v-model="form.allowsThroughputTests"
@@ -246,23 +248,20 @@ onMounted(async () => {
             aria-describedby="setting-throughput-hint"
             @change="saveChange"
           />
-          <span id="setting-throughput-hint" class="hint">
-            Désactivé par défaut. Les tests passent par Cloudflare (gratuit, sans compte) et ne partent jamais
-            seuls&nbsp;: uniquement sur un clic sur Test rapide ou Test complet.
-          </span>
+          <span id="setting-throughput-hint" class="hint">{{ say('ui-settings-throughput-hint') }}</span>
         </div>
       </div>
     </div>
 
     <div class="group">
-      <h3>Données</h3>
+      <h3>{{ say('ui-settings-data') }}</h3>
       <div class="rows">
         <div class="setting">
-          <label for="setting-export">Exporter l'historique</label>
+          <label for="setting-export">{{ say('ui-settings-export') }}</label>
           <div class="actions">
             <select id="setting-export" v-model="exportPeriod" data-export-period>
               <option v-for="period in EXPORT_PERIODS" :key="period.value" :value="period.value">
-                {{ period.label }}
+                {{ say(period.labelKey) }}
               </option>
             </select>
             <button
@@ -273,19 +272,16 @@ onMounted(async () => {
               data-export
               @click="exportHistory"
             >
-              {{ isExporting ? 'Export en cours…' : 'Exporter…' }}
+              {{ isExporting ? say('ui-settings-exporting') : say('ui-settings-export-action') }}
             </button>
           </div>
-          <span v-if="exportUnavailable === null" class="hint">
-            Trois fichiers CSV dans le dossier de votre choix&nbsp;: mesures, événements, tests de débit. Sans adresse
-            matérielle de la box.
-          </span>
+          <span v-if="exportUnavailable === null" class="hint">{{ say('ui-settings-export-hint') }}</span>
           <span v-else class="hint" data-export-unavailable>{{ exportUnavailable }}</span>
         </div>
         <div class="setting">
-          <span class="label">Effacer l'historique</span>
+          <span class="label">{{ say('ui-settings-erase') }}</span>
           <button type="button" class="secondary" :disabled="isBusy" data-erase @click="isConfirmingErase = true">
-            Effacer…
+            {{ say('ui-settings-erase-action') }}
           </button>
           <div
             v-if="isConfirmingErase"
@@ -295,14 +291,15 @@ onMounted(async () => {
             data-erase-warning
           >
             <p id="erase-warning">
-              Toutes les mesures (minutes et heures), les événements (coupures, changements de réseau, veilles), les
-              tests de débit et les réseaux connus seront supprimés, sans retour possible. Les réglages sont conservés.
+              {{ say('ui-settings-erase-warning') }}
             </p>
             <div class="actions">
               <button type="button" class="secondary" data-erase-confirm @click="eraseHistory">
-                Effacer l'historique
+                {{ say('ui-settings-erase-confirm') }}
               </button>
-              <button type="button" class="link" data-erase-cancel @click="isConfirmingErase = false">Annuler</button>
+              <button type="button" class="link" data-erase-cancel @click="isConfirmingErase = false">
+                {{ say('ui-cancel') }}
+              </button>
             </div>
           </div>
         </div>

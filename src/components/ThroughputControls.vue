@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useInterfaceTexts } from '../composables/interface-texts'
 import { inject, ref, watch } from 'vue'
 import { REQUESTED_TEST_KEY } from '../composables/dashboard-requests'
 import { THROUGHPUT_PROFILES, useThroughputTest } from '../composables/use-throughput-test'
@@ -8,6 +9,7 @@ const emit = defineEmits<{ done: [] }>()
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
+const say = useInterfaceTexts()
 // Only the dashboard provides it: the tray menu runs its tests there.
 const requested = inject(REQUESTED_TEST_KEY, ref(null))
 
@@ -40,14 +42,16 @@ watch(
         :data-run="profile.value"
         @click="run(profile.value, false)"
       >
-        {{ running === profile.value ? 'Test en cours…' : profile.label }}
+        {{ running === profile.value ? say('ui-test-running') : say(profile.labelKey) }}
       </button>
     </div>
     <div v-if="asked" class="warning" role="alertdialog" aria-labelledby="throughput-warning" data-warning>
       <p id="throughput-warning">{{ asked.warning }}</p>
       <div class="actions">
-        <button type="button" class="secondary" data-confirm @click="run(asked.profile, true)">Lancer le test</button>
-        <button type="button" class="link" data-cancel @click="cancel">Annuler</button>
+        <button type="button" class="secondary" data-confirm @click="run(asked.profile, true)">
+          {{ say('ui-test-confirm') }}
+        </button>
+        <button type="button" class="link" data-cancel @click="cancel">{{ say('ui-cancel') }}</button>
       </div>
     </div>
     <p v-if="refusal" class="refused" role="alert" data-refused>{{ refusal }}</p>

@@ -1,5 +1,7 @@
 //! Typed commands exposed to the front end. Tauri cannot export `pub` commands from the crate root.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Manager, State};
@@ -56,6 +58,18 @@ pub fn read_app_info() -> AppInfo {
         name: env!("CARGO_PKG_NAME").to_owned(),
         version: env!("CARGO_PKG_VERSION").to_owned(),
     }
+}
+
+/// Every word of the windows, read once when a window opens. O(c) for a catalogue of c characters.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn read_interface_texts(catalog: State<'_, TextCatalog>) -> BTreeMap<String, String> {
+    catalog.list_interface_texts()
 }
 
 /// The latest display, for a window that opens between two events.

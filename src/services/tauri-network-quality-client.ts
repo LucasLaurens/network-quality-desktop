@@ -18,12 +18,16 @@ import {
   type ThroughputPanel,
   type WindowModeTexts,
 } from '../bindings'
-import type { NetworkQualityClient } from './network-quality-client'
+import type { InterfaceTexts, NetworkQualityClient } from './network-quality-client'
 
 /** Production adapter: talks to the Rust core through the generated Tauri bindings. */
 export class TauriNetworkQualityClient implements NetworkQualityClient {
   readAppInfo(): Promise<AppInfo> {
     return commands.readAppInfo()
+  }
+
+  readInterfaceTexts(): Promise<InterfaceTexts> {
+    return commands.readInterfaceTexts()
   }
 
   readConnectionDisplay(): Promise<ConnectionDisplay> {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useInterfaceTexts } from '../composables/interface-texts'
 import { computed, inject, ref } from 'vue'
 import type { ThroughputPanel } from '../bindings'
 import { useLoadOnFocus } from '../composables/use-load-on-focus'
@@ -8,6 +9,7 @@ import ThroughputControls from './ThroughputControls.vue'
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
+const say = useInterfaceTexts()
 
 const panel = ref<ThroughputPanel | null>(null)
 const lastTest = computed(() => panel.value?.tests[0] ?? null)
@@ -28,15 +30,17 @@ useLoadOnFocus(loadPanel)
 </script>
 
 <template>
-  <section v-if="panel" class="throughput" aria-label="Débit">
+  <section v-if="panel" class="throughput" :aria-label="say('ui-throughput-title')">
     <p v-if="!panel.isAllowed" class="small">
-      Tests de débit désactivés&nbsp;:
-      <button type="button" class="link" data-open-settings @click="openSettings">Activer dans Réglages</button>
+      {{ say('ui-throughput-off-short') }}
+      <button type="button" class="link" data-open-settings @click="openSettings">
+        {{ say('ui-throughput-enable') }}
+      </button>
     </p>
     <template v-else>
       <ThroughputControls @done="loadPanel" />
       <p v-if="lastTest" class="small num" data-last-test>
-        Dernier test, {{ lastTest.when }}&nbsp;: réception {{ lastTest.download }}, envoi {{ lastTest.upload }}
+        {{ say('ui-throughput-last', { when: lastTest.when, download: lastTest.download, upload: lastTest.upload }) }}
       </p>
     </template>
   </section>

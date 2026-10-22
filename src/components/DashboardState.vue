@@ -2,6 +2,7 @@
 import { inject, nextTick, ref, useTemplateRef, watch } from 'vue'
 import type { ConnectionDisplay, OverviewDisplay } from '../bindings'
 import { HELP_REQUESTED_KEY } from '../composables/dashboard-requests'
+import { useInterfaceTexts } from '../composables/interface-texts'
 import ConnectionPath from './ConnectionPath.vue'
 import HelpDetails from './HelpDetails.vue'
 import StateShape from './StateShape.vue'
@@ -12,6 +13,7 @@ const { display, overview, updatedAt } = defineProps<{
   updatedAt: string
 }>()
 
+const say = useInterfaceTexts()
 const helpRequested = inject(HELP_REQUESTED_KEY, ref(false))
 const helpDetails = useTemplateRef<InstanceType<typeof HelpDetails>>('helpDetails')
 
@@ -35,31 +37,31 @@ watch(
       <h2 id="dashboard-state">{{ display.stateLabel }}</h2>
       <p class="where">
         <span v-if="display.network" data-network>{{ display.network.label }}, {{ display.network.connection }}</span>
-        <span class="num">Mis à jour à {{ updatedAt }}</span>
+        <span class="num">{{ say('ui-updated-at', { time: updatedAt }) }}</span>
       </p>
     </div>
     <p class="cause" aria-live="polite">{{ display.cause }}</p>
     <p v-if="display.action" class="action" data-action>{{ display.action }}</p>
     <HelpDetails v-if="display.help" ref="helpDetails" :help="display.help" />
     <ConnectionPath v-if="display.path" :path="display.path" class="path" />
-    <dl v-if="overview" class="overview" aria-label="Vue d'ensemble">
+    <dl v-if="overview" class="overview" :aria-label="say('ui-overview')">
       <div class="fact">
-        <dt>Aujourd'hui</dt>
+        <dt>{{ say('ui-overview-today') }}</dt>
         <dd class="num">
           <span data-fact="today">{{ overview.today }}</span>
           <span v-if="overview.todayCoverage" class="coverage" data-coverage>{{ overview.todayCoverage }}</span>
         </dd>
       </div>
       <div class="fact">
-        <dt>Coupures aujourd'hui</dt>
+        <dt>{{ say('ui-overview-outages') }}</dt>
         <dd class="num" data-fact="outages">{{ overview.outages }}</dd>
       </div>
       <div class="fact">
-        <dt>Pire moment</dt>
+        <dt>{{ say('ui-overview-worst') }}</dt>
         <dd class="num" data-fact="worst">{{ overview.worstMoment }}</dd>
       </div>
       <div class="fact">
-        <dt>Sur ce réseau depuis</dt>
+        <dt>{{ say('ui-overview-since') }}</dt>
         <dd class="num" data-fact="since">{{ overview.onNetworkSince }}</dd>
       </div>
     </dl>

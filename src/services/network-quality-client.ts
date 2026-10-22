@@ -18,9 +18,14 @@ import type {
   WindowModeTexts,
 } from '../bindings'
 
+/** Every word of the windows, by catalogue key, read once from the core when a window opens. */
+export type InterfaceTexts = Partial<Record<string, string>>
+
 /** Port between the Vue front end and the Rust core. Components never call Tauri directly. */
 export interface NetworkQualityClient {
   readAppInfo(): Promise<AppInfo>
+  /** Every word of the windows, from the catalogue. */
+  readInterfaceTexts(): Promise<InterfaceTexts>
   readConnectionDisplay(): Promise<ConnectionDisplay>
   /** Calls `onChange` with every new display; resolves to the function that stops listening. */
   listenConnectionDisplay(onChange: (display: ConnectionDisplay) => void): Promise<() => void>

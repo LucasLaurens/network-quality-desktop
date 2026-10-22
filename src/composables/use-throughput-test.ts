@@ -4,9 +4,9 @@ import type { NetworkQualityClient } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
 
 export const THROUGHPUT_PROFILES = [
-  { value: 'quick', label: 'Test rapide' },
-  { value: 'full', label: 'Test complet' },
-] as const satisfies readonly { value: ProfileChoice; label: string }[]
+  { value: 'quick', labelKey: 'ui-quick-test' },
+  { value: 'full', labelKey: 'ui-full-test' },
+] as const satisfies readonly { value: ProfileChoice; labelKey: string }[]
 
 /**
  * One test at a time per window, as the dashboard and the popover both run it; the core refuses a

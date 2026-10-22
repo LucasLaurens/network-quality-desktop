@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { useInterfaceTexts } from '../composables/interface-texts'
 import { computed, inject, onUnmounted, ref } from 'vue'
 import type { LineDetails, TechnicalDetails } from '../bindings'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
+const say = useInterfaceTexts()
 
 const details = ref<TechnicalDetails | null>(null)
 const line = ref<LineDetails | null>(null)
@@ -53,7 +55,7 @@ onUnmounted(stopRefreshing)
 
 <template>
   <details class="details" data-details @toggle="onToggle">
-    <summary>Détails techniques</summary>
+    <summary>{{ say('ui-details-title') }}</summary>
     <div class="sections">
       <section v-for="section in sections" :key="section.title" data-detail-section>
         <h3>{{ section.title }}</h3>
@@ -67,7 +69,7 @@ onUnmounted(stopRefreshing)
     </div>
     <p v-if="line" class="small" data-line-note>{{ line.note }}</p>
     <p v-else-if="lineRefusal" class="small" role="alert" data-line-refused>{{ lineRefusal }}</p>
-    <p v-else-if="details" class="small" role="status">Interrogation de la box…</p>
+    <p v-else-if="details" class="small" role="status">{{ say('ui-details-asking-box') }}</p>
   </details>
 </template>
 

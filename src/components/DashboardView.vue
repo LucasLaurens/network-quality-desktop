@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { DashboardSummaryDisplay, EvolutionDisplay, PeriodChoice } from '../bindings'
+import { useInterfaceTexts } from '../composables/interface-texts'
 import { useConnectionDisplay } from '../composables/use-connection-display'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
@@ -18,22 +19,27 @@ type ChartMetric = 'latency' | 'jitter' | 'loss'
 const REFRESH_EVERY_MS = 30_000
 
 const METRICS = [
-  { value: 'latency', label: 'Latence' },
-  { value: 'jitter', label: 'Gigue' },
-  { value: 'loss', label: 'Perte' },
-] as const satisfies readonly { value: ChartMetric; label: string }[]
+  { value: 'latency', labelKey: 'ui-metric-latency' },
+  { value: 'jitter', labelKey: 'ui-metric-jitter' },
+  { value: 'loss', labelKey: 'ui-metric-loss' },
+] as const satisfies readonly { value: ChartMetric; labelKey: string }[]
 
+/** Each period with the start and the middle of its time axis; the end is always now. */
 const PERIODS = [
-  { value: 'hour', label: '1 h', ticks: ['Il y a 1 h', 'Il y a 30 min', 'Maintenant'] },
-  { value: 'day', label: '24 h', ticks: ['Il y a 24 h', 'Il y a 12 h', 'Maintenant'] },
-  { value: 'week', label: '7 j', ticks: ['Il y a 7 j', 'Il y a 3 j', 'Maintenant'] },
-  { value: 'month', label: '30 j', ticks: ['Il y a 30 j', 'Il y a 15 j', 'Maintenant'] },
-] as const satisfies readonly { value: PeriodChoice; label: string; ticks: readonly [string, string, string] }[]
+  { value: 'hour', labelKey: 'ui-period-hour', tickKeys: ['ui-tick-hour-start', 'ui-tick-hour-middle'] },
+  { value: 'day', labelKey: 'ui-period-day', tickKeys: ['ui-tick-day-start', 'ui-tick-day-middle'] },
+  { value: 'week', labelKey: 'ui-period-week', tickKeys: ['ui-tick-week-start', 'ui-tick-week-middle'] },
+  { value: 'month', labelKey: 'ui-period-month', tickKeys: ['ui-tick-month-start', 'ui-tick-month-middle'] },
+] as const satisfies readonly { value: PeriodChoice; labelKey: string; tickKeys: readonly [string, string] }[]
 
 const emit = defineEmits<{ openSettings: [] }>()
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
+const say = useInterfaceTexts()
+
+const metricOptions = METRICS.map(({ value, labelKey }) => ({ value, label: say(labelKey) }))
+const periodOptions = PERIODS.map(({ value, labelKey }) => ({ value, label: say(labelKey) }))
 
 const display = useConnectionDisplay(client)
 const updatedAt = ref('')
@@ -45,12 +51,15 @@ let refresh: ReturnType<typeof setInterval> | undefined
 
 const chosenPeriod = computed(() => PERIODS.find((entry) => entry.value === period.value) ?? PERIODS[0])
 const chosenMetric = computed(() => METRICS.find((entry) => entry.value === metric.value) ?? METRICS[0])
-const chartLabel = computed(
-  () => `${chosenMetric.value.label} sur ${chosenPeriod.value.label}, avec les seuils Instable et Dégradée`,
+const ticks = computed(
+  () => [say(chosenPeriod.value.tickKeys[0]), say(chosenPeriod.value.tickKeys[1]), say('ui-tick-now')] as const,
+)
+const chartLabel = computed(() =>
+  say('ui-chart-label', { metric: say(chosenMetric.value.labelKey), period: say(chosenPeriod.value.labelKey) }),
 )
 
 watch(display, () => {
-  updatedAt.value = new Date().toLocaleTimeString('fr-FR')
+  updatedAt.value = new Date().toLocaleTimeString(say('ui-locale'))
 })
 
 const loadSummary = async (): Promise<void> => {
@@ -92,37 +101,47 @@ onUnmounted(() => {
     <DashboardState v-if="display" :display="display" :overview="summary?.overview ?? null" :updated-at="updatedAt" />
     <section v-if="display" aria-labelledby="metrics-title">
       <div class="section-head">
-        <h2 id="metrics-title">Mesures actuelles</h2>
-        <span class="muted">Vers Internet, une mesure par seconde</span>
+        <h2 id="metrics-title">{{ say('ui-metrics-title') }}</h2>
+        <span class="muted">{{ say('ui-metrics-subtitle') }}</span>
       </div>
       <CurrentMetrics :metrics="display.metrics" />
     </section>
     <section aria-labelledby="evolution-title">
       <div class="section-head">
-        <h2 id="evolution-title">Évolution</h2>
+        <h2 id="evolution-title">{{ say('ui-evolution-title') }}</h2>
         <div class="controls">
-          <SegmentedControl v-model="metric" :options="METRICS" label="Mesure affichée" data-metric-choice />
-          <SegmentedControl v-model="period" :options="PERIODS" label="Période" data-period-choice />
+          <SegmentedControl
+            v-model="metric"
+            :options="metricOptions"
+            :label="say('ui-evolution-metric')"
+            data-metric-choice
+          />
+          <SegmentedControl
+            v-model="period"
+            :options="periodOptions"
+            :label="say('ui-evolution-period')"
+            data-period-choice
+          />
         </div>
       </div>
       <EvolutionChart
         v-if="evolution"
         :evolution="evolution"
         :series="evolution[metric]"
-        :ticks="chosenPeriod.ticks"
+        :ticks="ticks"
         :label="chartLabel"
       />
     </section>
     <section aria-labelledby="networks-title">
       <div class="section-head">
-        <h2 id="networks-title">Tes réseaux</h2>
-        <span class="muted">30 derniers jours</span>
+        <h2 id="networks-title">{{ say('ui-networks-title') }}</h2>
+        <span class="muted">{{ say('ui-networks-period') }}</span>
       </div>
       <NetworksTable v-if="summary" :networks="summary.networks" />
     </section>
     <section aria-labelledby="throughput-title">
       <div class="section-head">
-        <h2 id="throughput-title">Débit</h2>
+        <h2 id="throughput-title">{{ say('ui-throughput-title') }}</h2>
       </div>
       <ThroughputSection @open-settings="emit('openSettings')" />
     </section>

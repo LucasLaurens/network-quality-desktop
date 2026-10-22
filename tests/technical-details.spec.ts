@@ -2,12 +2,15 @@ import { faker } from '@faker-js/faker'
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TechnicalDetails from '../src/components/TechnicalDetails.vue'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../src/services/network-quality-client'
-import { InMemoryNetworkQualityClient, createDetailSection } from './fakes/in-memory-network-quality-client'
+import {
+  InMemoryNetworkQualityClient,
+  createDetailSection,
+  createWindowProvisions,
+} from './fakes/in-memory-network-quality-client'
 
 function mountDetails(client: InMemoryNetworkQualityClient) {
   return mount(TechnicalDetails, {
-    global: { provide: { [NETWORK_QUALITY_CLIENT_KEY as symbol]: client } },
+    global: { provide: createWindowProvisions(client) },
   })
 }
 
