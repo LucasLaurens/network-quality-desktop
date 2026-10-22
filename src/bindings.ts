@@ -156,6 +156,11 @@ export type ConnectionDisplay = {
 	network: NetworkDisplay | null,
 	/**  `None` without a default route. */
 	path: PathDisplay | null,
+	/**
+	 *  How to let the app measure the link to the box, when the system refuses the ping; `None`
+	 *  whenever the cause is known.
+	 */
+	help: HelpDisplay | null,
 };
 
 /**  Sent to every window whenever what the popover shows changes. */
@@ -165,7 +170,9 @@ export type ConnectionDisplayChanged = ConnectionDisplay;
  *  What the tray menu or the popover asks the dashboard to do once shown: it alone can ask for a
  *  confirmation, show a test running and keep its result.
  */
-export type DashboardRequested = { kind: "settings" } | { kind: "throughputTest"; profile: ProfileChoice };
+export type DashboardRequested = { kind: "settings" } | 
+/**  The help shown when the cause cannot be determined. */
+{ kind: "help" } | { kind: "throughputTest"; profile: ProfileChoice };
 
 export type DashboardSummaryDisplay = {
 	overview: OverviewDisplay,
@@ -222,6 +229,21 @@ export type Gauge = {
 	unstableFrom: number | null,
 	degradedAbove: number | null,
 	label: string,
+};
+
+/**  Help kept in the app: the repository that holds the documentation is private. */
+export type HelpDisplay = {
+	title: string,
+	why: string,
+	steps: HelpStep[],
+	/**  What the app still measures without it. */
+	without: string,
+};
+
+/**  One thing to do, and the command that does it. */
+export type HelpStep = {
+	label: string,
+	command: string,
 };
 
 export type LineDetails = {

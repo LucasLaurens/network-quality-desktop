@@ -6,6 +6,7 @@ import { NETWORK_QUALITY_CLIENT_KEY } from '../src/services/network-quality-clie
 import {
   InMemoryNetworkQualityClient,
   createConnectionDisplay,
+  createHelpDisplay,
   createThroughputPanel,
   createWindowModeTexts,
 } from './fakes/in-memory-network-quality-client'
@@ -198,5 +199,21 @@ describe('App', () => {
     // Assert
     expect(wrapper.find('#settings-title').exists()).toBe(false)
     expect(client.throughputRuns).toEqual(['full'])
+  })
+
+  it('opens the help on the dashboard when the tray menu asks for it', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ help: createHelpDisplay() }))
+    const wrapper = await mountApp(client)
+    client.sendDashboardRequest({ kind: 'settings' })
+    await flushPromises()
+
+    // Act
+    client.sendDashboardRequest({ kind: 'help' })
+    await flushPromises()
+
+    // Assert
+    const details = wrapper.get('[data-help]')
+    expect((details.element as HTMLDetailsElement).open).toBe(true)
   })
 })

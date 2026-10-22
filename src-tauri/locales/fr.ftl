@@ -34,6 +34,14 @@ action-mobile-network = Changer d'endroit ou passer sur un autre réseau.
 cause-mobile-network-modem = Le réseau mobile est en cause.
 cause-undetermined-system = La cause exacte ne peut pas être déterminée sur ce système.
 action-allow-ping = Autoriser le ping (net.ipv4.ping_group_range).
+help-ping-title = Autoriser le ping sans privilège
+help-ping-why = Sous Linux, un ping envoyé sans être administrateur n'est permis qu'aux groupes listés dans net.ipv4.ping_group_range. Sans ce droit, l'app ne peut pas mesurer le lien avec la box.
+help-ping-now = Pour cette session :
+help-ping-now-command = sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
+help-ping-keep = Pour le garder après un redémarrage :
+help-ping-keep-command = echo 'net.ipv4.ping_group_range = 0 2147483647' | sudo tee /etc/sysctl.d/99-ping.conf
+help-ping-without = Sans cela, l'app mesure Internet comme d'habitude : seul le tronçon vers la box reste inconnu.
+menu-ping-help = Comment autoriser le ping…
 cause-undetermined-network = La cause exacte ne peut pas être déterminée sur ce réseau.
 cause-recovering = La connexion s'améliore, confirmation en cours.
 cause-measuring = Premières mesures en cours.

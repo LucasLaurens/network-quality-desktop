@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { inject, ref } from 'vue'
 import type { ConnectionDisplay, OverviewDisplay } from '../bindings'
+import { HELP_REQUESTED_KEY } from '../composables/dashboard-requests'
 import ConnectionPath from './ConnectionPath.vue'
+import HelpDetails from './HelpDetails.vue'
 import StateShape from './StateShape.vue'
 
 const { display, overview, updatedAt } = defineProps<{
@@ -8,6 +11,8 @@ const { display, overview, updatedAt } = defineProps<{
   overview: OverviewDisplay | null
   updatedAt: string
 }>()
+
+const helpRequested = inject(HELP_REQUESTED_KEY, ref(false))
 </script>
 
 <template>
@@ -22,6 +27,7 @@ const { display, overview, updatedAt } = defineProps<{
     </div>
     <p class="cause" aria-live="polite">{{ display.cause }}</p>
     <p v-if="display.action" class="action" data-action>{{ display.action }}</p>
+    <HelpDetails v-if="display.help" :help="display.help" :is-open="helpRequested" />
     <ConnectionPath v-if="display.path" :path="display.path" class="path" />
     <dl v-if="overview" class="overview" aria-label="Vue d'ensemble">
       <div class="fact">

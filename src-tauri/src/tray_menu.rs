@@ -17,15 +17,17 @@ pub enum MenuAction {
     OpenDashboard,
     RunQuickTest,
     RunFullTest,
+    OpenHelp,
     OpenSettings,
     Quit,
 }
 
 impl MenuAction {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::OpenDashboard,
         Self::RunQuickTest,
         Self::RunFullTest,
+        Self::OpenHelp,
         Self::OpenSettings,
         Self::Quit,
     ];
@@ -36,12 +38,13 @@ impl MenuAction {
             Self::OpenDashboard => "open-dashboard",
             Self::RunQuickTest => "run-quick-test",
             Self::RunFullTest => "run-full-test",
+            Self::OpenHelp => "open-help",
             Self::OpenSettings => "open-settings",
             Self::Quit => "quit",
         }
     }
 
-    /// `None` for an id this menu did not create. O(1): five actions.
+    /// `None` for an id this menu did not create. O(1): six actions.
     #[must_use]
     pub fn from_id(id: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|action| action.to_id() == id)
@@ -65,6 +68,7 @@ pub fn apply_menu_action(app: &AppHandle, action: MenuAction) {
                 profile: ProfileChoice::Full,
             },
         ),
+        MenuAction::OpenHelp => request_from_dashboard(app, DashboardRequested::Help),
         MenuAction::OpenSettings => request_from_dashboard(app, DashboardRequested::Settings),
         MenuAction::Quit => app.exit(0),
     }
@@ -104,6 +108,13 @@ pub fn compose_menu_entries(
         entries.push(MenuEntry::Action(
             MenuAction::RunFullTest,
             catalog.render("menu-full-test", None),
+        ));
+    }
+    // Linux has no popover: the menu is the way to the help there.
+    if display.help.is_some() {
+        entries.push(MenuEntry::Action(
+            MenuAction::OpenHelp,
+            catalog.render("menu-ping-help", None),
         ));
     }
     entries.extend([
@@ -280,6 +291,7 @@ fn read_info_texts(entries: &[MenuEntry]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::display::HelpDisplay;
 
     #[test]
     fn lists_state_cause_dashboard_settings_and_quit_while_tests_are_off() {
@@ -333,6 +345,20 @@ mod tests {
                 MenuAction::Quit,
             ]
         );
+    }
+
+    #[test]
+    fn leads_to_the_help_when_the_cause_cannot_be_determined() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let mut display = ConnectionDisplay::create_initial(&catalog);
+        display.help = Some(HelpDisplay::compose_ping_help(&catalog));
+
+        // Act
+        let entries = compose_menu_entries(&display, &Settings::default(), &catalog);
+
+        // Assert
+        assert!(list_actions(&entries).contains(&MenuAction::OpenHelp));
     }
 
     #[test]

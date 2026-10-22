@@ -114,6 +114,48 @@ pub struct ConnectionDisplay {
     pub network: Option<NetworkDisplay>,
     /// `None` without a default route.
     pub path: Option<PathDisplay>,
+    /// How to let the app measure the link to the box, when the system refuses the ping; `None`
+    /// whenever the cause is known.
+    pub help: Option<HelpDisplay>,
+}
+
+/// One thing to do, and the command that does it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct HelpStep {
+    pub label: String,
+    pub command: String,
+}
+
+/// Help kept in the app: the repository that holds the documentation is private.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct HelpDisplay {
+    pub title: String,
+    pub why: String,
+    pub steps: Vec<HelpStep>,
+    /// What the app still measures without it.
+    pub without: String,
+}
+
+impl HelpDisplay {
+    /// Linux refuses an unprivileged ping unless the user's group is in `ping_group_range`. O(1).
+    #[must_use]
+    pub fn compose_ping_help(catalog: &TextCatalog) -> Self {
+        let step = |label: &str, command: &str| HelpStep {
+            label: catalog.render(label, None),
+            command: catalog.render(command, None),
+        };
+        Self {
+            title: catalog.render("help-ping-title", None),
+            why: catalog.render("help-ping-why", None),
+            steps: vec![
+                step("help-ping-now", "help-ping-now-command"),
+                step("help-ping-keep", "help-ping-keep-command"),
+            ],
+            without: catalog.render("help-ping-without", None),
+        }
+    }
 }
 
 impl ConnectionDisplay {
@@ -194,6 +236,14 @@ impl ConnectionDisplay {
             ],
             open_dashboard_label: catalog.render("action-open-dashboard", None),
             path: PathDisplay::from_view(view, catalog),
+            help: matches!(
+                view.diagnosis,
+                Diagnosis::OutOfThreshold {
+                    fault: Fault::Undetermined(Unmeasurable::NotPermitted),
+                    ..
+                }
+            )
+            .then(|| HelpDisplay::compose_ping_help(catalog)),
             network: view
                 .context
                 .map(|context| NetworkDisplay::from_context(&context, view.wifi.as_ref(), catalog)),
@@ -926,6 +976,25 @@ mod tests {
             display.action.as_deref(),
             Some("Autoriser le ping (net.ipv4.ping_group_range).")
         );
+        let help = display.help.expect("help to allow the ping");
+        assert!(
+            help.steps
+                .iter()
+                .any(|step| step.command.contains("net.ipv4.ping_group_range"))
+        );
+        assert!(!help.without.is_empty());
+    }
+
+    #[test]
+    fn offers_no_help_where_the_cause_is_known() {
+        // Act
+        let display = ConnectionDisplay::from_view(
+            &create_fault_view(Fault::Operator, ConnectionKind::WiFi),
+            &TextCatalog::load(),
+        );
+
+        // Assert
+        assert_eq!(display.help, None);
     }
 
     #[test]

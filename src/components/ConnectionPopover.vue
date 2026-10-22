@@ -4,6 +4,7 @@ import { useConnectionDisplay } from '../composables/use-connection-display'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import ConnectionPath from './ConnectionPath.vue'
 import MetricGauge from './MetricGauge.vue'
+import HelpDetails from './HelpDetails.vue'
 import PopoverThroughput from './PopoverThroughput.vue'
 import StateShape from './StateShape.vue'
 
@@ -57,6 +58,7 @@ const openDashboard = async (): Promise<void> => {
     </header>
     <p class="cause" aria-live="polite">{{ display.cause }}</p>
     <p v-if="display.action" class="action">{{ display.action }}</p>
+    <HelpDetails v-if="display.help" :help="display.help" />
     <p v-if="display.detail" class="detail num">{{ display.detail }}</p>
     <ConnectionPath v-if="display.path" :path="display.path" />
 

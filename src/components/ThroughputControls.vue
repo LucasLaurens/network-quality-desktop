@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { inject, ref, watch } from 'vue'
-import { REQUESTED_TEST_KEY, THROUGHPUT_PROFILES, useThroughputTest } from '../composables/use-throughput-test'
+import { REQUESTED_TEST_KEY } from '../composables/dashboard-requests'
+import { THROUGHPUT_PROFILES, useThroughputTest } from '../composables/use-throughput-test'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 
 const emit = defineEmits<{ done: [] }>()

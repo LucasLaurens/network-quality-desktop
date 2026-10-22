@@ -92,9 +92,29 @@ export const connectionScenarios: Record<string, ConnectionDisplay> = {
       name,
       definition: DEFINITIONS[name] ?? '',
       method: `15${NBSP}s`,
-      value: 'en cours',
+      value: 'valeur inconnue',
       gauge: null,
       hint: null,
     })),
+  }),
+  undetermined: createConnectionDisplay({
+    openDashboardLabel: 'Ouvrir le tableau de bord',
+    network: { label: 'Box-Bureau', connection: 'Ethernet', wifiDetails: null, revealLabel: null },
+    state: 'unstable',
+    stateLabel: 'Instable',
+    cause: 'La cause exacte ne peut pas être déterminée sur ce système.',
+    action: 'Autoriser le ping (net.ipv4.ping_group_range).',
+    help: {
+      title: 'Autoriser le ping sans privilège',
+      why: "Sous Linux, un ping envoyé sans être administrateur n'est permis qu'aux groupes listés dans net.ipv4.ping_group_range. Sans ce droit, l'app ne peut pas mesurer le lien avec la box.",
+      steps: [
+        { label: `Pour cette session${NBSP}:`, command: 'sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"' },
+        {
+          label: `Pour le garder après un redémarrage${NBSP}:`,
+          command: "echo 'net.ipv4.ping_group_range = 0 2147483647' | sudo tee /etc/sysctl.d/99-ping.conf",
+        },
+      ],
+      without: `Sans cela, l'app mesure Internet comme d'habitude${NBSP}: seul le tronçon vers la box reste inconnu.`,
+    },
   }),
 }
