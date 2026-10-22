@@ -32,6 +32,6 @@ Le pire des deux sens compte. L'état affiché devient le plus mauvais entre la 
 
 ## Historique
 
-Chaque test est gardé sur l'ordinateur, sous son réseau : quand, lequel, réception, envoi, latence en charge et données consommées. Le tableau de bord affiche les 20 derniers, le plus récent en premier. Les débits sont gardés au kbit/s près, les durées à la milliseconde.
+Chaque test est gardé sur l'ordinateur, sous son réseau : quand, lequel, réception, envoi, latence en charge et données consommées. Le tableau de bord affiche les 20 derniers, le plus récent en premier. Les débits sont gardés au kbit/s près, les durées à la milliseconde. Les tests s'exportent dans `tests-de-debit.csv` (voir [Export](export.md)), et l'envoi des 5 derniers tests d'un réseau (3 au moins) sert à estimer son accès (voir [Détails techniques](tableau-de-bord.md#accès-et-ligne)).
 
 Le serveur de test est celui de Cloudflare (`speed.cloudflare.com`), gratuit et sans compte ; voir [Confidentialité](confidentialite.md).

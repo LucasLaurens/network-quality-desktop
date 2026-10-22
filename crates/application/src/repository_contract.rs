@@ -1,4 +1,4 @@
-//! The behaviour every `MeasurementRepository` and `HistoryReader` share. Each adapter runs these checks on a fresh
+//! The behaviour every `MeasurementRepository`, `HistoryReader` and `HistoryStream` share. Each adapter runs these checks on a fresh
 //! repository, so the in-memory fake and the database cannot drift apart.
 
 use std::time::Duration;
@@ -9,8 +9,8 @@ use domain::{
 };
 
 use crate::{
-    EventKind, HistoryEvent, HistoryReader, MeasurementRepository, NetworkKey, SettingsRepository,
-    ThroughputRecord,
+    EventKind, HistoryEvent, HistoryReader, HistoryStream, MeasurementRepository, NetworkKey,
+    RepositoryError, SettingsRepository, ThroughputRecord,
 };
 
 const HOUR: i64 = 3600;
@@ -45,7 +45,9 @@ fn create_aggregate(seconds: u32, latency_ms: u64) -> Aggregate {
 /// # Panics
 ///
 /// When the repository breaks the contract.
-pub fn check_contract<R: MeasurementRepository + HistoryReader>(create: impl Fn() -> R) {
+pub fn check_contract<R: MeasurementRepository + HistoryReader + HistoryStream>(
+    create: impl Fn() -> R,
+) {
     adds_to_a_minute_already_kept(&mut create());
     replaces_an_hour_already_kept(&mut create());
     lists_rows_in_range_oldest_first(&mut create());
@@ -61,11 +63,13 @@ pub fn check_contract<R: MeasurementRepository + HistoryReader>(create: impl Fn(
     lists_the_rows_of_every_network_in_range(&mut create());
     keeps_every_kind_of_event(&mut create());
     keeps_throughput_tests_newest_first(&mut create());
+    erases_the_whole_history(&mut create());
 }
 
 /// Rates in whole kbit/s and round trips in whole milliseconds: the precision the storage keeps.
+/// The list goes newest first, for the dashboard; the stream oldest first, for an export.
 fn keeps_throughput_tests_newest_first(
-    repository: &mut (impl MeasurementRepository + HistoryReader),
+    repository: &mut (impl MeasurementRepository + HistoryReader + HistoryStream),
 ) {
     // Arrange
     let network = create_network(23, Some("Box"));
@@ -106,7 +110,15 @@ fn keeps_throughput_tests_newest_first(
     let tests = repository
         .list_throughput_tests(SOME_HOUR, SOME_HOUR + HOUR)
         .expect("tests");
-    assert_eq!(tests, vec![newer, older]);
+    let mut streamed = Vec::new();
+    repository
+        .stream_throughput_tests(SOME_HOUR, SOME_HOUR + HOUR, |record| {
+            streamed.push(record.clone());
+            Ok::<_, RepositoryError>(())
+        })
+        .expect("a stream");
+    assert_eq!(tests, vec![newer.clone(), older.clone()]);
+    assert_eq!(streamed, vec![older, newer]);
 }
 
 fn keeps_every_kind_of_event(repository: &mut (impl MeasurementRepository + HistoryReader)) {
@@ -517,4 +529,56 @@ fn goes_back_to_the_public_servers(repository: &mut impl SettingsRepository) {
     let settings = repository.read_settings().expect("settings");
     assert_eq!(settings.servers, MeasurementServers::Default);
     assert_eq!(settings.appearance, Appearance::Light);
+}
+
+fn erases_the_whole_history(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+    // Arrange
+    let network = create_network(24, Some("Box"));
+    repository
+        .add_minute(&network, SOME_HOUR, &create_aggregate(60, 20))
+        .expect("a minute");
+    repository
+        .save_hour(&network, SOME_HOUR, &create_aggregate(60, 20))
+        .expect("an hour");
+    repository
+        .record_event(&HistoryEvent {
+            utc: SOME_HOUR,
+            network: network.clone(),
+            kind: EventKind::Wake,
+        })
+        .expect("an event");
+    repository
+        .record_throughput_test(&ThroughputRecord {
+            utc: SOME_HOUR,
+            network: network.clone(),
+            result: ThroughputResult {
+                profile: TestProfile::Quick,
+                download: None,
+                upload: None,
+                loaded_latency: None,
+                bytes: 0,
+                duration: Duration::ZERO,
+            },
+        })
+        .expect("a test");
+
+    // Act
+    repository.erase_history().expect("an erase");
+
+    // Assert
+    let range = (SOME_HOUR, SOME_HOUR + HOUR);
+    let minutes = repository
+        .list_all_aggregates(Granularity::Minute, range.0, range.1)
+        .expect("minutes");
+    let hours = repository
+        .list_all_aggregates(Granularity::Hour, range.0, range.1)
+        .expect("hours");
+    let events = repository.list_events(range.0, range.1).expect("events");
+    let tests = repository
+        .list_throughput_tests(range.0, range.1)
+        .expect("tests");
+    assert!(minutes.is_empty() && hours.is_empty() && events.is_empty() && tests.is_empty());
+    repository
+        .add_minute(&network, SOME_HOUR, &create_aggregate(60, 20))
+        .expect("a minute after the erase");
 }

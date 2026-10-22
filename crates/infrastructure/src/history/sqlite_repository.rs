@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use application::{
-    EventKind, HistoryEvent, HistoryReader, MeasurementRepository, NetworkKey, RepositoryError,
-    SettingsRepository, ThroughputRecord,
+    EventKind, HistoryEvent, HistoryReader, HistoryStream, MeasurementRepository, NetworkKey,
+    RepositoryError, SettingsRepository, ThroughputRecord,
 };
 use domain::{
     Aggregate, Appearance, Bitrate, ConnectionKind, Granularity, LatencyHistogram, MacAddress,
@@ -284,6 +284,28 @@ impl MeasurementRepository for SqliteMeasurementRepository {
             Ok(())
         })
     }
+
+    /// Deleted pages are zeroed as they go (`secure_delete`), then the file is rewritten and the
+    /// journal emptied. The rows are gone once the transaction commits: a rewrite that fails, or a
+    /// journal a reader still holds, is only logged. O(file).
+    fn erase_history(&mut self) -> Result<(), RepositoryError> {
+        self.connection
+            .pragma_update(None, "secure_delete", true)
+            .map_err(to_error)?;
+        self.write(|transaction| {
+            transaction.execute_batch(
+                "DELETE FROM aggregates; DELETE FROM events; DELETE FROM throughput_tests; \
+                 DELETE FROM networks;",
+            )
+        })?;
+        if let Err(error) = self
+            .connection
+            .execute_batch("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);")
+        {
+            eprintln!("Rewriting the history after the erase failed: {error}");
+        }
+        Ok(())
+    }
 }
 
 impl HistoryReader for SqliteMeasurementRepository {
@@ -294,6 +316,50 @@ impl HistoryReader for SqliteMeasurementRepository {
         from: i64,
         to: i64,
     ) -> Result<Vec<(NetworkKey, i64, Aggregate)>, RepositoryError> {
+        let mut rows = Vec::new();
+        self.stream_all_aggregates(granularity, from, to, |network, start, aggregate| {
+            rows.push((network.clone(), start, *aggregate));
+            Ok::<_, RepositoryError>(())
+        })?;
+        Ok(rows)
+    }
+
+    /// Newest first. O(t log t) for the t tests kept: a test is a click, so there are few.
+    fn list_throughput_tests(
+        &self,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<ThroughputRecord>, RepositoryError> {
+        let mut tests = Vec::new();
+        self.stream_throughput_tests(from, to, |record| {
+            tests.push(record.clone());
+            Ok::<_, RepositoryError>(())
+        })?;
+        tests.reverse();
+        Ok(tests)
+    }
+
+    /// O(log n + k) through the time index.
+    fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
+        let mut events = Vec::new();
+        self.stream_events(from, to, |event| {
+            events.push(event.clone());
+            Ok::<_, RepositoryError>(())
+        })?;
+        Ok(events)
+    }
+}
+
+/// One row read at a time from the cursor: an export of years stays in constant memory.
+impl HistoryStream for SqliteMeasurementRepository {
+    /// O(log n + k) time through the (granularity, start) index, O(1) space.
+    fn stream_all_aggregates<E: From<RepositoryError>>(
+        &self,
+        granularity: Granularity,
+        from: i64,
+        to: i64,
+        mut visit: impl FnMut(&NetworkKey, i64, &Aggregate) -> Result<(), E>,
+    ) -> Result<(), E> {
         let mut statement = self
             .connection
             .prepare(&format!(
@@ -306,28 +372,57 @@ impl HistoryReader for SqliteMeasurementRepository {
             .query_map(params![to_granularity_code(granularity), from, to], |row| {
                 Ok((
                     read_network(row, 0)?,
-                    row.get(3)?,
+                    row.get::<_, i64>(3)?,
                     read_aggregate_from(row, 4)?,
                 ))
             })
             .map_err(to_error)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(to_error)
+        visit_rows(rows, |(network, start, aggregate)| {
+            visit(&network, start, &aggregate)
+        })
     }
 
-    /// O(log n + k) through the time index.
-    /// Newest first. O(t log t) for the t tests kept: a test is a click, so there are few.
-    fn list_throughput_tests(
+    /// O(log n + k) time through the time index, O(1) space.
+    fn stream_events<E: From<RepositoryError>>(
         &self,
         from: i64,
         to: i64,
-    ) -> Result<Vec<ThroughputRecord>, RepositoryError> {
+        mut visit: impl FnMut(&HistoryEvent) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT n.gateway_mac, n.connection_kind, n.label, e.ts, e.kind FROM events e \
+                 JOIN networks n ON n.id = e.network_id WHERE e.ts >= ?1 AND e.ts < ?2 \
+                 ORDER BY e.ts, e.rowid",
+            )
+            .map_err(to_error)?;
+        let rows = statement
+            .query_map(params![from, to], |row| {
+                Ok(HistoryEvent {
+                    network: read_network(row, 0)?,
+                    utc: row.get(3)?,
+                    kind: from_event_text(&row.get::<_, String>(4)?),
+                })
+            })
+            .map_err(to_error)?;
+        visit_rows(rows, |row| visit(&row))
+    }
+
+    /// O(t log t) time for the t tests kept, O(1) space.
+    fn stream_throughput_tests<E: From<RepositoryError>>(
+        &self,
+        from: i64,
+        to: i64,
+        mut visit: impl FnMut(&ThroughputRecord) -> Result<(), E>,
+    ) -> Result<(), E> {
         let mut statement = self
             .connection
             .prepare(
                 "SELECT n.gateway_mac, n.connection_kind, n.label, t.ts, t.profile, t.down_kbps, \
                  t.up_kbps, t.loaded_latency_ms, t.bytes, t.duration_ms FROM throughput_tests t \
                  JOIN networks n ON n.id = t.network_id WHERE t.ts >= ?1 AND t.ts < ?2 \
-                 AND t.status = ?3 ORDER BY t.ts DESC, t.rowid DESC",
+                 AND t.status = ?3 ORDER BY t.ts, t.rowid",
             )
             .map_err(to_error)?;
         let rows = statement
@@ -346,29 +441,20 @@ impl HistoryReader for SqliteMeasurementRepository {
                 })
             })
             .map_err(to_error)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(to_error)
+        visit_rows(rows, |row| visit(&row))
     }
+}
 
-    fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT n.gateway_mac, n.connection_kind, n.label, e.ts, e.kind FROM events e \
-                 JOIN networks n ON n.id = e.network_id WHERE e.ts >= ?1 AND e.ts < ?2 \
-                 ORDER BY e.ts, e.rowid",
-            )
-            .map_err(to_error)?;
-        let rows = statement
-            .query_map(params![from, to], |row| {
-                Ok(HistoryEvent {
-                    network: read_network(row, 0)?,
-                    utc: row.get(3)?,
-                    kind: from_event_text(&row.get::<_, String>(4)?),
-                })
-            })
-            .map_err(to_error)?;
-        rows.collect::<rusqlite::Result<_>>().map_err(to_error)
+/// Hands each row to `visit` as the cursor reads it; the first failure stops the reading.
+/// O(k) for k rows, O(1) space.
+fn visit_rows<T, E: From<RepositoryError>>(
+    rows: impl Iterator<Item = rusqlite::Result<T>>,
+    mut visit: impl FnMut(T) -> Result<(), E>,
+) -> Result<(), E> {
+    for row in rows {
+        visit(row.map_err(to_error)?)?;
     }
+    Ok(())
 }
 
 impl SettingsRepository for SqliteMeasurementRepository {
@@ -702,6 +788,24 @@ mod tests {
     fn honours_the_repository_contract() {
         // Act & Assert
         check_contract(|| SqliteMeasurementRepository::open_in_memory().expect("a history"));
+    }
+
+    #[test]
+    fn keeps_the_settings_when_the_history_is_erased() {
+        // Arrange
+        let mut repository = SqliteMeasurementRepository::open_in_memory().expect("a history");
+        let settings = Settings {
+            launch_at_login: true,
+            notifies_on_degradation: false,
+            ..Settings::default()
+        };
+        repository.save_settings(&settings).expect("settings saved");
+
+        // Act
+        repository.erase_history().expect("an erase");
+
+        // Assert
+        assert_eq!(repository.read_settings().expect("settings"), settings);
     }
 
     #[test]

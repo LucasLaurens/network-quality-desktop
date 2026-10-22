@@ -205,4 +205,42 @@ unit-milliseconds = { $value } ms
 unit-percent = { $value } %
 unit-dbm = −{ $value } dBm
 unit-megabytes = { $value } Mo
+unit-gigabytes = { $value } Go
 unit-megabits = { $value } Mbit/s
+
+## Données : export et effacement de l'historique.
+export-done = Export enregistré dans Téléchargements : { $folder }.
+export-failed = L'export n'a pas pu être écrit.
+export-unavailable = L'historique n'est pas enregistré sur le disque pendant cette session : il n'y a rien à exporter.
+history-erased = Historique effacé.
+history-not-erased = L'historique n'a pas pu être effacé.
+
+
+## Détails techniques du tableau de bord.
+details-title = Détails techniques
+details-connection = Connexion
+details-network = Réseau
+details-connection-kind = Liaison
+details-gateway = Adresse de la box
+details-wifi = Wi-Fi
+details-wifi-signal = Signal
+details-wifi-band = Bande
+details-wifi-channel = Canal
+details-wifi-rate = Débit négocié
+details-traffic = Trafic observé
+details-traffic-now = Sur { $seconds } secondes
+details-traffic-peak = Pic de la dernière heure
+details-traffic-waiting = Disponible dans quelques secondes
+details-pair = ↓ { $received }, ↑ { $sent }
+details-line = Ligne
+details-access = Accès
+details-line-rate = Débit synchronisé
+details-box-traffic = Trafic total de la box
+details-line-note = Valeurs annoncées par la box (UPnP), non mesurées. Son compteur de trafic repart souvent de zéro tous les 4 Go.
+details-line-silent = La box ne répond pas en UPnP : l'accès n'est qu'estimé, d'après les tests de débit de ce réseau et la latence.
+details-line-silent-unknown = La box ne répond pas en UPnP : l'accès reste inconnu tant que trois tests de débit sur ce réseau et la latence ne concordent pas.
+access-reported-dsl = DSL (annoncé par la box)
+access-estimated-fibre = Fibre (estimé)
+access-estimated-adsl = ADSL (estimé)
+access-unknown = Inconnu
+details-line-failed = La ligne n'a pas pu être lue.

@@ -10,6 +10,7 @@ use fluent_bundle::FluentArgs;
 use infrastructure::{SqliteHistoryRecorder, SqliteMeasurementRepository, SystemClock};
 use tauri::{AppHandle, Manager};
 
+use crate::history_export::HistoryLocation;
 use crate::settings_store::SettingsStore;
 use crate::text_catalog::TextCatalog;
 
@@ -79,6 +80,7 @@ pub struct OpenedStores {
     pub notice: HistoryNotice,
     pub dashboard: DashboardHistory,
     pub settings: SettingsStore,
+    pub location: HistoryLocation,
 }
 
 /// Opens the history in the app's data folder, then the dashboard's and the settings'
@@ -112,6 +114,7 @@ pub fn open_stores(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> Open
                 notice: HistoryNotice(notice),
                 dashboard: DashboardHistory::open(&path),
                 settings: SettingsStore::open(&path),
+                location: HistoryLocation::OnDisk(path),
             }
         }
         Err(error) => {
@@ -123,6 +126,7 @@ pub fn open_stores(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> Open
                     notice,
                     dashboard: DashboardHistory::create_empty(),
                     settings: SettingsStore::create_in_memory(),
+                    location: HistoryLocation::InMemory,
                 },
                 Err(error) => panic!("an in-memory history cannot fail to open: {}", error.0),
             }

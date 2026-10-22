@@ -5,6 +5,9 @@ import type {
   DashboardSummaryDisplay,
   DisplayState,
   EvolutionDisplay,
+  DetailSection,
+  ExportPeriodChoice,
+  LineDetails,
   MetricDisplay,
   NetworkRowDisplay,
   OverviewDisplay,
@@ -14,6 +17,7 @@ import type {
   SegmentDisplay,
   SeriesDisplay,
   SettingsForm,
+  TechnicalDetails,
   ThroughputOutcome,
   ThroughputPanel,
   ThroughputRow,
@@ -81,6 +85,13 @@ export function createWindowModeTexts(): WindowModeTexts {
     linkLabel: faker.lorem.words(3),
     dismissLabel: faker.word.verb(),
     quitLabel: faker.word.verb(),
+  }
+}
+
+export function createDetailSection(): DetailSection {
+  return {
+    title: faker.word.words(2),
+    rows: Array.from({ length: 2 }, () => ({ label: faker.word.noun(), value: faker.word.words(3) })),
   }
 }
 
@@ -182,6 +193,21 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   readonly evolutionRequests: PeriodChoice[] = []
   readonly savedForms: SettingsForm[] = []
   readonly throughputRuns: ProfileChoice[] = []
+  readonly exports: ExportPeriodChoice[] = []
+  readonly exportConfirmation = faker.lorem.sentence()
+  readonly eraseConfirmation = faker.lorem.sentence()
+  erases = 0
+  technicalDetailsReads = 0
+  lineDetailsReads = 0
+  technicalDetails: TechnicalDetails = {
+    sections: [createDetailSection(), createDetailSection()],
+    refreshSeconds: faker.number.int({ min: 2, max: 10 }),
+  }
+  readonly lineDetails: LineDetails = { section: createDetailSection(), note: faker.lorem.sentence() }
+  /** Empty while the line is read. */
+  private lineRefusal = ''
+  /** Empty while exports and erases succeed. */
+  private dataRefusal = ''
   private throughputPanel = createThroughputPanel()
   private readonly nextThroughputRow = createThroughputRow()
   /** Empty while tests run. */
@@ -394,6 +420,39 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   finishThroughputTest(): void {
     this.isHoldingThroughput = false
     this.releaseThroughputTest()
+  }
+
+  exportHistory(period: ExportPeriodChoice): Promise<string> {
+    if (this.dataRefusal !== '') return Promise.reject(new Error(this.dataRefusal))
+    this.exports.push(period)
+    return Promise.resolve(this.exportConfirmation)
+  }
+
+  eraseHistory(): Promise<string> {
+    if (this.dataRefusal !== '') return Promise.reject(new Error(this.dataRefusal))
+    this.erases += 1
+    return Promise.resolve(this.eraseConfirmation)
+  }
+
+  /** Every export and erase is refused with `refusal`. */
+  refuseDataActions(refusal: string): void {
+    this.dataRefusal = refusal
+  }
+
+  readTechnicalDetails(): Promise<TechnicalDetails> {
+    this.technicalDetailsReads += 1
+    return Promise.resolve(this.technicalDetails)
+  }
+
+  readLineDetails(): Promise<LineDetails> {
+    this.lineDetailsReads += 1
+    if (this.lineRefusal !== '') return Promise.reject(new Error(this.lineRefusal))
+    return Promise.resolve(this.lineDetails)
+  }
+
+  /** Every reading of the line is refused with `refusal`. */
+  refuseLineDetails(refusal: string): void {
+    this.lineRefusal = refusal
   }
 
   readNextThroughputRow(): ThroughputRow {

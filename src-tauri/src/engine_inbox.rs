@@ -10,6 +10,8 @@ use tokio::sync::{mpsc, oneshot};
 
 /// How long quitting waits for the last minute to be written.
 pub const FLUSH_TIMEOUT: Duration = Duration::from_secs(2);
+/// Erasing rewrites the history file: a few seconds for months of history.
+pub const ERASE_TIMEOUT: Duration = Duration::from_secs(30);
 /// Windows lets about 2 s pass between the sleep notice and the sleep: answer before it.
 pub const SLEEP_TIMEOUT: Duration = Duration::from_millis(1500);
 const SEND_RETRY_EVERY: Duration = Duration::from_millis(20);
@@ -60,6 +62,13 @@ impl EngineInbox {
             .urgent
             .send(EngineMessage::ThroughputEnded(result))
             .await;
+    }
+
+    /// Erases the history and the engine's last hour; `false` when it did not finish in time.
+    /// Blocking: run it off the async runtime.
+    #[must_use]
+    pub fn erase_history(&self) -> bool {
+        self.send_and_wait(EngineMessage::EraseHistory, ERASE_TIMEOUT)
     }
 
     /// Writes the minute in progress before the app quits.
@@ -131,7 +140,9 @@ mod tests {
             let mut unanswered = Vec::new();
             while let Some(message) = inbox.blocking_recv() {
                 match message {
-                    EngineMessage::Sleep(answer) | EngineMessage::Flush(answer) => {
+                    EngineMessage::Sleep(answer)
+                    | EngineMessage::Flush(answer)
+                    | EngineMessage::EraseHistory(answer) => {
                         received.push("answering");
                         if reply == Reply::Answers {
                             let _ = answer.send(());

@@ -1,12 +1,17 @@
 //! Typed commands exposed to the front end. Tauri cannot export `pub` commands from the crate root.
 
+use fluent_bundle::FluentArgs;
 use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Manager, State};
 
-use application::{Clock, can_measure_against, list_network_summaries, read_day_overview};
+use application::{
+    Clock, can_measure_against, detect_access, list_network_summaries, read_day_overview,
+};
 use domain::TestProfile;
-use infrastructure::{LocationRequest, SystemClock, request_location_permission};
+use infrastructure::{
+    LocationRequest, SystemClock, UpnpAccessDetector, request_location_permission,
+};
 
 use crate::create_latency_probe;
 use crate::dashboard_display::{
@@ -14,6 +19,7 @@ use crate::dashboard_display::{
 };
 use crate::display::ConnectionDisplay;
 use crate::engine_inbox::EngineInbox;
+use crate::history_export::{ExportPeriodChoice, HistoryLocation, write_export};
 use crate::history_store::{DashboardHistory, HistoryNotice};
 use crate::settings_effects::apply_settings;
 use crate::settings_form::{SettingsForm, format_save_confirmation};
@@ -21,11 +27,13 @@ use crate::settings_store::SettingsStore;
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
 use crate::shell_presenter::ConnectionStore;
 use crate::shell_presenter::DisplayStore;
+use crate::technical_details::{LineDetails, TechnicalDetails};
 use crate::text_catalog::TextCatalog;
 use crate::throughput_display::{
     ProfileChoice, ThroughputOutcome, ThroughputPanel, ThroughputRow, compose_warning,
 };
 use crate::throughput_lab::{LabRefusal, ThroughputLab};
+use crate::traffic_store::TrafficStore;
 use crate::windows::{POPOVER_WINDOW, report_failure, show_dashboard};
 
 /// Identity of the running build, shown in the window footer.
@@ -341,6 +349,138 @@ pub async fn run_throughput_test(
             &catalog,
         ),
     })
+}
+
+/// Writes the history of `period` as three CSV files into a new folder of Downloads, on a thread
+/// of its own, then shows the folder.
+///
+/// # Errors
+///
+/// The sentence shown under the button: a history kept in memory, or a failed export.
+#[tauri::command]
+#[specta::specta]
+pub async fn export_history(
+    period: ExportPeriodChoice,
+    utc_offset_seconds: i32,
+    app: AppHandle,
+    location: State<'_, HistoryLocation>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<String, String> {
+    let HistoryLocation::OnDisk(history) = location.inner() else {
+        return Err(catalog.render("export-unavailable", None));
+    };
+    let failed = || catalog.render("export-failed", None);
+    let downloads = app.path().download_dir().map_err(|error| {
+        eprintln!("The Downloads folder cannot be found: {error}");
+        failed()
+    })?;
+    let history = history.clone();
+    let now = SystemClock::start().read_utc_seconds();
+    let offset = i64::from(utc_offset_seconds);
+    let (answer, answered) = tokio::sync::oneshot::channel();
+    std::thread::Builder::new()
+        .name("export".to_owned())
+        .spawn(move || {
+            let _ = answer.send(write_export(
+                &history,
+                &downloads,
+                period.into(),
+                now,
+                offset,
+            ));
+        })
+        .map_err(|error| {
+            eprintln!("Starting the export failed: {error}");
+            failed()
+        })?;
+    let folder = answered
+        .await
+        .map_err(|error| {
+            eprintln!("The export thread stopped: {error}");
+            failed()
+        })?
+        .map_err(|error| {
+            eprintln!("The export failed: {error:?}");
+            failed()
+        })?;
+    if let Err(error) = tauri_plugin_opener::reveal_item_in_dir(&folder) {
+        eprintln!("Showing the export failed: {error}");
+    }
+    let mut args = FluentArgs::new();
+    args.set(
+        "folder",
+        folder
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
+    );
+    Ok(catalog.render("export-done", Some(&args)))
+}
+
+/// Erases every measure, event and throughput test; the settings stay.
+///
+/// # Errors
+///
+/// The sentence shown under the button when the erase did not finish.
+#[tauri::command]
+#[specta::specta]
+pub async fn erase_history(
+    inbox: State<'_, EngineInbox>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<String, String> {
+    let inbox = inbox.inner().clone();
+    let is_erased = tauri::async_runtime::spawn_blocking(move || inbox.erase_history())
+        .await
+        .unwrap_or(false);
+    if is_erased {
+        Ok(catalog.render("history-erased", None))
+    } else {
+        Err(catalog.render("history-not-erased", None))
+    }
+}
+
+/// The connection, its Wi-Fi and the traffic seen: quick, read again while the details are open.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn read_technical_details(
+    connection: State<'_, ConnectionStore>,
+    traffic: State<'_, TrafficStore>,
+    catalog: State<'_, TextCatalog>,
+) -> TechnicalDetails {
+    TechnicalDetails::compose(&connection.read_all(), traffic.read(), &catalog)
+}
+
+/// What carries the line: the box asked over `UPnP` (a few seconds at most), then the estimate
+/// from this network's throughput tests and the latency at rest.
+///
+/// # Errors
+///
+/// The sentence shown in the panel when the history could not be read.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_line_details(
+    connection: State<'_, ConnectionStore>,
+    inbox: State<'_, EngineInbox>,
+    history: State<'_, DashboardHistory>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<LineDetails, String> {
+    let network = inbox.read_live().await.network;
+    let now = SystemClock::start().read_utc_seconds();
+    let tests = history
+        .read(|reader| reader.list_throughput_tests(0, now + 1))
+        .map_err(|error| {
+            eprintln!("Reading the throughput tests failed: {}", error.0);
+            catalog.render("details-line-failed", None)
+        })?;
+    let reading = connection.read_all();
+    let detector =
+        UpnpAccessDetector::new(reading.context.and_then(|context| context.gateway_address));
+    let line = detect_access(&detector, &tests, network.as_ref(), reading.latency).await;
+    Ok(LineDetails::compose(&line, &catalog))
 }
 
 #[cfg(test)]

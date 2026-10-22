@@ -46,7 +46,8 @@ Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; l
 
 ## Lecture
 
-- Le tableau de bord lit par le port `HistoryReader` (`list_all_aggregates`, `list_events`), séparé de `MeasurementRepository` : l'écrivain n'en a pas besoin. `list_all_aggregates` rend les lignes de tous les réseaux d'une granularité et d'une plage, par l'index `(granularity, start)`.
+- Le tableau de bord lit par le port `HistoryReader` (`list_all_aggregates`, `list_events`, `list_throughput_tests`), séparé de `MeasurementRepository` : l'écrivain n'en a pas besoin. `list_all_aggregates` rend les lignes de tous les réseaux d'une granularité et d'une plage, par l'index `(granularity, start)`.
+- Le port `HistoryStream` (`stream_all_aggregates`, `stream_events`, `stream_throughput_tests`) rend les mêmes lignes une à une, de la plus ancienne à la plus récente, à une fonction de visite qui peut arrêter la lecture par sa propre erreur. Dans SQLite, chaque ligne est lue au curseur : rien n'est gardé en mémoire. Dans SQLite, les trois méthodes de `HistoryReader` s'appuient dessus (`list_throughput_tests` inverse ensuite l'ordre).
 - Le shell ouvre une seconde connexion SQLite en lecture seule (`SqliteMeasurementRepository::open_read_only`), après l'écrivain : en WAL, elle lit pendant qu'il écrit, sans l'attendre, et ne peut rien écrire. Si l'historique vit en mémoire (repli), le lecteur est un objet nul qui ne rend rien : seule la dernière heure en mémoire s'affiche.
 - Les calculs sont des fonctions de la couche application (`dashboard.rs`) : `read_evolution` (seaux de largeur fixe, vides là où rien n'a été mesuré, changements de réseau, couverture), `read_day_overview` (journée, coupures, pire minute, arrivée sur le réseau courant), `list_network_summaries` (30 jours par réseau, le plus fiable). Les périodes de 7 et 30 jours lisent les heures closes puis les minutes de l'heure en cours. La dernière heure lit les minutes écrites avant le début de la mémoire, puis la mémoire, sans compter deux fois la minute où la mémoire commence.
 - Deux événements `network_changed` successifs du même type, dont l'un n'a pas de MAC (lue plus tard) et dont les noms ne diffèrent pas, ne sont pas un changement (`NetworkKey::is_likely_same`). Le regroupement par réseau suit l'identité stockée (`is_same_identity`).
@@ -55,6 +56,18 @@ Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; l
 
 - Table `throughput_tests` (première migration) : `ts`, réseau, `profile` (`quick`, `full`), `down_kbps`, `up_kbps`, `loaded_latency_ms` (`NULL` pour un sens non mesuré), `bytes`, `duration_ms`, `status` (`done` : seuls les tests finis sont gardés). Écrits par le fil d'écriture (`HistoryCommand::RecordThroughput`), lus par le tableau de bord (`HistoryReader::list_throughput_tests`, du plus récent au plus ancien). Les entiers passent en `i64` à la frontière SQLite. La suite de contrat les couvre.
 
+## Export
+
+- `export_measures`, `export_events`, `export_throughput_tests` (couche application, `export.rs`) écrivent chacune un fichier CSV RFC 4180 sur un `Write`, ligne par ligne depuis `HistoryStream` : O(r) en temps, O(1) en mémoire. `encode_csv_line` ne met un champ entre guillemets que s'il contient une virgule, un guillemet ou un retour à la ligne ; `format_utc_iso8601` écrit les dates (`CivilDateTime`, domaine).
+- Mesures : la purge garde une minute tant que son heure n'est pas conservée, donc après l'heure qui contient la limite des 30 jours (`MINUTE_RETENTION`), toutes les minutes sont là. L'export prend les heures jusqu'à cette heure comprise (à partir de l'heure qui contient le début de la période), puis les minutes : chaque seconde une fois. Ni la MAC (`gateway_mac`) ni `latency_hist` ne sortent ; le réseau est nommé par son libellé, précédé d'une apostrophe s'il commence comme une formule de tableur (`=`, `+`, `-`, `@`, tabulation, retour chariot). « Tout » part de 0 (1970). Le format des colonnes est décrit dans [Export](../fonctionnel/export.md).
+- `write_export` (crate `app`, module `history_export`) ouvre sa propre connexion en lecture seule (`open_read_only`), crée le dossier `qualite-reseau-AAAA-MM-JJ-HHMMSS` (heure locale envoyée par le front) dans Téléchargements, écrit les trois fichiers par des `BufWriter`, et supprime le dossier si une étape échoue. La commande `export_history` l'appelle sur un fil à lui (« export ») et attend sa réponse sans bloquer : l'écrivain et le tableau de bord continuent pendant ce temps. Un historique en mémoire (`HistoryLocation::InMemory`) ne s'exporte pas.
+
+## Effacement
+
+- La commande `erase_history` passe par le moteur, pas par une connexion à part : `EngineInbox::erase_history` envoie `EngineMessage::EraseHistory` par la boîte urgente et attend la réponse au plus 30 s (`ERASE_TIMEOUT`).
+- Le moteur remet son `HistoryTracker` à neuf (minute en cours et dernière heure en mémoire abandonnées, réseau et coupure oubliés : la seconde suivante les note de nouveau, comme au lancement), puis envoie `HistoryCommand::EraseAll` au fil d'écriture avec la réponse attendue. Le fil ne répond qu'une fois l'effacement fait ; s'il échoue, la réponse est abandonnée et la commande rend aussitôt « L'historique n'a pas pu être effacé. ».
+- `HistoryWriter` appelle `MeasurementRepository::erase_history`, puis oublie sa dernière heure. Dans SQLite : `PRAGMA secure_delete` met à zéro les pages libérées, une transaction supprime `aggregates`, `events`, `throughput_tests` et `networks` (la ligne `settings` reste), puis `VACUUM` réécrit le fichier et `PRAGMA wal_checkpoint(TRUNCATE)` vide le journal. Les lignes sont supprimées dès la validation de la transaction : un `VACUUM` qui échoue, ou un journal encore tenu par un lecteur, est seulement noté dans le journal de l'app.
+
 ## Réglages
 
 - La ligne typée `settings` (id 1, créée par la première migration) garde `autostart`, `theme` (`system`, `light`, `dark`), `notify` et `ping_target` (adresse IP du serveur personnalisé, `NULL` pour les serveurs publics). Une adresse illisible relue retombe sur les serveurs publics.
@@ -62,20 +75,22 @@ Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; l
 
 ## Contrat
 
-Les ports `MeasurementRepository` et `HistoryReader` ont deux implémentations : `InMemoryMeasurementRepository` (faux pour les tests) et `SqliteMeasurementRepository`. Une seule suite, `application::repository_contract::check_contract`, tourne sur les deux (SQLite en mémoire) : ajout et fusion d'une minute, remplacement d'une heure, plage triée, réseaux séparés, heures ouvertes, purge, minutes d'une heure non conservée gardées, événements triés, libellé appris plus tard ou par un événement et jamais effacé, réseaux sans MAC regroupés par type, lignes de tous les réseaux d'une plage.
+Les ports `MeasurementRepository`, `HistoryReader` et `HistoryStream` ont deux implémentations : `InMemoryMeasurementRepository` (faux pour les tests) et `SqliteMeasurementRepository`. Une seule suite, `application::repository_contract::check_contract`, tourne sur les deux (SQLite en mémoire) : ajout et fusion d'une minute, remplacement d'une heure, plage triée, réseaux séparés, heures ouvertes, purge, minutes d'une heure non conservée gardées, événements triés, libellé appris plus tard ou par un événement et jamais effacé, réseaux sans MAC regroupés par type, lignes de tous les réseaux d'une plage, tests de débit listés du plus récent et lus en flux du plus ancien, effacement de tout l'historique suivi d'une nouvelle écriture. Un test propre à SQLite vérifie que l'effacement garde les réglages.
 
 ## Complexité
 
-| Opération                                        | Temps                                                                                        | Espace                   |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------ |
-| Seconde (cumul de la minute, tampon d'une heure) | O(1)                                                                                         | O(1)                     |
-| Fin de minute (écriture depuis la mémoire)       | O(B), B = 24                                                                                 | O(B)                     |
-| Fusion horaire                                   | O(60·B)                                                                                      | O(60·B)                  |
-| Percentile sur un histogramme fusionné           | O(B)                                                                                         | O(1)                     |
-| Période sur la clé primaire                      | O(log n + k)                                                                                 | O(k)                     |
-| Purge des minutes                                | O(log n + k) par l'index `(granularity, start)`, une vérification sur clé primaire par ligne | O(1)                     |
-| Heures restées ouvertes                          | O(m log m), m minutes gardées                                                                | O(m)                     |
-| Ouverture (`quick_check`)                        | O(taille du fichier)                                                                         | O(1)                     |
-| Lecture de la dernière heure                     | O(n), n ≤ 3 600                                                                              | O(n)                     |
-| Courbe d'une période                             | O(log n + r + s + e), r lignes, s ≤ 3 600 secondes en mémoire, e événements                  | O(r + p), p ≤ 241 points |
-| Réseaux sur 30 jours                             | O(log n + r + k log k), k réseaux                                                            | O(r + k)                 |
+| Opération                                        | Temps                                                                                        | Espace                          |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------- |
+| Seconde (cumul de la minute, tampon d'une heure) | O(1)                                                                                         | O(1)                            |
+| Fin de minute (écriture depuis la mémoire)       | O(B), B = 24                                                                                 | O(B)                            |
+| Fusion horaire                                   | O(60·B)                                                                                      | O(60·B)                         |
+| Percentile sur un histogramme fusionné           | O(B)                                                                                         | O(1)                            |
+| Période sur la clé primaire                      | O(log n + k)                                                                                 | O(k)                            |
+| Purge des minutes                                | O(log n + k) par l'index `(granularity, start)`, une vérification sur clé primaire par ligne | O(1)                            |
+| Heures restées ouvertes                          | O(m log m), m minutes gardées                                                                | O(m)                            |
+| Ouverture (`quick_check`)                        | O(taille du fichier)                                                                         | O(1)                            |
+| Lecture de la dernière heure                     | O(n), n ≤ 3 600                                                                              | O(n)                            |
+| Courbe d'une période                             | O(log n + r + s + e), r lignes, s ≤ 3 600 secondes en mémoire, e événements                  | O(r + p), p ≤ 241 points        |
+| Réseaux sur 30 jours                             | O(log n + r + k log k), k réseaux                                                            | O(r + k)                        |
+| Export (trois fichiers)                          | O(log n + r), r lignes exportées ; tests : O(t log t)                                        | O(1)                            |
+| Effacement                                       | O(taille du fichier) (`VACUUM`)                                                              | une copie temporaire du fichier |

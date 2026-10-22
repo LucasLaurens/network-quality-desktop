@@ -70,6 +70,9 @@ pub enum HistoryCommand {
     },
     RecordEvent(HistoryEvent),
     RecordThroughput(ThroughputRecord),
+    /// The user erases the history: everything written so far goes. Answered once it is done,
+    /// never after a failure: the asker then sees its answer dropped.
+    EraseAll(SyncSender<()>),
     /// Answered once every earlier command is written.
     Flush(SyncSender<()>),
 }
@@ -136,6 +139,12 @@ impl<R: MeasurementRepository> HistoryWriter<R> {
             HistoryCommand::RecordEvent(event) => self.repository.record_event(&event),
             HistoryCommand::RecordThroughput(record) => {
                 self.repository.record_throughput_test(&record)
+            }
+            HistoryCommand::EraseAll(answer) => {
+                self.repository.erase_history()?;
+                self.last_hour = None;
+                let _ = answer.send(());
+                Ok(())
             }
             HistoryCommand::Flush(answer) => {
                 // The asker may have given up waiting: nothing to do then.
@@ -270,6 +279,14 @@ impl HistoryTracker {
     pub fn flush(&mut self, answer: SyncSender<()>, recorder: &impl HistoryRecorder) {
         self.save_current_minute(recorder);
         recorder.record(HistoryCommand::Flush(answer));
+    }
+
+    /// Forgets the last hour and the minute in progress, then has what was written erased; the
+    /// writer answers `answer` once done. The next second notes its network and any outage
+    /// again, as at launch. O(1).
+    pub fn erase(&mut self, answer: SyncSender<()>, recorder: &impl HistoryRecorder) {
+        *self = Self::default();
+        recorder.record(HistoryCommand::EraseAll(answer));
     }
 
     /// Closes an outage in progress (nothing is measured while asleep), notes the sleep, then

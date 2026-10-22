@@ -5,9 +5,12 @@ import {
   type ConnectionDisplay,
   type DashboardSummaryDisplay,
   type EvolutionDisplay,
+  type ExportPeriodChoice,
+  type LineDetails,
   type PeriodChoice,
   type ProfileChoice,
   type SettingsForm,
+  type TechnicalDetails,
   type ThroughputOutcome,
   type ThroughputPanel,
   type WindowModeTexts,
@@ -84,6 +87,22 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
     utcOffsetSeconds: number,
   ): Promise<ThroughputOutcome> {
     return unwrap(await commands.runThroughputTest(profile, isConfirmed, utcOffsetSeconds))
+  }
+
+  async exportHistory(period: ExportPeriodChoice, utcOffsetSeconds: number): Promise<string> {
+    return unwrap(await commands.exportHistory(period, utcOffsetSeconds))
+  }
+
+  async eraseHistory(): Promise<string> {
+    return unwrap(await commands.eraseHistory())
+  }
+
+  readTechnicalDetails(): Promise<TechnicalDetails> {
+    return commands.readTechnicalDetails()
+  }
+
+  async readLineDetails(): Promise<LineDetails> {
+    return unwrap(await commands.readLineDetails())
   }
 }
 
