@@ -44,6 +44,21 @@ jobs:
       - run: pnpm test:smoke
         shell: bash
 
+  visual:
+    name: Mise en page (clair et sombre)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # The preview pages measured in both themes: overflows and alignments.
+      - run: pnpm test:visual
+
   coverage:
     name: Couverture
     runs-on: ubuntu-22.04

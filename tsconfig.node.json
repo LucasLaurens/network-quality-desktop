@@ -13,5 +13,11 @@
     "types": ["node"],
     "resolveJsonModule": true
   },
-  "include": ["vite.config.ts", "eslint.config.js", "scripts/**/*.mjs", "src-tauri/tauri.conf.json"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "eslint.config.js",
+    "scripts/**/*.mjs",
+    "src-tauri/tauri.conf.json"
+  ]
 }
