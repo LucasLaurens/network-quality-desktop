@@ -92,7 +92,7 @@ export function createHelpDisplay(): HelpDisplay {
       { label: faker.lorem.words(3), command: `sudo ${faker.lorem.word()}` },
       { label: faker.lorem.words(3), command: `sudo ${faker.lorem.word()}` },
     ],
-    without: faker.lorem.sentence(),
+    withoutPermission: faker.lorem.sentence(),
   }
 }
 

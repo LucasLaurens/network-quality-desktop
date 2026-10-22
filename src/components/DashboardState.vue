@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, ref } from 'vue'
+import { inject, nextTick, ref, useTemplateRef, watch } from 'vue'
 import type { ConnectionDisplay, OverviewDisplay } from '../bindings'
 import { HELP_REQUESTED_KEY } from '../composables/dashboard-requests'
 import ConnectionPath from './ConnectionPath.vue'
@@ -13,6 +13,19 @@ const { display, overview, updatedAt } = defineProps<{
 }>()
 
 const helpRequested = inject(HELP_REQUESTED_KEY, ref(false))
+const helpDetails = useTemplateRef<InstanceType<typeof HelpDetails>>('helpDetails')
+
+// Consumed at once, so that the dashboard shown again later leaves the help as the user left it.
+watch(
+  helpRequested,
+  async (asked) => {
+    if (!asked) return
+    helpRequested.value = false
+    await nextTick()
+    helpDetails.value?.unfold()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -27,7 +40,7 @@ const helpRequested = inject(HELP_REQUESTED_KEY, ref(false))
     </div>
     <p class="cause" aria-live="polite">{{ display.cause }}</p>
     <p v-if="display.action" class="action" data-action>{{ display.action }}</p>
-    <HelpDetails v-if="display.help" :help="display.help" :is-open="helpRequested" />
+    <HelpDetails v-if="display.help" ref="helpDetails" :help="display.help" />
     <ConnectionPath v-if="display.path" :path="display.path" class="path" />
     <dl v-if="overview" class="overview" aria-label="Vue d'ensemble">
       <div class="fact">

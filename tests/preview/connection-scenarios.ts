@@ -111,10 +111,10 @@ export const connectionScenarios: Record<string, ConnectionDisplay> = {
         { label: `Pour cette session${NBSP}:`, command: 'sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"' },
         {
           label: `Pour le garder après un redémarrage${NBSP}:`,
-          command: "echo 'net.ipv4.ping_group_range = 0 2147483647' | sudo tee /etc/sysctl.d/99-ping.conf",
+          command: "echo 'net.ipv4.ping_group_range = 0 2147483647' | sudo tee /etc/sysctl.d/99-ping.conf > /dev/null",
         },
       ],
-      without: `Sans cela, l'app mesure Internet comme d'habitude${NBSP}: seul le tronçon vers la box reste inconnu.`,
+      withoutPermission: `Sans cela, l'app mesure Internet comme d'habitude${NBSP}: seul le tronçon vers la box reste inconnu.`,
     },
   }),
 }

@@ -216,4 +216,38 @@ describe('App', () => {
     const details = wrapper.get('[data-help]')
     expect((details.element as HTMLDetailsElement).open).toBe(true)
   })
+
+  it('unfolds the help again when asked after it was folded', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ help: createHelpDisplay() }))
+    const wrapper = await mountApp(client)
+    client.sendDashboardRequest({ kind: 'help' })
+    await flushPromises()
+    const details = wrapper.get('[data-help]').element as HTMLDetailsElement
+    details.open = false
+
+    // Act
+    client.sendDashboardRequest({ kind: 'help' })
+    await flushPromises()
+
+    // Assert
+    expect(details.open).toBe(true)
+  })
+
+  it('leaves the help folded when the dashboard comes back unasked', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ help: createHelpDisplay() }))
+    const wrapper = await mountApp(client)
+    client.sendDashboardRequest({ kind: 'help' })
+    await flushPromises()
+
+    // Act
+    client.sendDashboardRequest({ kind: 'settings' })
+    await flushPromises()
+    await wrapper.get('[data-page="dashboard"]').trigger('click')
+    await flushPromises()
+
+    // Assert
+    expect((wrapper.get('[data-help]').element as HTMLDetailsElement).open).toBe(false)
+  })
 })

@@ -135,7 +135,7 @@ pub struct HelpDisplay {
     pub why: String,
     pub steps: Vec<HelpStep>,
     /// What the app still measures without it.
-    pub without: String,
+    pub without_permission: String,
 }
 
 impl HelpDisplay {
@@ -153,7 +153,7 @@ impl HelpDisplay {
                 step("help-ping-now", "help-ping-now-command"),
                 step("help-ping-keep", "help-ping-keep-command"),
             ],
-            without: catalog.render("help-ping-without", None),
+            without_permission: catalog.render("help-ping-without", None),
         }
     }
 }
@@ -236,12 +236,10 @@ impl ConnectionDisplay {
             ],
             open_dashboard_label: catalog.render("action-open-dashboard", None),
             path: PathDisplay::from_view(view, catalog),
+            // The segment, not the diagnosis: the box stays unmeasurable while the connection is good.
             help: matches!(
-                view.diagnosis,
-                Diagnosis::OutOfThreshold {
-                    fault: Fault::Undetermined(Unmeasurable::NotPermitted),
-                    ..
-                }
+                view.local,
+                LocalSegment::Unmeasurable(Unmeasurable::NotPermitted)
             )
             .then(|| HelpDisplay::compose_ping_help(catalog)),
             network: view
@@ -958,14 +956,15 @@ mod tests {
 
     #[test]
     fn suggests_allowing_the_ping_when_the_system_refuses_it() {
-        // Act
-        let display = ConnectionDisplay::from_view(
-            &create_fault_view(
-                Fault::Undetermined(Unmeasurable::NotPermitted),
-                ConnectionKind::WiFi,
-            ),
-            &TextCatalog::load(),
+        // Arrange
+        let mut view = create_fault_view(
+            Fault::Undetermined(Unmeasurable::NotPermitted),
+            ConnectionKind::WiFi,
         );
+        view.local = LocalSegment::Unmeasurable(Unmeasurable::NotPermitted);
+
+        // Act
+        let display = ConnectionDisplay::from_view(&view, &TextCatalog::load());
 
         // Assert
         assert_eq!(
@@ -982,7 +981,25 @@ mod tests {
                 .iter()
                 .any(|step| step.command.contains("net.ipv4.ping_group_range"))
         );
-        assert!(!help.without.is_empty());
+        assert!(!help.without_permission.is_empty());
+    }
+
+    #[test]
+    fn offers_the_help_while_the_connection_is_good() {
+        // Arrange
+        let mut view = create_view(
+            Verdict::Graded(Grade::Solid),
+            Diagnosis::Healthy,
+            Duration::from_millis(20),
+        );
+        view.local = LocalSegment::Unmeasurable(Unmeasurable::NotPermitted);
+
+        // Act
+        let display = ConnectionDisplay::from_view(&view, &TextCatalog::load());
+
+        // Assert
+        assert_eq!(display.action, None);
+        assert!(display.help.is_some(), "the box stays unmeasurable");
     }
 
     #[test]

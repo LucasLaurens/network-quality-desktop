@@ -1,20 +1,30 @@
 <script setup lang="ts">
+import { useTemplateRef } from 'vue'
 import type { HelpDisplay } from '../bindings'
 
-const { help, isOpen } = defineProps<{ help: HelpDisplay; isOpen?: boolean }>()
+const { help } = defineProps<{ help: HelpDisplay }>()
+
+const details = useTemplateRef<HTMLDetailsElement>('details')
+
+// Set on the element itself: once the user folds it, only the element knows it is closed.
+const unfold = (): void => {
+  if (details.value) details.value.open = true
+}
+
+defineExpose({ unfold })
 </script>
 
 <template>
-  <details class="help" :open="isOpen" data-help>
+  <details ref="details" class="help" data-help>
     <summary>{{ help.title }}</summary>
     <p>{{ help.why }}</p>
     <ol>
-      <li v-for="step in help.steps" :key="step.command">
+      <li v-for="(step, index) in help.steps" :key="index">
         {{ step.label }}
         <code>{{ step.command }}</code>
       </li>
     </ol>
-    <p>{{ help.without }}</p>
+    <p>{{ help.withoutPermission }}</p>
   </details>
 </template>
 

@@ -39,7 +39,7 @@ help-ping-why = Sous Linux, un ping envoyé sans être administrateur n'est perm
 help-ping-now = Pour cette session :
 help-ping-now-command = sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
 help-ping-keep = Pour le garder après un redémarrage :
-help-ping-keep-command = echo 'net.ipv4.ping_group_range = 0 2147483647' | sudo tee /etc/sysctl.d/99-ping.conf
+help-ping-keep-command = echo 'net.ipv4.ping_group_range = 0 2147483647' | sudo tee /etc/sysctl.d/99-ping.conf > /dev/null
 help-ping-without = Sans cela, l'app mesure Internet comme d'habitude : seul le tronçon vers la box reste inconnu.
 menu-ping-help = Comment autoriser le ping…
 cause-undetermined-network = La cause exacte ne peut pas être déterminée sur ce réseau.

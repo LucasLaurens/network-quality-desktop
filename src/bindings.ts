@@ -237,7 +237,7 @@ export type HelpDisplay = {
 	why: string,
 	steps: HelpStep[],
 	/**  What the app still measures without it. */
-	without: string,
+	withoutPermission: string,
 };
 
 /**  One thing to do, and the command that does it. */
