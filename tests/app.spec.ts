@@ -6,6 +6,7 @@ import { NETWORK_QUALITY_CLIENT_KEY } from '../src/services/network-quality-clie
 import {
   InMemoryNetworkQualityClient,
   createConnectionDisplay,
+  createThroughputPanel,
   createWindowModeTexts,
 } from './fakes/in-memory-network-quality-client'
 
@@ -153,5 +154,19 @@ describe('App', () => {
     // Assert
     expect(wrapper.find('#settings-title').exists()).toBe(false)
     expect(wrapper.get('[data-page="dashboard"]').attributes('aria-current')).toBe('page')
+  })
+
+  it('opens the settings from the throughput section', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: false }))
+    const wrapper = await mountApp(client)
+
+    // Act
+    await wrapper.get('[data-open-settings]').trigger('click')
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.find('#settings-title').exists()).toBe(true)
   })
 })

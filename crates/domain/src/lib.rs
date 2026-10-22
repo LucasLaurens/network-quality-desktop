@@ -15,6 +15,7 @@ mod probe_outcome;
 mod segment;
 mod settings;
 mod target;
+mod throughput;
 mod timestamp;
 mod verdict;
 mod wifi;
@@ -42,6 +43,10 @@ pub use segment::{
 };
 pub use settings::{Appearance, MeasurementServers, Settings};
 pub use target::Target;
+pub use throughput::{
+    Bitrate, Direction, ENOUGH_TRANSFER_TIME, Step, THROUGHPUT_CAP_DURATION, TestProfile,
+    ThroughputResult, Transfer,
+};
 pub use timestamp::Timestamp;
 pub use verdict::Verdict;
 pub use wifi::{

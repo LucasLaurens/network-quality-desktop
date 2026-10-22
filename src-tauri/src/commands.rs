@@ -5,6 +5,7 @@ use specta::Type;
 use tauri::{AppHandle, Manager, State};
 
 use application::{Clock, can_measure_against, list_network_summaries, read_day_overview};
+use domain::TestProfile;
 use infrastructure::{LocationRequest, SystemClock, request_location_permission};
 
 use crate::create_latency_probe;
@@ -18,8 +19,13 @@ use crate::settings_effects::apply_settings;
 use crate::settings_form::{SettingsForm, format_save_confirmation};
 use crate::settings_store::SettingsStore;
 use crate::shell_mode::{APPINDICATOR_EXTENSION_URL, WindowModeTexts};
+use crate::shell_presenter::ConnectionStore;
 use crate::shell_presenter::DisplayStore;
 use crate::text_catalog::TextCatalog;
+use crate::throughput_display::{
+    ProfileChoice, ThroughputOutcome, ThroughputPanel, ThroughputRow, compose_warning,
+};
+use crate::throughput_lab::{LabRefusal, ThroughputLab};
 use crate::windows::{POPOVER_WINDOW, report_failure, show_dashboard};
 
 /// Identity of the running build, shown in the window footer.
@@ -249,6 +255,92 @@ pub async fn save_settings(
         store.read_durability(),
         &catalog,
     ))
+}
+
+/// The tests shown at most, newest first.
+const THROUGHPUT_ROWS: usize = 20;
+
+/// The dashboard's throughput section: whether tests are allowed, what they may use, and the
+/// last tests.
+///
+/// # Errors
+///
+/// The history could not be read.
+#[tauri::command]
+#[specta::specta]
+pub async fn read_throughput_panel(
+    utc_offset_seconds: i32,
+    settings: State<'_, SettingsStore>,
+    history: State<'_, DashboardHistory>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<ThroughputPanel, String> {
+    let now = SystemClock::start().read_utc_seconds();
+    let mut records = history
+        .read(|reader| reader.list_throughput_tests(0, now + 1))
+        .map_err(|error| error.0)?;
+    records.truncate(THROUGHPUT_ROWS);
+    Ok(ThroughputPanel::compose(
+        settings.read().allows_throughput_tests,
+        &records,
+        i64::from(utc_offset_seconds),
+        &catalog,
+    ))
+}
+
+/// Runs the test the user clicked. Where data counts, the first click only returns the warning:
+/// the test runs once the user confirms, the connection read again at that moment. The engine
+/// stops measuring while the line is full, then keeps the result.
+///
+/// # Errors
+///
+/// The sentence shown under the buttons: tests not allowed, one already running, or a server
+/// that did not answer.
+#[tauri::command]
+#[specta::specta]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Tauri injects each state as an argument"
+)]
+pub async fn run_throughput_test(
+    profile: ProfileChoice,
+    is_confirmed: bool,
+    utc_offset_seconds: i32,
+    settings: State<'_, SettingsStore>,
+    lab: State<'_, ThroughputLab>,
+    inbox: State<'_, EngineInbox>,
+    connection: State<'_, ConnectionStore>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<ThroughputOutcome, String> {
+    let profile = TestProfile::from(profile);
+    if !settings.read().allows_throughput_tests {
+        return Err(catalog.render("throughput-disabled", None));
+    }
+    if let Some(warning) = compose_warning(connection.read().as_ref(), profile, &catalog)
+        && !is_confirmed
+    {
+        return Ok(ThroughputOutcome::NeedsConfirmation { warning });
+    }
+    let refuse = |refusal| {
+        let key = match refusal {
+            LabRefusal::Busy => "throughput-busy",
+            LabRefusal::Unavailable => "throughput-unreachable",
+        };
+        catalog.render(key, None)
+    };
+    let test = lab.begin().map_err(refuse)?;
+    inbox.send_throughput_started().await;
+    let result = test.run(profile).await;
+    drop(test);
+    inbox.send_throughput_ended(result.ok()).await;
+    let result = result.map_err(refuse)?;
+    Ok(ThroughputOutcome::Done {
+        row: ThroughputRow::compose(
+            SystemClock::start().read_utc_seconds(),
+            &result,
+            i64::from(utc_offset_seconds),
+            &catalog,
+        ),
+    })
 }
 
 #[cfg(test)]

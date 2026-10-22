@@ -157,6 +157,27 @@ onMounted(async () => {
       </div>
     </div>
 
+    <div class="group">
+      <h3>Tests de débit</h3>
+      <div class="rows">
+        <div class="setting">
+          <label for="setting-throughput">Autoriser les tests de débit</label>
+          <input
+            id="setting-throughput"
+            v-model="form.allowsThroughputTests"
+            type="checkbox"
+            role="switch"
+            aria-describedby="setting-throughput-hint"
+            @change="saveChange"
+          />
+          <span id="setting-throughput-hint" class="hint">
+            Désactivé par défaut. Les tests passent par Cloudflare (gratuit, sans compte) et ne partent jamais
+            seuls&nbsp;: uniquement sur un clic sur Test rapide ou Test complet.
+          </span>
+        </div>
+      </div>
+    </div>
+
     <p v-if="refusal" class="refused" role="alert" data-refused>{{ refusal }}</p>
     <p class="saved" role="status" data-saved>{{ saved }}</p>
   </section>

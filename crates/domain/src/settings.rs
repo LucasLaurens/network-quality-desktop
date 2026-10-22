@@ -39,6 +39,8 @@ pub struct Settings {
     pub servers: MeasurementServers,
     /// A system notification when the connection gets durably worse.
     pub notifies_on_degradation: bool,
+    /// Throughput tests can be started; they never start by themselves.
+    pub allows_throughput_tests: bool,
 }
 
 impl Default for Settings {
@@ -48,6 +50,7 @@ impl Default for Settings {
             appearance: Appearance::default(),
             servers: MeasurementServers::default(),
             notifies_on_degradation: true,
+            allows_throughput_tests: false,
         }
     }
 }
@@ -66,5 +69,6 @@ mod tests {
         assert_eq!(settings.appearance, Appearance::System);
         assert_eq!(settings.servers, MeasurementServers::Default);
         assert!(settings.notifies_on_degradation);
+        assert!(!settings.allows_throughput_tests);
     }
 }

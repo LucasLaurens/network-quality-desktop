@@ -9,6 +9,7 @@ import DashboardState from './DashboardState.vue'
 import EvolutionChart from './EvolutionChart.vue'
 import NetworksTable from './NetworksTable.vue'
 import SegmentedControl from './SegmentedControl.vue'
+import ThroughputSection from './ThroughputSection.vue'
 
 type ChartMetric = 'latency' | 'jitter' | 'loss'
 
@@ -27,6 +28,8 @@ const PERIODS = [
   { value: 'week', label: '7 j', ticks: ['Il y a 7 j', 'Il y a 3 j', 'Maintenant'] },
   { value: 'month', label: '30 j', ticks: ['Il y a 30 j', 'Il y a 15 j', 'Maintenant'] },
 ] as const satisfies readonly { value: PeriodChoice; label: string; ticks: readonly [string, string, string] }[]
+
+const emit = defineEmits<{ openSettings: [] }>()
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
@@ -115,6 +118,12 @@ onUnmounted(() => {
         <span class="muted">30 derniers jours</span>
       </div>
       <NetworksTable v-if="summary" :networks="summary.networks" />
+    </section>
+    <section aria-labelledby="throughput-title">
+      <div class="section-head">
+        <h2 id="throughput-title">Débit</h2>
+      </div>
+      <ThroughputSection @open-settings="emit('openSettings')" />
     </section>
   </div>
 </template>

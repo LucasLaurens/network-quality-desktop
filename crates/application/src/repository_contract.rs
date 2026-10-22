@@ -4,12 +4,13 @@
 use std::time::Duration;
 
 use domain::{
-    Aggregate, Appearance, ConnectionKind, CountedState, Granularity, MacAddress,
-    MeasurementServers, SecondSample, Settings, Target,
+    Aggregate, Appearance, Bitrate, ConnectionKind, CountedState, Granularity, MacAddress,
+    MeasurementServers, SecondSample, Settings, Target, TestProfile, ThroughputResult,
 };
 
 use crate::{
     EventKind, HistoryEvent, HistoryReader, MeasurementRepository, NetworkKey, SettingsRepository,
+    ThroughputRecord,
 };
 
 const HOUR: i64 = 3600;
@@ -59,6 +60,53 @@ pub fn check_contract<R: MeasurementRepository + HistoryReader>(create: impl Fn(
     groups_networks_without_a_readable_gateway_by_kind(&mut create());
     lists_the_rows_of_every_network_in_range(&mut create());
     keeps_every_kind_of_event(&mut create());
+    keeps_throughput_tests_newest_first(&mut create());
+}
+
+/// Rates in whole kbit/s and round trips in whole milliseconds: the precision the storage keeps.
+fn keeps_throughput_tests_newest_first(
+    repository: &mut (impl MeasurementRepository + HistoryReader),
+) {
+    // Arrange
+    let network = create_network(23, Some("Box"));
+    let older = ThroughputRecord {
+        utc: SOME_HOUR,
+        network: network.clone(),
+        result: ThroughputResult {
+            profile: TestProfile::Quick,
+            download: Some(Bitrate::from_bits_per_second(85_000_000)),
+            upload: None,
+            loaded_latency: None,
+            bytes: 4_200_000,
+            duration: Duration::from_millis(3_100),
+        },
+    };
+    let newer = ThroughputRecord {
+        utc: SOME_HOUR + 120,
+        network,
+        result: ThroughputResult {
+            profile: TestProfile::Full,
+            download: Some(Bitrate::from_bits_per_second(412_000_000)),
+            upload: Some(Bitrate::from_bits_per_second(96_000_000)),
+            loaded_latency: Some(Duration::from_millis(46)),
+            bytes: 138_000_000,
+            duration: Duration::from_millis(24_500),
+        },
+    };
+
+    // Act
+    repository
+        .record_throughput_test(&older)
+        .expect("an older test");
+    repository
+        .record_throughput_test(&newer)
+        .expect("a newer test");
+
+    // Assert
+    let tests = repository
+        .list_throughput_tests(SOME_HOUR, SOME_HOUR + HOUR)
+        .expect("tests");
+    assert_eq!(tests, vec![newer, older]);
 }
 
 fn keeps_every_kind_of_event(repository: &mut (impl MeasurementRepository + HistoryReader)) {
@@ -438,6 +486,7 @@ fn reads_back_what_was_saved(repository: &mut impl SettingsRepository) {
         appearance: Appearance::Dark,
         servers: MeasurementServers::Custom(Target::parse("2001:db8::7")),
         notifies_on_degradation: false,
+        allows_throughput_tests: true,
     };
 
     // Act

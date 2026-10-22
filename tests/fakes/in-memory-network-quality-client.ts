@@ -10,9 +10,13 @@ import type {
   OverviewDisplay,
   PathDisplay,
   PeriodChoice,
+  ProfileChoice,
   SegmentDisplay,
   SeriesDisplay,
   SettingsForm,
+  ThroughputOutcome,
+  ThroughputPanel,
+  ThroughputRow,
   WindowModeTexts,
 } from '../../src/bindings'
 import type { NetworkQualityClient } from '../../src/services/network-quality-client'
@@ -78,6 +82,22 @@ export function createWindowModeTexts(): WindowModeTexts {
     dismissLabel: faker.word.verb(),
     quitLabel: faker.word.verb(),
   }
+}
+
+export function createThroughputRow(overrides: Partial<ThroughputRow> = {}): ThroughputRow {
+  return {
+    when: faker.date.recent().toISOString(),
+    profile: faker.word.noun(),
+    download: `${String(faker.number.int({ min: 5, max: 900 }))} Mbit/s`,
+    upload: `${String(faker.number.int({ min: 1, max: 300 }))} Mbit/s`,
+    loadedLatency: `${String(faker.number.int({ min: 10, max: 400 }))} ms`,
+    data: `${String(faker.number.int({ min: 2, max: 150 }))} Mo`,
+    ...overrides,
+  }
+}
+
+export function createThroughputPanel(overrides: Partial<ThroughputPanel> = {}): ThroughputPanel {
+  return { isAllowed: true, note: faker.lorem.sentence(), tests: [], ...overrides }
 }
 
 export function createOverviewDisplay(overrides: Partial<OverviewDisplay> = {}): OverviewDisplay {
@@ -161,11 +181,21 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private evolution = createEvolutionDisplay()
   readonly evolutionRequests: PeriodChoice[] = []
   readonly savedForms: SettingsForm[] = []
+  readonly throughputRuns: ProfileChoice[] = []
+  private throughputPanel = createThroughputPanel()
+  private readonly nextThroughputRow = createThroughputRow()
+  /** Empty while tests run. */
+  private throughputRefusal = ''
+  /** Empty where data does not count. */
+  private throughputWarning = ''
+  private isHoldingThroughput = false
+  private releaseThroughputTest = (): void => undefined
   private settings: SettingsForm = {
     launchAtLogin: true,
     appearance: 'system',
     ownServer: null,
     notifiesOnDegradation: true,
+    allowsThroughputTests: false,
   }
   /** Empty while saves are accepted. */
   private settingsRefusal = ''
@@ -318,6 +348,56 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   readConfirmation(): string {
     return this.confirmation
+  }
+
+  readThroughputPanel(): Promise<ThroughputPanel> {
+    return Promise.resolve(this.throughputPanel)
+  }
+
+  setThroughputPanel(panel: ThroughputPanel): void {
+    this.throughputPanel = panel
+  }
+
+  runThroughputTest(profile: ProfileChoice, isConfirmed: boolean): Promise<ThroughputOutcome> {
+    if (this.throughputWarning !== '' && !isConfirmed) {
+      return Promise.resolve({ kind: 'needsConfirmation', warning: this.throughputWarning })
+    }
+    this.throughputRuns.push(profile)
+    const answer = (): Promise<ThroughputOutcome> => {
+      if (this.throughputRefusal !== '') return Promise.reject(new Error(this.throughputRefusal))
+      this.throughputPanel = { ...this.throughputPanel, tests: [this.nextThroughputRow, ...this.throughputPanel.tests] }
+      return Promise.resolve({ kind: 'done', row: this.nextThroughputRow })
+    }
+    if (!this.isHoldingThroughput) return answer()
+    return new Promise((resolve, reject) => {
+      this.releaseThroughputTest = () => {
+        answer().then(resolve, reject)
+      }
+    })
+  }
+
+  /** Asked before every test, as on a connection where data counts. */
+  warnBeforeThroughputTests(warning: string): void {
+    this.throughputWarning = warning
+  }
+
+  /** Every test is refused with `refusal`. */
+  refuseThroughputTests(refusal: string): void {
+    this.throughputRefusal = refusal
+  }
+
+  /** The running test waits until `finishThroughputTest`. */
+  holdThroughputTests(): void {
+    this.isHoldingThroughput = true
+  }
+
+  finishThroughputTest(): void {
+    this.isHoldingThroughput = false
+    this.releaseThroughputTest()
+  }
+
+  readNextThroughputRow(): ThroughputRow {
+    return this.nextThroughputRow
   }
 
   pushDisplay(display: ConnectionDisplay): void {

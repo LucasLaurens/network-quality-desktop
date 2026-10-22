@@ -318,7 +318,8 @@ fn compose_detail(view: &VerdictView, catalog: &TextCatalog) -> Option<String> {
         | Diagnosis::Measuring { .. }
         | Diagnosis::NoNetwork
         | Diagnosis::GatewayWithoutInternet
-        | Diagnosis::NoServerReachable => None,
+        | Diagnosis::NoServerReachable
+        | Diagnosis::LowThroughput => None,
     }
 }
 
@@ -351,6 +352,7 @@ const fn select_cause_keys(
             ..
         } => ("cause-new-servers", None),
         Diagnosis::NoNetwork => ("cause-no-network", Some("action-no-network")),
+        Diagnosis::LowThroughput => ("cause-low-throughput", Some("action-low-throughput")),
         Diagnosis::GatewayWithoutInternet if matches!(kind, ConnectionKind::PhoneHotspot) => (
             "cause-phone-without-internet",
             Some("action-phone-without-internet"),

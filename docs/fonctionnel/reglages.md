@@ -31,4 +31,8 @@ Limite : un serveur du réseau local sur une connexion sans accès à Internet (
 | -------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Prévenir quand la connexion se dégrade | activé     | Une notification du système quand l'état empire durablement (voir [États et verdict](etats-et-verdict.md#notifications)). Désactivé, l'état change sans rien annoncer. |
 
-Le réglage des tests de débit s'ajoutera à cette page avec les tests.
+## Tests de débit
+
+| Réglage                      | Par défaut | Effet                                                                                                                                              |
+| ---------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Autoriser les tests de débit | désactivé  | Fait apparaître Test rapide et Test complet dans le tableau de bord. Les tests ne partent jamais seuls (voir [Tests de débit](tests-de-debit.md)). |

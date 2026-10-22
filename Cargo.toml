@@ -47,6 +47,9 @@ objc2-foundation = { version = "=0.3.2", default-features = false, features = ["
 objc2-io-kit = { version = "=0.3.2", default-features = false, features = ["std", "libc", "dispatch2", "pwr_mgt"] }
 # Already linked by tao on Linux: reusing it adds no native dependency.
 dbus = "=0.9.12"
+# HTTP for the throughput tests: rustls with the ring provider, the system's certificates.
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "http2"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
 unic-langid = { version = "0.9", features = ["macros"] }
 tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }

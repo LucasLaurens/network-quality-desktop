@@ -44,4 +44,6 @@ pub enum Diagnosis {
     GatewayWithoutInternet,
     /// No target answered for 5 s, and the gateway is silent or cannot be pinged.
     NoServerReachable,
+    /// The last throughput test was too slow for a call: its grade holds for a while.
+    LowThroughput,
 }

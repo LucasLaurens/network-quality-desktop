@@ -6,7 +6,10 @@ import {
   type DashboardSummaryDisplay,
   type EvolutionDisplay,
   type PeriodChoice,
+  type ProfileChoice,
   type SettingsForm,
+  type ThroughputOutcome,
+  type ThroughputPanel,
   type WindowModeTexts,
 } from '../bindings'
 import type { NetworkQualityClient } from './network-quality-client'
@@ -69,6 +72,18 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
 
   async saveSettings(form: SettingsForm, utcOffsetSeconds: number): Promise<string> {
     return unwrap(await commands.saveSettings(form, utcOffsetSeconds))
+  }
+
+  async readThroughputPanel(utcOffsetSeconds: number): Promise<ThroughputPanel> {
+    return unwrap(await commands.readThroughputPanel(utcOffsetSeconds))
+  }
+
+  async runThroughputTest(
+    profile: ProfileChoice,
+    isConfirmed: boolean,
+    utcOffsetSeconds: number,
+  ): Promise<ThroughputOutcome> {
+    return unwrap(await commands.runThroughputTest(profile, isConfirmed, utcOffsetSeconds))
   }
 }
 

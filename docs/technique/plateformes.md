@@ -55,6 +55,13 @@ Points laissés ouverts par la recherche (#19), tranchés :
 - Apparence : `AppHandle::set_theme` applique Clair ou Sombre à toutes les fenêtres (Système : `None`). Le webview suit le thème de sa fenêtre, donc les media queries `prefers-color-scheme` des tokens CSS aussi : pas de second jeu de couleurs. Non vérifié dans l'app réelle : à contrôler à la main sur les trois systèmes (barre de titre et page).
 - Ouverture de session : `tauri-plugin-autostart` 2.7.0, appelé depuis Rust seulement (aucune permission front) : LaunchAgent sous macOS, clé `Run` du registre sous Windows, fichier `.desktop` dans `~/.config/autostart` sous Linux. Le réglage est appliqué au lancement, avant toute fenêtre, et à chaque enregistrement : le réglage de l'app fait foi sur l'état du système. Une version de développement (`debug_assertions`) ne s'inscrit jamais.
 
+## Tests de débit
+
+- HTTP : reqwest 0.13.5, déjà tiré par Tauri, en HTTP/2 (les requêtes de latence en charge passent sur la connexion du transfert, sans nouvelle poignée de main), avec rustls (`rustls-no-provider`) et le fournisseur cryptographique `ring` installé au premier usage : aucune bibliothèque TLS du système ni `aws-lc`. Les certificats sont ceux du système (`rustls-platform-verifier`).
+- Points d'entrée : `GET https://speed.cloudflare.com/__down?bytes=N` et `POST https://speed.cloudflare.com/__up`, non documentés comme API stable par Cloudflare (recherche #4). Un test réel lancé à la demande : `cargo test -p infrastructure -- --ignored` (environ 5 Mo).
+- Mesuré sur ce Mac (test rapide, Wi-Fi) : 12,5 Mbit/s en réception, 1,9 Mbit/s en envoi, latence en charge 335 ms, 2,7 Mo en 4,8 s.
+- Limite : une requête attend au plus 30 s. Sur une ligne très lente (moins de 0,15 Mbit/s en envoi), un transfert de 0,5 Mo la dépasse et le test se conclut « serveur ne répond pas ». Observé une fois sur ce Mac pendant une baisse du lien (curl : 17 s pour 1 Mo).
+
 ## Notifications
 
 - `tauri-plugin-notification` 2.7.0, appelé depuis Rust seulement (aucune permission front). Le texte vient du catalogue, comme le popover.
