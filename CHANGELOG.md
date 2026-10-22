@@ -30,6 +30,10 @@
 - try ICMP again after a network change, a wake or new servers ([#72](https://github.com/LucasLaurens/network-quality-desktop/pull/72))
 - take every word of the windows from the Fluent catalogue ([#73](https://github.com/LucasLaurens/network-quality-desktop/pull/73))
 
+### Bug Fixes
+
+- centre the window column and align the settings with it ([#77](https://github.com/LucasLaurens/network-quality-desktop/pull/77))
+
 ### Tests
 
 - hold the remaining test decisions of the spec ([#74](https://github.com/LucasLaurens/network-quality-desktop/pull/74))
