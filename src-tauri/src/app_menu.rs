@@ -1,13 +1,12 @@
 //! The macOS application menu. The menu bar stays hidden (no Dock icon), but its shortcuts still
-//! work in the dashboard: Tauri's default menu would let ⌘Q quit, while quitting belongs to the
-//! dot's menu alone.
+//! work while a window of the app is in front: ⌘Q quits the whole app, as the dot's menu does.
 
 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Wry};
 
 use crate::text_catalog::TextCatalog;
 
-/// Editing and window shortcuts, and no Quit item.
+/// Quit, editing and window shortcuts.
 ///
 /// # Errors
 ///
@@ -15,6 +14,13 @@ use crate::text_catalog::TextCatalog;
 pub fn build_app_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
     let catalog = TextCatalog::load();
     let text = |key: &str| catalog.render(key, None);
+    // The first submenu is the application menu: macOS titles it with the app's name.
+    let application = Submenu::with_items(
+        app,
+        text("menu-application"),
+        true,
+        &[&PredefinedMenuItem::quit(app, Some(&text("menu-quit")))?],
+    )?;
     let edit = Submenu::with_items(
         app,
         text("menu-edit"),
@@ -38,5 +44,5 @@ pub fn build_app_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
             &PredefinedMenuItem::close_window(app, Some(&text("menu-close-window")))?,
         ],
     )?;
-    Menu::with_items(app, &[&edit, &window])
+    Menu::with_items(app, &[&application, &edit, &window])
 }
