@@ -51,5 +51,6 @@ Un poste peut ajouter ses propres contrôles dans `lefthook-local.yml`, non vers
 - `.github/workflows/docs.yml` vérifie qu'une PR qui change le code change aussi la documentation.
 - `.github/workflows/dependencies.yml` vérifie licences et failles chaque lundi à 6 h UTC, à la demande, et sur toute PR qui change `Cargo.lock`, `pnpm-lock.yaml` ou `deny.toml`.
 - `.github/workflows/mutants.yml` lance les mutants du domaine à la demande (onglet Actions).
+- `.github/workflows/release.yml` tient la PR de release à jour et publie les releases (voir [Releases](releases.md)).
 - Ces trois contrôles lancent les outils directement : un script pnpm installerait d'abord toutes les dépendances du front.
 - Le dépôt n'accepte que la fusion en squash (réglage du dépôt) et supprime la branche fusionnée. La branche `main` n'est pas protégée : GitHub ne le permet sur un dépôt privé qu'avec l'offre Pro. Les contrôles échouent donc visiblement mais n'empêchent pas une fusion.

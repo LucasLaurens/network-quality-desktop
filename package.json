@@ -11,6 +11,7 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "app:install": "node scripts/install-app.mjs",
+    "release": "node scripts/merge-release.mjs",
     "dev:web": "vite",
     "build:web": "vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.node.json",
