@@ -151,7 +151,8 @@ chart-network-change = Changement de réseau : { $network }
 chart-coverage = Mesuré { $value } % de la période
 share-solid = { $value } % Solide
 shares = { $solid } % Solide, { $unstable } % Instable, { $degraded } % Dégradée, { $offline } % Hors ligne
-value-unknown = inconnu
+value-unknown = valeur inconnue
+value-pending = en cours
 
 ## Settings
 

@@ -36,7 +36,7 @@ describe('DashboardView', () => {
     expect(wrapper.get('#dashboard-state').text()).toBe(display.stateLabel)
     expect(wrapper.text()).toContain(display.cause)
     expect(wrapper.get('[data-action]').text()).toBe(display.action)
-    expect(wrapper.get('[data-fact="today"]').text()).toContain(overview.today)
+    expect(wrapper.get('[data-fact="today"]').text()).toBe(overview.today)
     expect(wrapper.get('[data-coverage]').text()).toBe(overview.todayCoverage)
     expect(wrapper.get('[data-fact="outages"]').text()).toBe(overview.outages)
     expect(wrapper.get('[data-fact="worst"]').text()).toBe(overview.worstMoment)
@@ -133,21 +133,33 @@ describe('DashboardView', () => {
   it('flags the current network and the most reliable one', async () => {
     // Arrange
     const client = new InMemoryNetworkQualityClient()
-    const summaryNetworks = [
-      createNetworkRowDisplay({ isMostReliable: true }),
-      createNetworkRowDisplay({ isCurrent: true }),
-    ]
-    client.setDashboardSummary(createDashboardSummary({ networks: summaryNetworks }))
+    client.setDashboardSummary(
+      createDashboardSummary({
+        networks: [createNetworkRowDisplay({ isMostReliable: true }), createNetworkRowDisplay({ isCurrent: true })],
+      }),
+    )
 
     // Act
     const wrapper = await mountDashboard(client)
 
     // Assert
     const rows = wrapper.findAll('[data-network-row]')
-    expect(rows[0]?.get('[data-measured]').text()).toBe(summaryNetworks[0]?.measured)
     expect(rows[0]?.find('[data-most-reliable]').exists()).toBe(true)
     expect(rows[0]?.find('[data-current]').exists()).toBe(false)
     expect(rows[1]?.find('[data-current]').exists()).toBe(true)
+  })
+
+  it('says how long each network was measured', async () => {
+    // Arrange
+    const network = createNetworkRowDisplay()
+    const client = new InMemoryNetworkQualityClient()
+    client.setDashboardSummary(createDashboardSummary({ networks: [network] }))
+
+    // Act
+    const wrapper = await mountDashboard(client)
+
+    // Assert
+    expect(wrapper.get('[data-measured]').text()).toBe(network.measured)
   })
 
   it('says what will appear on a first launch', async () => {

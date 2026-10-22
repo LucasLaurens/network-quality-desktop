@@ -18,7 +18,7 @@ const STATES = ['solid', 'unstable', 'degraded', 'offline'] as const satisfies r
           <th>Temps par état</th>
           <th class="right">Latence p90</th>
           <th class="right">Perte</th>
-          <th class="right">Mesuré</th>
+          <th class="right">Durée mesurée</th>
         </tr>
       </thead>
       <tbody>

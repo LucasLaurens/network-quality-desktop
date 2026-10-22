@@ -235,8 +235,8 @@ export type MetricDisplay = {
 	/**  What the metric means, in plain words. */
 	definition: string,
 	method: string,
-	/**  `None` while the metric cannot be computed yet. */
-	value: string | null,
+	/**  « en cours » until the first value, « valeur inconnue » when it cannot be computed (offline). */
+	value: string,
 	gauge: Gauge | null,
 	/**  Shown under a metric close to its next threshold. */
 	hint: string | null,

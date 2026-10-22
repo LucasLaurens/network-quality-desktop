@@ -829,6 +829,27 @@ mod tests {
     }
 
     #[test]
+    fn counts_a_network_measured_for_days_in_days_and_hours() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let mut aggregate = Aggregate::default();
+        aggregate.seconds.solid =
+            u32::try_from(2 * SECONDS_PER_DAY + 14 * SECONDS_PER_HOUR).expect("fits a u32");
+        let summary = NetworkSummary {
+            network: create_network(None),
+            aggregate,
+            is_current: false,
+            is_most_reliable: false,
+        };
+
+        // Act
+        let row = NetworkRowDisplay::compose(&summary, &catalog);
+
+        // Assert
+        assert_eq!(row.measured, insert_no_break_spaces("2~j 14~h"));
+    }
+
+    #[test]
     fn lays_out_the_chart_with_its_gaps_thresholds_and_network_changes() {
         // Arrange
         let catalog = TextCatalog::load();

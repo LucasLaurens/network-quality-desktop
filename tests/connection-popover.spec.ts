@@ -138,16 +138,17 @@ describe('ConnectionPopover', () => {
     expect(row.get('[role="img"]').attributes('aria-label')).toBe(label)
   })
 
-  it('shows a dash and no gauge marker for a metric not measured yet', async () => {
+  it('shows the wording of the core and no gauge marker for a metric not measured yet', async () => {
     // Arrange
-    const metric = createMetricDisplay({ value: null, gauge: null })
+    const pending = faker.lorem.words(2)
+    const metric = createMetricDisplay({ value: pending, gauge: null })
     const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ metrics: [metric] }))
 
     // Act
     const wrapper = await mountPopover(client)
 
     // Assert
-    expect(wrapper.get('[data-metric]').text()).toContain('–')
+    expect(wrapper.get('[data-metric]').text()).toContain(pending)
     expect(wrapper.find('[data-marker]').exists()).toBe(false)
     expect(wrapper.findAll('[data-zone]')).toHaveLength(0)
   })

@@ -95,7 +95,7 @@ const summary: DashboardSummaryDisplay = {
       degraded: 0,
       p90: 14,
       loss: 0,
-      hours: 62,
+      measured: '2 j 14 h',
     },
     {
       label: 'Livebox-4F2A',
@@ -105,7 +105,7 @@ const summary: DashboardSummaryDisplay = {
       degraded: 5,
       p90: 38,
       loss: 0.3,
-      hours: 140,
+      measured: '5 j 20 h',
     },
     {
       label: 'iPhone de Lucas',
@@ -115,7 +115,7 @@ const summary: DashboardSummaryDisplay = {
       degraded: 13,
       p90: 118,
       loss: 1.1,
-      hours: 6,
+      measured: '6 h',
     },
   ].map((network, index) => ({
     label: network.label,
@@ -125,7 +125,7 @@ const summary: DashboardSummaryDisplay = {
     sharesLabel: `${String(network.solid)}${NBSP}% Solide, ${String(network.unstable)}${NBSP}% Instable, ${String(network.degraded)}${NBSP}% Dégradée, 0${NBSP}% Hors ligne`,
     latencyP90: ms(network.p90),
     loss: percent(network.loss),
-    measured: `${String(network.hours)}${NBSP}h`,
+    measured: network.measured.replaceAll(' ', NBSP),
     isCurrent: index === 1,
     isMostReliable: index === 0,
   })),

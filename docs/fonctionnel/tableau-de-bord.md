@@ -48,7 +48,7 @@ Les tests de débit lancés d'un clic et les derniers résultats : voir [Tests d
 
 ## Valeurs inconnues
 
-Une valeur que l'app ne peut pas connaître s'écrit « inconnu » : adresse de la box non lue, sens d'un test de débit qui n'a pas abouti, Wi-Fi qui ne donne pas son signal. Une mesure pas encore faite, juste après le lancement ou un changement de réseau, garde un tiret : elle arrive dans les secondes qui suivent.
+Une valeur que l'app ne peut pas connaître s'écrit « valeur inconnue » : adresse de la box non lue, sens d'un test de débit qui n'a pas abouti, Wi-Fi qui ne donne pas son signal, mesures pendant une coupure. Une mesure pas encore faite, juste après le lancement, un réveil ou un changement de réseau, s'écrit « en cours » : elle arrive dans les secondes qui suivent. Les deux sont du texte, lu tel quel par un lecteur d'écran.
 
 ## Détails techniques
 

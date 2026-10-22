@@ -260,7 +260,7 @@ mod tests {
         let row = ThroughputRow::compose(record.utc, &record.result, PARIS, &catalog);
 
         // Assert
-        assert_eq!(row.download, "inconnu");
+        assert_eq!(row.download, "valeur inconnue");
     }
 
     #[test]

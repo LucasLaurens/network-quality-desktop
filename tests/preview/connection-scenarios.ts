@@ -92,7 +92,7 @@ export const connectionScenarios: Record<string, ConnectionDisplay> = {
       name,
       definition: DEFINITIONS[name] ?? '',
       method: `15${NBSP}s`,
-      value: null,
+      value: 'en cours',
       gauge: null,
       hint: null,
     })),
