@@ -8,7 +8,8 @@ import { InMemoryNetworkQualityClient } from '../fakes/in-memory-network-quality
 import { NBSP, connectionScenarios } from './connection-scenarios'
 
 // `?scenario=window` shows the window mode note, as on a desktop without a tray;
-// `?scenario=first` shows a first launch, before any minute is kept.
+// `?scenario=first` shows a first launch, before any minute is kept;
+// `?scenario=undetermined` shows the help to allow the ping.
 const scenario = new URLSearchParams(window.location.search).get('scenario')
 const windowModeTexts =
   scenario === 'window'
@@ -142,7 +143,11 @@ const firstRun: DashboardSummaryDisplay = {
   networks: [],
 }
 
-const client = new InMemoryNetworkQualityClient(undefined, connectionScenarios.degraded, windowModeTexts)
+const client = new InMemoryNetworkQualityClient(
+  undefined,
+  connectionScenarios[scenario ?? ''] ?? connectionScenarios.degraded,
+  windowModeTexts,
+)
 client.setThroughputPanel({
   isAllowed: scenario !== 'first',
   note: `Les tests ne partent que sur un clic, vers Cloudflare. Rapide${NBSP}: jusqu'à 4,2${NBSP}Mo. Complet${NBSP}: jusqu'à 155,8${NBSP}Mo. La latence en charge s'affiche sans compter dans l'état.`,

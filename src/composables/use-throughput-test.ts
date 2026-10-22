@@ -1,4 +1,4 @@
-import { ref, type InjectionKey, type Ref } from 'vue'
+import { ref } from 'vue'
 import type { ProfileChoice } from '../bindings'
 import type { NetworkQualityClient } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
@@ -7,9 +7,6 @@ export const THROUGHPUT_PROFILES = [
   { value: 'quick', label: 'Test rapide' },
   { value: 'full', label: 'Test complet' },
 ] as const satisfies readonly { value: ProfileChoice; label: string }[]
-
-/** A test the tray menu asked the dashboard to run; consumed once started. */
-export const REQUESTED_TEST_KEY: InjectionKey<Ref<ProfileChoice | null>> = Symbol('RequestedTest')
 
 /**
  * One test at a time per window, as the dashboard and the popover both run it; the core refuses a

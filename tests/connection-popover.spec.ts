@@ -6,6 +6,7 @@ import { NETWORK_QUALITY_CLIENT_KEY } from '../src/services/network-quality-clie
 import {
   InMemoryNetworkQualityClient,
   createConnectionDisplay,
+  createHelpDisplay,
   createMetricDisplay,
   createPathDisplay,
   createSegmentDisplay,
@@ -324,5 +325,20 @@ describe('ConnectionPopover', () => {
     expect(busyLabel).toBe('Test en cours…')
     expect(isFullBlocked).toBe(true)
     expect(wrapper.get('[data-refused]').text()).toBe(refusal)
+  })
+
+  it('offers folded help when the system refuses the ping', async () => {
+    // Arrange
+    const help = createHelpDisplay()
+    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ help }))
+
+    // Act
+    const wrapper = await mountPopover(client)
+
+    // Assert
+    const details = wrapper.get('[data-help]')
+    expect(details.get('summary').text()).toBe(help.title)
+    expect((details.element as HTMLDetailsElement).open).toBe(false)
+    expect(details.findAll('code').map((code) => code.text())).toEqual(help.steps.map((step) => step.command))
   })
 })

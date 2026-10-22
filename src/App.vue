@@ -3,7 +3,7 @@ import { inject, onMounted, onUnmounted, provide, ref } from 'vue'
 import type { DashboardRequested, ProfileChoice, WindowModeTexts } from './bindings'
 import DashboardView from './components/DashboardView.vue'
 import SettingsView from './components/SettingsView.vue'
-import { REQUESTED_TEST_KEY } from './composables/use-throughput-test'
+import { HELP_REQUESTED_KEY, REQUESTED_TEST_KEY } from './composables/dashboard-requests'
 import { NETWORK_QUALITY_CLIENT_KEY } from './services/network-quality-client'
 
 // Remembered in the webview's own storage: a convenience, losing it only shows the note again.
@@ -23,6 +23,8 @@ const PAGES = [
 const page = ref<(typeof PAGES)[number]['value']>('dashboard')
 const requestedTest = ref<ProfileChoice | null>(null)
 provide(REQUESTED_TEST_KEY, requestedTest)
+const helpRequested = ref(false)
+provide(HELP_REQUESTED_KEY, helpRequested)
 let stopListening = (): void => undefined
 
 // The tray menu and the popover ask for a page, or for a test the dashboard runs. O(1).
@@ -32,6 +34,10 @@ const followRequest = (request: DashboardRequested): void => {
     return
   }
   page.value = 'dashboard'
+  if (request.kind === 'help') {
+    helpRequested.value = true
+    return
+  }
   requestedTest.value = request.profile
 }
 
