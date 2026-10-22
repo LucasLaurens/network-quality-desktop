@@ -25,6 +25,7 @@ pedantic = { level = "deny", priority = -1 }
 domain = { path = "crates/domain" }
 application = { path = "crates/application" }
 infrastructure = { path = "crates/infrastructure" }
+fake = "5.1"
 fluent-bundle = "0.16"
 fluent-syntax = "0.12"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }

@@ -567,6 +567,7 @@ fn format_duration(seconds: i64, catalog: &TextCatalog) -> String {
 
 #[cfg(test)]
 mod tests {
+    use application::test_support::generate_network_name;
     use application::{HistoryEvent, NetworkKey, Outage};
     use domain::{ConnectionKind, MacAddress, SecondSample};
 
@@ -853,6 +854,7 @@ mod tests {
     fn lays_out_the_chart_with_its_gaps_thresholds_and_network_changes() {
         // Arrange
         let catalog = TextCatalog::load();
+        let name = generate_network_name();
         let start = MIDNIGHT;
         let evolution = Evolution {
             buckets: vec![
@@ -867,7 +869,7 @@ mod tests {
             bucket_seconds: 30,
             network_changes: vec![HistoryEvent {
                 utc: start + 60,
-                network: create_network(Some("Box")),
+                network: create_network(Some(name.as_str())),
                 kind: application::EventKind::NetworkChanged,
             }],
             coverage: 0.5,
@@ -888,7 +890,7 @@ mod tests {
         assert!((display.network_changes[0].position - 0.5).abs() < 1e-9);
         assert_eq!(
             display.network_changes[0].label,
-            insert_no_break_spaces("Changement de réseau~: Box")
+            insert_no_break_spaces(&format!("Changement de réseau~: {name}"))
         );
         assert_eq!(
             display.coverage,

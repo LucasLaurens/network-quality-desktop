@@ -8,6 +8,7 @@ use domain::{
     MeasurementServers, SecondSample, Settings, Target, TestProfile, ThroughputResult,
 };
 
+use crate::test_support::{generate_network_name, generate_targets};
 use crate::{
     EventKind, HistoryEvent, HistoryReader, HistoryStream, MeasurementRepository, NetworkKey,
     RepositoryError, SettingsRepository, ThroughputRecord,
@@ -73,7 +74,8 @@ fn check_keeps_throughput_tests_newest_first(
     repository: &mut (impl MeasurementRepository + HistoryReader + HistoryStream),
 ) {
     // Arrange
-    let network = create_network(23, Some("Box"));
+    let name = generate_network_name();
+    let network = create_network(23, Some(name.as_str()));
     let older = ThroughputRecord {
         utc: SOME_HOUR,
         network: network.clone(),
@@ -124,7 +126,8 @@ fn check_keeps_throughput_tests_newest_first(
 
 fn check_keeps_every_kind_of_event(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
-    let network = create_network(22, Some("Box"));
+    let name = generate_network_name();
+    let network = create_network(22, Some(name.as_str()));
     let kinds = [
         EventKind::NetworkChanged,
         EventKind::OfflineStarted,
@@ -158,7 +161,8 @@ fn check_lists_the_rows_of_every_network_in_range(
     repository: &mut (impl MeasurementRepository + HistoryReader),
 ) {
     // Arrange
-    let home = create_network(20, Some("Box"));
+    let name = generate_network_name();
+    let home = create_network(20, Some(name.as_str()));
     let office = create_network(21, None);
     repository
         .add_minute(&office, SOME_HOUR + MINUTE, &create_aggregate(60, 30))
@@ -185,7 +189,7 @@ fn check_lists_the_rows_of_every_network_in_range(
         .collect();
     assert_eq!(
         listed,
-        vec![(Some("Box"), SOME_HOUR), (None, SOME_HOUR + MINUTE)]
+        vec![(Some(name.as_str()), SOME_HOUR), (None, SOME_HOUR + MINUTE)]
     );
 }
 
@@ -337,7 +341,8 @@ fn check_purges_only_old_minutes(repository: &mut (impl MeasurementRepository + 
 
 fn check_records_events_in_order(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
-    let network = create_network(8, Some("Box"));
+    let name = generate_network_name();
+    let network = create_network(8, Some(name.as_str()));
     let started = HistoryEvent {
         utc: SOME_HOUR,
         network: network.clone(),
@@ -362,8 +367,9 @@ fn check_records_events_in_order(repository: &mut (impl MeasurementRepository + 
 
 fn check_keeps_a_name_learnt_later(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
+    let name = generate_network_name();
     let unnamed = create_network(9, None);
-    let named = create_network(9, Some("Livebox"));
+    let named = create_network(9, Some(name.as_str()));
     repository
         .add_minute(&unnamed, SOME_HOUR, &create_aggregate(60, 15))
         .expect("unnamed");
@@ -377,14 +383,15 @@ fn check_keeps_a_name_learnt_later(repository: &mut (impl MeasurementRepository 
     let open = repository
         .list_unmerged_hours(SOME_HOUR + HOUR)
         .expect("open hours");
-    assert_eq!(open[0].0.name.as_deref(), Some("Livebox"));
+    assert_eq!(open[0].0.name.as_deref(), Some(name.as_str()));
 }
 
 fn check_keeps_a_name_when_seen_again_without_it(
     repository: &mut (impl MeasurementRepository + HistoryReader),
 ) {
     // Arrange
-    let named = create_network(10, Some("Livebox"));
+    let name = generate_network_name();
+    let named = create_network(10, Some(name.as_str()));
     let unnamed = create_network(10, None);
     repository
         .add_minute(&named, SOME_HOUR, &create_aggregate(60, 15))
@@ -399,20 +406,21 @@ fn check_keeps_a_name_when_seen_again_without_it(
     let open = repository
         .list_unmerged_hours(SOME_HOUR + HOUR)
         .expect("open hours");
-    assert_eq!(open[0].0.name.as_deref(), Some("Livebox"));
+    assert_eq!(open[0].0.name.as_deref(), Some(name.as_str()));
 }
 
 fn check_learns_a_name_from_an_event(
     repository: &mut (impl MeasurementRepository + HistoryReader),
 ) {
     // Arrange
+    let name = generate_network_name();
     let unnamed = create_network(11, None);
     repository
         .add_minute(&unnamed, SOME_HOUR, &create_aggregate(60, 15))
         .expect("unnamed");
     let event = HistoryEvent {
         utc: SOME_HOUR + MINUTE,
-        network: create_network(11, Some("Bureau")),
+        network: create_network(11, Some(name.as_str())),
         kind: EventKind::NetworkChanged,
     };
 
@@ -423,7 +431,7 @@ fn check_learns_a_name_from_an_event(
     let open = repository
         .list_unmerged_hours(SOME_HOUR + HOUR)
         .expect("open hours");
-    assert_eq!(open[0].0.name.as_deref(), Some("Bureau"));
+    assert_eq!(open[0].0.name.as_deref(), Some(name.as_str()));
 }
 
 fn check_groups_networks_without_a_readable_gateway_by_kind(
@@ -521,7 +529,7 @@ fn check_goes_back_to_the_public_servers(repository: &mut impl SettingsRepositor
     // Arrange
     repository
         .save_settings(&Settings {
-            servers: MeasurementServers::Custom(Target::parse("192.0.2.9")),
+            servers: MeasurementServers::Custom(generate_targets(1)[0]),
             ..Settings::default()
         })
         .expect("a custom server");
@@ -542,7 +550,8 @@ fn check_goes_back_to_the_public_servers(repository: &mut impl SettingsRepositor
 
 fn check_erases_the_whole_history(repository: &mut (impl MeasurementRepository + HistoryReader)) {
     // Arrange
-    let network = create_network(24, Some("Box"));
+    let name = generate_network_name();
+    let network = create_network(24, Some(name.as_str()));
     repository
         .add_minute(&network, SOME_HOUR, &create_aggregate(60, 20))
         .expect("a minute");

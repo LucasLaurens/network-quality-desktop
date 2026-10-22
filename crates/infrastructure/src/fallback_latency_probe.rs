@@ -164,16 +164,18 @@ impl<E: EchoSender + Sync, O: ConnectionOpener + Sync> LatencyProbe for Fallback
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
     use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::{LazyLock, Mutex};
     use std::time::Duration;
 
     use application::LatencyProbe;
+    use application::test_support::generate_targets;
     use domain::{ProbeOutcome, Target};
 
     use super::*;
 
-    const TARGET: &str = "192.0.2.1";
+    /// Generated: the probe must not depend on which target it measures.
+    static TARGET: LazyLock<Target> = LazyLock::new(|| generate_targets(1)[0]);
     const ECHO_ROUND_TRIP: Duration = Duration::from_millis(18);
     const TCP_ROUND_TRIP: Duration = Duration::from_millis(25);
 
@@ -220,7 +222,7 @@ mod tests {
         );
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Answered(ECHO_ROUND_TRIP));
@@ -235,7 +237,7 @@ mod tests {
         );
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::LostButReachable);
@@ -248,7 +250,7 @@ mod tests {
             FallbackLatencyProbe::new(InMemoryEcho::new(EchoResult::NoAnswer), InMemoryTcp(None));
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Unreachable);
@@ -259,10 +261,10 @@ mod tests {
         // Arrange
         let echo = InMemoryEcho::new(EchoResult::NotPermitted);
         let probe = FallbackLatencyProbe::new(echo, InMemoryTcp(Some(TCP_ROUND_TRIP)));
-        probe.send_probe(Target::parse(TARGET)).await;
+        probe.send_probe(*TARGET).await;
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP));
@@ -280,12 +282,12 @@ mod tests {
             InMemoryEcho::new(EchoResult::NotPermitted),
             InMemoryTcp(Some(TCP_ROUND_TRIP)),
         );
-        probe.send_probe(Target::parse(TARGET)).await;
+        probe.send_probe(*TARGET).await;
         *probe.echo.result.lock().expect("unpoisoned") = EchoResult::Answered(ECHO_ROUND_TRIP);
         probe.forget_fallbacks();
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Answered(ECHO_ROUND_TRIP));
@@ -298,11 +300,11 @@ mod tests {
             InMemoryEcho::new(EchoResult::NotPermitted),
             InMemoryTcp(Some(TCP_ROUND_TRIP)),
         );
-        probe.send_probe(Target::parse(TARGET)).await;
+        probe.send_probe(*TARGET).await;
         probe.forget_fallbacks();
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP));
@@ -317,7 +319,7 @@ mod tests {
             InMemoryTcp(Some(TCP_ROUND_TRIP)),
         );
         for _ in 0..FILTERED_AFTER_LOSSES {
-            probe.send_probe(Target::parse(TARGET)).await;
+            probe.send_probe(*TARGET).await;
         }
         probe.forget_fallbacks();
         probe
@@ -329,7 +331,7 @@ mod tests {
         let probe = create_probe_retrying_a_filtered_target().await;
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP));
@@ -345,11 +347,11 @@ mod tests {
         // Arrange
         let probe = create_probe_retrying_a_filtered_target().await;
         for _ in 0..FILTERED_AFTER_LOSSES {
-            probe.send_probe(Target::parse(TARGET)).await;
+            probe.send_probe(*TARGET).await;
         }
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP));
@@ -364,11 +366,11 @@ mod tests {
         // Arrange
         let probe = create_probe_retrying_a_filtered_target().await;
         *probe.echo.result.lock().expect("unpoisoned") = EchoResult::Answered(ECHO_ROUND_TRIP);
-        probe.send_probe(Target::parse(TARGET)).await;
+        probe.send_probe(*TARGET).await;
         *probe.echo.result.lock().expect("unpoisoned") = EchoResult::NoAnswer;
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::LostButReachable);
@@ -382,13 +384,13 @@ mod tests {
             InMemoryTcp(Some(TCP_ROUND_TRIP)),
         );
         for _ in 1..FILTERED_AFTER_LOSSES {
-            probe.send_probe(Target::parse(TARGET)).await;
+            probe.send_probe(*TARGET).await;
         }
         probe.forget_fallbacks();
-        probe.send_probe(Target::parse(TARGET)).await;
+        probe.send_probe(*TARGET).await;
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP), "on TCP");
@@ -405,12 +407,12 @@ mod tests {
             InMemoryEcho::new(EchoResult::NotPermitted),
             InMemoryTcp(None),
         );
-        probe.send_probe(Target::parse(TARGET)).await;
+        probe.send_probe(*TARGET).await;
         probe.forget_fallbacks();
         *probe.echo.result.lock().expect("unpoisoned") = EchoResult::NoAnswer;
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Unreachable);
@@ -424,11 +426,11 @@ mod tests {
             InMemoryTcp(Some(TCP_ROUND_TRIP)),
         );
         for _ in 0..FILTERED_AFTER_LOSSES {
-            probe.send_probe(Target::parse(TARGET)).await;
+            probe.send_probe(*TARGET).await;
         }
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::Answered(TCP_ROUND_TRIP));
@@ -446,17 +448,17 @@ mod tests {
             InMemoryTcp(Some(TCP_ROUND_TRIP)),
         );
         for _ in 1..FILTERED_AFTER_LOSSES {
-            probe.send_probe(Target::parse(TARGET)).await;
+            probe.send_probe(*TARGET).await;
         }
         *probe.echo.result.lock().expect("unpoisoned") = EchoResult::Answered(ECHO_ROUND_TRIP);
-        probe.send_probe(Target::parse(TARGET)).await;
+        probe.send_probe(*TARGET).await;
         *probe.echo.result.lock().expect("unpoisoned") = EchoResult::NoAnswer;
         for _ in 1..FILTERED_AFTER_LOSSES {
-            probe.send_probe(Target::parse(TARGET)).await;
+            probe.send_probe(*TARGET).await;
         }
 
         // Act
-        let outcome = probe.send_probe(Target::parse(TARGET)).await;
+        let outcome = probe.send_probe(*TARGET).await;
 
         // Assert
         assert_eq!(outcome, ProbeOutcome::LostButReachable);

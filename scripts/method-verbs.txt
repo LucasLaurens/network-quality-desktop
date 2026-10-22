@@ -51,6 +51,7 @@ flush
 follow
 forget
 format
+generate
 grade
 handle
 hold

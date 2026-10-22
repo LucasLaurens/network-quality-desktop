@@ -8,6 +8,10 @@ use std::time::Duration;
 
 use std::net::Ipv4Addr;
 
+use fake::faker::internet::en::IPv4;
+use fake::faker::lorem::en::Word;
+use fake::{Fake, Faker};
+
 use domain::{
     Aggregate, BoxLine, ConnectionContext, Direction, GatewayEcho, Granularity, ProbeOutcome,
     Settings, Target, Timestamp, Transfer, WifiLink,
@@ -725,4 +729,24 @@ impl PowerEventSource for InMemoryPowerEventSource {
             .unwrap_or_else(PoisonError::into_inner)
             .push(Box::new(on_event));
     }
+}
+
+/// A network name, as a box or a phone gives one: data a test needs but does not test.
+#[must_use]
+pub fn generate_network_name() -> String {
+    format!("{}-{:04X}", Word().fake::<String>(), Faker.fake::<u16>())
+}
+
+/// `count` different addresses, for measurement targets or an own server. O(count²): a test asks
+/// for a handful.
+#[must_use]
+pub fn generate_targets(count: usize) -> Vec<Target> {
+    let mut targets: Vec<Target> = Vec::with_capacity(count);
+    while targets.len() < count {
+        let target = Target::parse(&IPv4().fake::<String>());
+        if !targets.contains(&target) {
+            targets.push(target);
+        }
+    }
+    targets
 }

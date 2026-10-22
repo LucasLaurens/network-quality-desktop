@@ -250,6 +250,7 @@ fn format_bytes(bytes: u64, catalog: &TextCatalog) -> String {
 mod tests {
     use std::net::Ipv4Addr;
 
+    use application::test_support::generate_network_name;
     use domain::{BoxLine, ConnectionKind, MacAddress, Medium, Metering, WanAccessType, WifiBand};
 
     use super::*;
@@ -270,7 +271,7 @@ mod tests {
                 medium,
             }),
             wifi: Some(WifiLink {
-                name: Some("Maison".to_owned()),
+                name: Some(generate_network_name()),
                 signal_dbm: Some(-58),
                 rate_mbps: Some(866),
                 channel: Some(36),
