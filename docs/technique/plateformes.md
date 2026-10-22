@@ -103,7 +103,7 @@ Points laissés ouverts par la recherche (#19), tranchés :
 - Le popover est ancré à l'icône par le plugin positioner : centré sous l'icône sous macOS, au-dessus sous Windows (barre des tâches en bas). Sous Linux, Tauri ne transmet pas le clic sur l'icône : il n'y a pas de popover (`HAS_POPOVER`), le menu s'ouvre à tout clic.
 - Fermer le tableau de bord ne quitte jamais l'app (`ShellMode::choose_close_action`) : il est masqué en mode barre système, réduit en mode fenêtre. On quitte par le menu, ou en mode fenêtre par le bouton « Quitter » du tableau de bord (commande `quit_app`).
 - Sous macOS, l'app n'a pas d'icône dans le Dock (politique d'activation `Accessory`) : c'est une app de barre des menus, le tableau de bord s'ouvre depuis la pastille.
-- Sous macOS, le menu d'application de Tauri par défaut est remplacé (`src-tauri/src/app_menu.rs`) : Édition et Fenêtre seulement, pour garder ⌘C, ⌘V, ⌘W et ⌘M dans le tableau de bord, sans « Quitter » ni ⌘Q.
+- Sous macOS, le menu d'application de Tauri par défaut est remplacé (`src-tauri/src/app_menu.rs`) : menu de l'app avec « Quitter » (élément natif `quit`, ⌘Q, qui envoie `terminate:` et passe par `RunEvent::Exit`, donc par l'écriture de la dernière minute), Édition et Fenêtre, pour ⌘Q, ⌘C, ⌘V, ⌘W et ⌘M dans le tableau de bord et le popover. La barre de menus reste cachée (pas d'icône dans le Dock) : seuls les raccourcis servent.
 - Une seule instance (`tauri-plugin-single-instance`, enregistré en premier) : un second lancement ouvre le tableau de bord de l'app déjà lancée et s'arrête, sans jamais ouvrir le fichier d'historique une seconde fois.
 - La fenêtre popover est déclarée avec `create: false` et construite au lancement seulement sous macOS et Windows : sous Linux, elle ne servirait à rien.
 
