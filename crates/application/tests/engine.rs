@@ -734,6 +734,42 @@ async fn measures_again_as_soon_as_the_network_changes() {
 }
 
 #[tokio::test]
+async fn tries_icmp_again_on_another_network() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 61)));
+    harness.warm_up_with_latency(FAST).await;
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 62)));
+    harness.engine.handle(EngineMessage::NetworkChanged).await;
+
+    // Act
+    harness.run_seconds(1).await;
+
+    // Assert
+    assert_eq!(harness.network.count_forgotten_fallbacks(), 1);
+}
+
+#[tokio::test]
+async fn keeps_its_fallbacks_while_the_network_stays_the_same() {
+    // Arrange
+    let mut harness = create_harness();
+    let wifi = create_context(ConnectionKind::WiFi, 63);
+    harness.connection.set_context(Some(wifi));
+    harness.warm_up_with_latency(FAST).await;
+    harness.engine.handle(EngineMessage::NetworkChanged).await;
+
+    // Act
+    harness.run_seconds(5).await;
+
+    // Assert
+    assert_eq!(harness.network.count_forgotten_fallbacks(), 0);
+}
+
+#[tokio::test]
 async fn keeps_its_verdict_when_a_change_leaves_the_network_as_it_was() {
     // Arrange
     let mut harness = create_harness();
@@ -1203,6 +1239,25 @@ async fn measures_nothing_between_sleep_and_wake() {
 }
 
 #[tokio::test]
+async fn tries_icmp_again_on_wake() {
+    // Arrange
+    let mut harness = create_harness();
+    harness
+        .connection
+        .set_context(Some(create_context(ConnectionKind::WiFi, 64)));
+    harness.warm_up_with_latency(FAST).await;
+    let (answer, _answered) = std::sync::mpsc::sync_channel(1);
+    harness.engine.handle(EngineMessage::Sleep(answer)).await;
+    harness.clock.advance(Duration::from_secs(3600));
+
+    // Act
+    harness.engine.handle(EngineMessage::Wake).await;
+
+    // Assert
+    assert_eq!(harness.network.count_forgotten_fallbacks(), 1);
+}
+
+#[tokio::test]
 async fn measures_again_from_scratch_on_wake() {
     // Arrange
     let mut harness = create_harness();
@@ -1418,6 +1473,10 @@ impl application::LatencyProbe for DozingNetwork {
         }
         self.network.send_probe(target)
     }
+
+    fn forget_fallbacks(&self) {
+        self.network.forget_fallbacks();
+    }
 }
 
 #[tokio::test]
@@ -1522,6 +1581,15 @@ async fn create_harness_moving_to_the_own_server() -> Harness {
         )))
         .await;
     harness
+}
+
+#[tokio::test]
+async fn tries_icmp_again_against_new_servers() {
+    // Act
+    let harness = create_harness_moving_to_the_own_server().await;
+
+    // Assert
+    assert_eq!(harness.network.count_forgotten_fallbacks(), 1);
 }
 
 #[tokio::test]
