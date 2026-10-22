@@ -6,6 +6,8 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 /** Commands */
 export const commands = {
 	readAppInfo: () => __TAURI_INVOKE<AppInfo>("read_app_info"),
+	/**  Every word of the windows, read once when a window opens. O(c) for a catalogue of c characters. */
+	readInterfaceTexts: () => __TAURI_INVOKE<{ [key in string]: string }>("read_interface_texts"),
 	/**  The latest display, for a window that opens between two events. */
 	readConnectionDisplay: () => __TAURI_INVOKE<ConnectionDisplay>("read_connection_display"),
 	/**  Brings the dashboard window forward and closes the popover. */

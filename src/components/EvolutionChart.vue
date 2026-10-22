@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { EvolutionDisplay, SeriesDisplay } from '../bindings'
+import { useInterfaceTexts } from '../composables/interface-texts'
 import StateShape from './StateShape.vue'
 
 const { evolution, series, ticks, label } = defineProps<{
@@ -10,6 +11,8 @@ const { evolution, series, ticks, label } = defineProps<{
   ticks: readonly [string, string, string]
   label: string
 }>()
+
+const say = useInterfaceTexts()
 
 const WIDTH = 820
 const HEIGHT = 200
@@ -95,7 +98,7 @@ const measuredIndexes = computed(() => series.values.flatMap((value, index) => (
 
 <template>
   <p v-if="evolution.isEmpty" class="empty" data-chart-empty>
-    L'historique se remplit au fil des mesures. La première courbe apparaît après une minute.
+    {{ say('ui-chart-empty') }}
   </p>
   <div v-else class="chart">
     <div class="plot">
@@ -166,7 +169,7 @@ const measuredIndexes = computed(() => series.values.flatMap((value, index) => (
         }"
       >
         <span class="time num">{{ evolution.times[hovered] }}</span>
-        <strong class="num">{{ series.texts[hovered] ?? 'Pas de mesure' }}</strong>
+        <strong class="num">{{ series.texts[hovered] ?? say('ui-chart-no-value') }}</strong>
         <span v-if="stateLabel(hovered)" class="state">{{ stateLabel(hovered) }}</span>
       </div>
     </div>
@@ -178,20 +181,20 @@ const measuredIndexes = computed(() => series.values.flatMap((value, index) => (
       />
     </div>
     <div class="legend">
-      <span>Bande&nbsp;: l'état à chaque instant</span>
+      <span>{{ say('ui-chart-band') }}</span>
       <span v-for="entry in evolution.stateLabels" :key="entry.state">
         <StateShape :state="entry.state" :size="10" />{{ entry.label }}
       </span>
     </div>
     <p class="coverage" data-coverage>{{ evolution.coverage }}</p>
     <details class="values">
-      <summary>Voir les valeurs</summary>
+      <summary>{{ say('ui-chart-values') }}</summary>
       <table>
         <thead>
           <tr>
-            <th>Début</th>
-            <th class="right">Valeur</th>
-            <th>État</th>
+            <th>{{ say('ui-chart-start') }}</th>
+            <th class="right">{{ say('ui-chart-value') }}</th>
+            <th>{{ say('ui-chart-state') }}</th>
           </tr>
         </thead>
         <tbody>

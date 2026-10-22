@@ -19,11 +19,16 @@ import {
   type WindowModeTexts,
 } from '../bindings'
 import type { NetworkQualityClient } from './network-quality-client'
+import type { InterfaceTexts } from '../composables/interface-texts'
 
 /** Production adapter: talks to the Rust core through the generated Tauri bindings. */
 export class TauriNetworkQualityClient implements NetworkQualityClient {
   readAppInfo(): Promise<AppInfo> {
     return commands.readAppInfo()
+  }
+
+  readInterfaceTexts(): Promise<InterfaceTexts> {
+    return commands.readInterfaceTexts()
   }
 
   readConnectionDisplay(): Promise<ConnectionDisplay> {

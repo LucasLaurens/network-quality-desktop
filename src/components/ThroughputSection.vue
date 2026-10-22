@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useInterfaceTexts } from '../composables/interface-texts'
 import { inject, ref } from 'vue'
 import type { ThroughputPanel } from '../bindings'
 import { useLoadOnFocus } from '../composables/use-load-on-focus'
@@ -10,6 +11,7 @@ const emit = defineEmits<{ openSettings: [] }>()
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
+const say = useInterfaceTexts()
 
 const panel = ref<ThroughputPanel | null>(null)
 
@@ -27,8 +29,10 @@ useLoadOnFocus(loadPanel)
 <template>
   <div v-if="panel" class="throughput">
     <p v-if="!panel.isAllowed" class="quiet">
-      <span>Tests de débit désactivés&nbsp;: aucune donnée n'est consommée.</span>
-      <button type="button" class="link" data-open-settings @click="emit('openSettings')">Activer dans Réglages</button>
+      <span>{{ say('ui-throughput-off') }}</span>
+      <button type="button" class="link" data-open-settings @click="emit('openSettings')">
+        {{ say('ui-throughput-enable') }}
+      </button>
     </p>
     <template v-else>
       <ThroughputControls @done="loadPanel" />
@@ -36,12 +40,12 @@ useLoadOnFocus(loadPanel)
         <table>
           <thead>
             <tr>
-              <th>Quand</th>
-              <th>Test</th>
-              <th class="right">Réception</th>
-              <th class="right">Envoi</th>
-              <th class="right">Latence en charge</th>
-              <th class="right">Données</th>
+              <th>{{ say('ui-throughput-when') }}</th>
+              <th>{{ say('ui-throughput-test') }}</th>
+              <th class="right">{{ say('ui-throughput-download') }}</th>
+              <th class="right">{{ say('ui-throughput-upload') }}</th>
+              <th class="right">{{ say('ui-throughput-loaded-latency') }}</th>
+              <th class="right">{{ say('ui-throughput-data') }}</th>
             </tr>
           </thead>
           <tbody>

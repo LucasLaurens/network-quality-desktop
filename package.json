@@ -25,7 +25,7 @@
     "coverage:back": "node scripts/coverage-back.mjs",
     "deps:audit": "cargo deny check advisories licenses && pnpm audit",
     "mutants:domain": "cargo mutants -p domain",
-    "bindings:check": "cargo test -p app --lib exports_typescript_bindings && git diff --exit-code -- src/bindings.ts",
+    "bindings:check": "cargo test -p app --lib exports_ && git diff --exit-code -- src/bindings.ts tests/fakes/interface-texts.json",
     "tauri": "tauri",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:front && pnpm build:web && pnpm lint:back && pnpm test:back && pnpm bindings:check",
     "prepare": "lefthook install",

@@ -1,10 +1,15 @@
 //! The French text catalogue (Fluent), the single home of every word the app shows.
 
+use std::collections::BTreeMap;
+
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::{FluentArgs, FluentResource};
+use fluent_syntax::ast::{Entry, Expression, InlineExpression, Message, PatternElement};
 use unic_langid::langid;
 
 const FRENCH: &str = include_str!("../locales/fr.ftl");
+/// The texts of the windows, as opposed to those the core composes itself.
+const INTERFACE_PREFIX: &str = "ui-";
 
 pub struct TextCatalog {
     bundle: FluentBundle<FluentResource>,
@@ -46,6 +51,48 @@ impl TextCatalog {
         debug_assert!(errors.is_empty(), "`{key}` failed to format: {errors:?}");
         text
     }
+
+    /// Every interface text, rendered, each variable left as `{name}` for the window to fill.
+    /// O(c) for a catalogue of c characters: it is read again, once per window.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the bundled catalogue is malformed, as `load` does.
+    #[must_use]
+    pub fn list_interface_texts(&self) -> BTreeMap<String, String> {
+        let resource = FluentResource::try_new(FRENCH.to_owned()).expect("a well-formed catalogue");
+        resource
+            .entries()
+            .filter_map(|entry| match entry {
+                Entry::Message(message) if message.id.name.starts_with(INTERFACE_PREFIX) => {
+                    Some(message)
+                }
+                _ => None,
+            })
+            .map(|message| {
+                let key = message.id.name;
+                (
+                    key.to_owned(),
+                    self.render(key, Some(&create_open_slots(message))),
+                )
+            })
+            .collect()
+    }
+}
+
+/// Each variable of the message, valued with its own `{name}`. O(e) for e pattern elements.
+fn create_open_slots(message: &Message<&str>) -> FluentArgs<'static> {
+    let mut slots = FluentArgs::new();
+    let elements = message.value.iter().flat_map(|pattern| &pattern.elements);
+    for element in elements {
+        if let PatternElement::Placeable {
+            expression: Expression::Inline(InlineExpression::VariableReference { id }),
+        } = element
+        {
+            slots.set(id.name.to_owned(), format!("{{{}}}", id.name));
+        }
+    }
+    slots
 }
 
 #[cfg(test)]
@@ -58,6 +105,33 @@ mod tests {
             .filter(|line| !line.starts_with('#') && line.contains(" = "))
             .filter_map(|line| line.split_once(" = "))
             .collect()
+    }
+
+    #[test]
+    fn hands_over_every_interface_text_with_its_slots_open() {
+        // Arrange
+        let catalog = TextCatalog::load();
+
+        // Act
+        let texts = catalog.list_interface_texts();
+
+        // Assert
+        let keys: Vec<&str> = list_messages()
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| key.starts_with(INTERFACE_PREFIX))
+            .collect();
+        assert_eq!(texts.keys().map(String::as_str).collect::<Vec<_>>(), {
+            let mut sorted = keys;
+            sorted.sort_unstable();
+            sorted
+        });
+        assert_eq!(texts["ui-cancel"], "Annuler");
+        assert_eq!(texts["ui-updated-at"], "Mis à jour à {time}");
+        assert_eq!(
+            texts["ui-throughput-last"],
+            "Dernier test, {when}\u{a0}: réception {download}, envoi {upload}"
+        );
     }
 
     #[test]

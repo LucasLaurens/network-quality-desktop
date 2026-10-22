@@ -58,4 +58,4 @@ Sous chaque mesure proche de son seuil, le popover indique « Proche du seuil »
 
 ## Ton et typographie
 
-Ton impersonnel (actions à l'infinitif), constat de 80 caractères au plus, action de 60 au plus, virgule décimale, espace insécable avant les unités, « % » et « : », ni point d'exclamation, ni tiret long, ni emoji. Un test vérifie ces règles sur tout le catalogue.
+Ton impersonnel (actions à l'infinitif), constat de 80 caractères au plus, action de 60 au plus, virgule décimale, espace insécable avant les unités, « % » et « : », ni point d'exclamation, ni tiret long, ni emoji. Un test vérifie ces règles sur tout le catalogue, qui contient aussi chaque mot des fenêtres : boutons, titres, aides, états vides et confirmations suivent les mêmes règles.

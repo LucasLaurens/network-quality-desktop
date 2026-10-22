@@ -1,0 +1,152 @@
+// Every word of the windows comes from the Fluent catalogue (`read_interface_texts`): this finds
+// the ones written in a component instead. In a template, any text, text attribute or written
+// string counts. In a script, a string counts when it reads as words: a space, a letter beyond
+// ASCII, an ellipsis, or the value of a `label`-like property. A lone capitalised ASCII word in a
+// script is left alone: it may as well be a key name such as 'Escape'.
+import ts from 'typescript'
+import { parse } from 'vue/compiler-sfc'
+
+const TEXT_ATTRIBUTES = new Set([
+  'alt',
+  'aria-description',
+  'aria-label',
+  'aria-placeholder',
+  'aria-roledescription',
+  'aria-valuetext',
+  'label',
+  'placeholder',
+  'title',
+])
+const LABEL_PROPERTIES = new Set(['hint', 'label', 'message', 'text', 'title', 'warning'])
+const VUE_NODE = { element: 1, text: 2, interpolation: 5, attribute: 6, directive: 7 }
+const LETTER = /\p{L}/u
+const WORDS = /\s|[^\p{ASCII}]/u
+const CAPITALISED = /^\p{Lu}/u
+
+/**
+ * The few fields of the Vue template syntax tree this check reads.
+ * @typedef {{ content?: string }} VueExpression
+ * @typedef {{ type: number, name: string, value?: { content: string }, exp?: VueExpression }} VueProp
+ * @typedef {{ type: number, content?: string | VueExpression, props?: VueProp[], children?: VueNode[] }} VueNode
+ */
+
+/**
+ * The texts written in a component or a module rather than read from the catalogue, in the order
+ * they appear (script first). O(n) for a source of n characters.
+ * @param {string} source
+ * @param {string} fileName
+ * @returns {string[]}
+ */
+export function findHardcodedTexts(source, fileName) {
+  if (!fileName.endsWith('.vue')) return findScriptTexts(source, fileName, false)
+  const { descriptor } = parse(source, { filename: fileName })
+  const scripts = [descriptor.script, descriptor.scriptSetup].flatMap((block) => (block ? [block.content] : []))
+  return [
+    ...scripts.flatMap((script) => findScriptTexts(script, `${fileName}.ts`, false)),
+    ...(descriptor.template?.ast ? findTemplateTexts(/** @type {VueNode} */ (descriptor.template.ast), fileName) : []),
+  ]
+}
+
+/**
+ * O(n) for n template nodes and their expressions.
+ * @param {VueNode} node
+ * @param {string} fileName
+ * @returns {string[]}
+ */
+function findTemplateTexts(node, fileName) {
+  /** @type {string[]} */
+  const found = []
+  const content = node.content
+  if (node.type === VUE_NODE.text && typeof content === 'string' && LETTER.test(content)) {
+    found.push(content.replace(/\s+/g, ' ').trim())
+  }
+  if (node.type === VUE_NODE.interpolation && typeof content === 'object') {
+    found.push(...findExpressionTexts(content, fileName))
+  }
+  for (const prop of node.props ?? []) {
+    const value = prop.value?.content ?? ''
+    if (prop.type === VUE_NODE.attribute && TEXT_ATTRIBUTES.has(prop.name) && LETTER.test(value)) found.push(value)
+    if (prop.type === VUE_NODE.directive) found.push(...findExpressionTexts(prop.exp, fileName))
+  }
+  for (const child of node.children ?? []) found.push(...findTemplateTexts(child, fileName))
+  return found
+}
+
+/**
+ * @param {VueExpression | undefined} expression
+ * @param {string} fileName
+ * @returns {string[]}
+ */
+function findExpressionTexts(expression, fileName) {
+  if (!expression?.content) return []
+  return findScriptTexts(`(${expression.content})`, `${fileName}.ts`, true)
+}
+
+/**
+ * O(n) for n syntax nodes.
+ * @param {string} code
+ * @param {string} fileName
+ * @param {boolean} isTemplate a template writes no key names, so a capitalised word is a text there
+ * @returns {string[]}
+ */
+function findScriptTexts(code, fileName, isTemplate) {
+  const file = ts.createSourceFile(fileName, code, ts.ScriptTarget.Latest, true)
+  /** @type {string[]} */
+  const found = []
+  /** @param {ts.Node} node */
+  const visit = (node) => {
+    if (isOutsideTheWindow(node)) return
+    const text = readLiteralText(node)
+    if (text !== null && isText(text, node, isTemplate)) found.push(text)
+    ts.forEachChild(node, visit)
+  }
+  visit(file)
+  return found
+}
+
+/**
+ * Module paths, types, logs, errors and property names never reach the window.
+ * @param {ts.Node} node
+ * @returns {boolean}
+ */
+function isOutsideTheWindow(node) {
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node) || ts.isLiteralTypeNode(node)) return true
+  if (ts.isNewExpression(node)) return ts.isIdentifier(node.expression) && node.expression.text.endsWith('Error')
+  if (ts.isCallExpression(node)) {
+    const callee = node.expression
+    return (
+      ts.isPropertyAccessExpression(callee) &&
+      ts.isIdentifier(callee.expression) &&
+      callee.expression.text === 'console'
+    )
+  }
+  return node.parent !== undefined && ts.isPropertyAssignment(node.parent) && node.parent.name === node
+}
+
+/**
+ * The written part of a string or a template string; `null` for any other node.
+ * @param {ts.Node} node
+ * @returns {string | null}
+ */
+function readLiteralText(node) {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text
+  if (ts.isTemplateExpression(node))
+    return [node.head.text, ...node.templateSpans.map((span) => span.literal.text)].join('')
+  return null
+}
+
+/**
+ * @param {string} text
+ * @param {ts.Node} node
+ * @param {boolean} isTemplate
+ * @returns {boolean}
+ */
+function isText(text, node, isTemplate) {
+  if (!LETTER.test(text)) return false
+  if (WORDS.test(text.trim())) return true
+  const parent = node.parent
+  if (ts.isPropertyAssignment(parent) && ts.isIdentifier(parent.name) && LABEL_PROPERTIES.has(parent.name.text)) {
+    return true
+  }
+  return isTemplate && CAPITALISED.test(text)
+}

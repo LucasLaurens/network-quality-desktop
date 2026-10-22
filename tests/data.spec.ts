@@ -2,12 +2,11 @@ import { faker } from '@faker-js/faker'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import SettingsView from '../src/components/SettingsView.vue'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../src/services/network-quality-client'
-import { InMemoryNetworkQualityClient } from './fakes/in-memory-network-quality-client'
+import { InMemoryNetworkQualityClient, createWindowProvisions } from './fakes/in-memory-network-quality-client'
 
 async function mountSection(client: InMemoryNetworkQualityClient) {
   const wrapper = mount(SettingsView, {
-    global: { provide: { [NETWORK_QUALITY_CLIENT_KEY as symbol]: client } },
+    global: { provide: createWindowProvisions(client) },
   })
   await flushPromises()
   return wrapper

@@ -27,7 +27,14 @@ import type {
   ThroughputRow,
   WindowModeTexts,
 } from '../../src/bindings'
-import type { NetworkQualityClient } from '../../src/services/network-quality-client'
+import { INTERFACE_TEXTS_KEY, type InterfaceTexts } from '../../src/composables/interface-texts'
+import { NETWORK_QUALITY_CLIENT_KEY, type NetworkQualityClient } from '../../src/services/network-quality-client'
+import interfaceTexts from './interface-texts.json'
+
+/** What `main.ts` gives a window: the client, and the catalogue's texts as the core renders them. */
+export function createWindowProvisions(client: NetworkQualityClient): Record<symbol, unknown> {
+  return { [NETWORK_QUALITY_CLIENT_KEY as symbol]: client, [INTERFACE_TEXTS_KEY as symbol]: interfaceTexts }
+}
 
 export function createMetricDisplay(overrides: Partial<MetricDisplay> = {}): MetricDisplay {
   return {
@@ -270,6 +277,10 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   readAppInfo(): Promise<AppInfo> {
     return Promise.resolve(this.appInfo)
+  }
+
+  readInterfaceTexts(): Promise<InterfaceTexts> {
+    return Promise.resolve(interfaceTexts)
   }
 
   readConnectionDisplay(): Promise<ConnectionDisplay> {

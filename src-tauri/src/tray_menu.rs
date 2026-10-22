@@ -103,11 +103,11 @@ pub fn compose_menu_entries(
     if settings.allows_throughput_tests {
         entries.push(MenuEntry::Action(
             MenuAction::RunQuickTest,
-            catalog.render("menu-quick-test", None),
+            catalog.render("ui-quick-test", None),
         ));
         entries.push(MenuEntry::Action(
             MenuAction::RunFullTest,
-            catalog.render("menu-full-test", None),
+            catalog.render("ui-full-test", None),
         ));
     }
     // Linux has no popover: the menu is the way to the help there.
