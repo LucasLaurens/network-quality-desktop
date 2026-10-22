@@ -18,6 +18,15 @@ export function selectReleasePullRequest(pending) {
 }
 
 /**
+ * The Release workflow commits Cargo.lock to the release branch once release-please has bumped the
+ * version; merging before that would leave main with a stale lock. O(f) for f changed files.
+ * @param {readonly string[]} changedFiles the files the release pull request changes
+ */
+export function isLockfileSynced(changedFiles) {
+  return changedFiles.includes('Cargo.lock')
+}
+
+/**
  * Squash, under the pull request's title: the message stays exactly what release-please wrote,
  * with no trailer added by GitHub. O(1).
  * @param {PullRequest} pullRequest
