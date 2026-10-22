@@ -39,9 +39,9 @@ Limite : un serveur du réseau local sur une connexion sans accès à Internet (
 
 ## Données
 
-| Action                | Effet                                                                                                                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Exporter l'historique | Trois fichiers CSV (mesures, événements, tests de débit) dans un nouveau dossier de Téléchargements, sur 24 heures, 7 jours, 30 jours (par défaut) ou Tout. Voir [Export](export.md). |
-| Effacer l'historique  | Supprime tout l'historique, après confirmation. Voir [Historique](historique.md#effacer-lhistorique).                                                                                 |
+| Action                | Effet                                                                                                                                                                                                       |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exporter l'historique | Trois fichiers CSV (mesures, événements, tests de débit) dans le dossier choisi, sur 24 heures, 7 jours, 30 jours (par défaut) ou Tout. Désactivé tant que l'historique est vide. Voir [Export](export.md). |
+| Effacer l'historique  | Supprime tout l'historique, après confirmation. Voir [Historique](historique.md#effacer-lhistorique).                                                                                                       |
 
 Avant d'effacer, l'app dit ce qui part : « Toutes les mesures (minutes et heures), les événements (coupures, changements de réseau, veilles), les tests de débit et les réseaux connus seront supprimés, sans retour possible. Les réglages sont conservés. » Rien n'est supprimé sans un clic sur « Effacer l'historique » ; « Annuler » referme l'avertissement. Le résultat s'affiche sous la section : « Historique effacé. » ou « L'historique n'a pas pu être effacé. ». Pendant un export ou un effacement, les deux boutons sont désactivés.

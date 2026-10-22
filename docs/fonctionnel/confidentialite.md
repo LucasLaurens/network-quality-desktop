@@ -16,4 +16,4 @@ Seulement quand l'utilisateur ouvre les « Détails techniques » du tableau de 
 
 L'historique (résumés par minute et par heure, changements de réseau, coupures) est enregistré dans un fichier sur l'ordinateur ; voir [Historique](historique.md). Pour reconnaître les réseaux, ce fichier garde sans limite de durée l'adresse MAC de la box ou du téléphone et le nom du Wi-Fi. Rien n'est envoyé ailleurs. « Effacer l'historique », dans Réglages, supprime tout cela, réseaux compris ; seuls les réglages restent.
 
-L'[export](export.md) écrit, à la demande, trois fichiers dans Téléchargements : ils contiennent le nom des Wi-Fi, mais jamais l'adresse MAC de la box. Ce que l'utilisateur en fait ensuite ne passe plus par l'app.
+L'[export](export.md) écrit, à la demande, trois fichiers dans le dossier choisi : ils contiennent le nom des Wi-Fi, mais jamais l'adresse MAC de la box. Ce que l'utilisateur en fait ensuite ne passe plus par l'app.

@@ -6,6 +6,8 @@ import type {
   DashboardSummaryDisplay,
   EvolutionDisplay,
   LineDetails,
+  ExportAvailability,
+  ExportDone,
   ExportPeriodChoice,
   PeriodChoice,
   ProfileChoice,
@@ -49,8 +51,14 @@ export interface NetworkQualityClient {
    * sentence explaining why it did not run.
    */
   runThroughputTest(profile: ProfileChoice, isConfirmed: boolean, utcOffsetSeconds: number): Promise<ThroughputOutcome>
-  /** Writes three CSV files into Downloads; resolves to where, rejects with why not. */
-  exportHistory(period: ExportPeriodChoice, utcOffsetSeconds: number): Promise<string>
+  /** Asks for the export folder; `false` when the dialog is closed without a choice. */
+  chooseExportFolder(): Promise<boolean>
+  /** Writes three CSV files into the chosen folder; rejects with why not. */
+  exportHistory(period: ExportPeriodChoice): Promise<ExportDone>
+  /** Whether there is anything to export, and why not. */
+  readExportAvailability(): Promise<ExportAvailability>
+  /** Shows the export folder in the system's file manager. */
+  revealExportFolder(): Promise<void>
   /** Erases measures, events and throughput tests; the settings stay. */
   eraseHistory(): Promise<string>
   /** The connection, its Wi-Fi and the traffic seen: quick to read. */

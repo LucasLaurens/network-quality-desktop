@@ -82,7 +82,9 @@ fn exports_the_measures_by_network_name_without_mac_nor_histogram() {
 
     // Assert
     let lines: Vec<&str> = measures.split("\r\n").collect();
-    assert!(lines[0].starts_with("debut_utc,granularite,reseau,type_connexion,latence_p90_ms"));
+    assert!(lines[0].starts_with(
+        "start_utc,granularity,network,connection_type,latency_p50_ms,latency_p90_ms"
+    ));
     assert!(lines[1].starts_with("2023-11-14T22:13:00Z,minute,Box,wifi,"));
     assert!(!measures.contains("54:9b"));
     assert_eq!(lines.len(), 3, "a header, one row and the last line break");
@@ -119,8 +121,8 @@ fn exports_events_and_throughput_tests_in_their_own_files() {
     let [_, events, tests] = export(&repository, ExportPeriod::All);
 
     // Assert
-    assert!(events.contains("2023-11-14T22:13:20Z,Bureau,wifi,debut_coupure\r\n"));
-    assert!(tests.contains("2023-11-14T22:13:20Z,Bureau,wifi,rapide,85000,,46,4200000,3100\r\n"));
+    assert!(events.contains("2023-11-14T22:13:20Z,Bureau,wifi,offline_started\r\n"));
+    assert!(tests.contains("2023-11-14T22:13:20Z,Bureau,wifi,quick,85000,,46,4200000,3100\r\n"));
 }
 
 #[test]
@@ -179,7 +181,7 @@ fn exports_hours_where_minutes_are_gone_and_never_a_second_twice() {
         .filter(|line| !line.is_empty())
         .filter_map(|line| line.split(',').nth(1))
         .collect();
-    assert_eq!(grains, ["heure", "minute"]);
+    assert_eq!(grains, ["hour", "minute"]);
 }
 
 #[test]
@@ -206,7 +208,7 @@ fn exports_the_hour_where_the_purge_cut_its_minutes() {
         .skip(1)
         .filter_map(|line| line.split(',').nth(1))
         .collect();
-    assert_eq!(grains, ["heure"], "the hour already holds its minutes");
+    assert_eq!(grains, ["hour"], "the hour already holds its minutes");
 }
 
 #[test]
@@ -245,5 +247,28 @@ fn starts_the_last_month_with_the_whole_hour_it_falls_in() {
     let [measures, ..] = export(&repository, ExportPeriod::LastMonth);
 
     // Assert
-    assert!(measures.contains(",heure,Box,"));
+    assert!(measures.contains(",hour,Box,"));
+}
+
+#[test]
+fn gives_the_median_beside_the_ninetieth_percentile() {
+    // Arrange
+    let mut repository = InMemoryMeasurementRepository::default();
+    repository
+        .add_minute(&create_network("Box"), SOME_UTC - 20, &create_minute())
+        .expect("a minute");
+
+    // Act
+    let [measures, ..] = export(&repository, ExportPeriod::LastDay);
+
+    // Assert
+    let row: Vec<&str> = measures
+        .split("\r\n")
+        .nth(1)
+        .expect("a row")
+        .split(',')
+        .collect();
+    let p50: f64 = row[4].parse().expect("a p50");
+    let p90: f64 = row[5].parse().expect("a p90");
+    assert!(p50 > 0.0 && p50 <= p90, "{p50} then {p90}");
 }

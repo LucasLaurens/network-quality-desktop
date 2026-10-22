@@ -12,32 +12,33 @@ use crate::{
     ThroughputRecord,
 };
 
-const MEASURE_HEADER: [&str; 13] = [
-    "debut_utc",
-    "granularite",
-    "reseau",
-    "type_connexion",
-    "latence_p90_ms",
-    "gigue_moyenne_ms",
-    "perte_pct",
-    "sondes_envoyees",
-    "sondes_perdues",
-    "secondes_solide",
-    "secondes_instable",
-    "secondes_degrade",
-    "secondes_hors_ligne",
+const MEASURE_HEADER: [&str; 14] = [
+    "start_utc",
+    "granularity",
+    "network",
+    "connection_type",
+    "latency_p50_ms",
+    "latency_p90_ms",
+    "jitter_mean_ms",
+    "loss_pct",
+    "probes_sent",
+    "probes_lost",
+    "seconds_solid",
+    "seconds_unstable",
+    "seconds_degraded",
+    "seconds_offline",
 ];
-const EVENT_HEADER: [&str; 4] = ["horodatage_utc", "reseau", "type_connexion", "evenement"];
+const EVENT_HEADER: [&str; 4] = ["time_utc", "network", "connection_type", "event"];
 const TEST_HEADER: [&str; 9] = [
-    "horodatage_utc",
-    "reseau",
-    "type_connexion",
-    "profil",
-    "reception_kbps",
-    "envoi_kbps",
-    "latence_en_charge_ms",
-    "octets",
-    "duree_ms",
+    "time_utc",
+    "network",
+    "connection_type",
+    "profile",
+    "download_kbps",
+    "upload_kbps",
+    "loaded_latency_ms",
+    "bytes",
+    "duration_ms",
 ];
 const BITS_PER_KILOBIT: u64 = 1000;
 const MINUTE_RETENTION_SECONDS: i64 = MINUTE_RETENTION.as_secs().cast_signed();
@@ -216,6 +217,7 @@ fn encode_measure_line(
         to_granularity_text(granularity).to_owned(),
         to_network_name(network),
         to_kind_text(network.kind).to_owned(),
+        format_or_empty(aggregate.compute_latency_p50(), format_tenths_of_millis),
         format_or_empty(aggregate.compute_latency_p90(), format_tenths_of_millis),
         format_or_empty(aggregate.compute_mean_jitter(), format_tenths_of_millis),
         format_or_empty(aggregate.compute_loss(), |loss| {
@@ -288,7 +290,7 @@ fn to_network_name(network: &NetworkKey) -> String {
 const fn to_granularity_text(granularity: Granularity) -> &'static str {
     match granularity {
         Granularity::Minute => "minute",
-        Granularity::Hour => "heure",
+        Granularity::Hour => "hour",
     }
 }
 
@@ -296,25 +298,25 @@ const fn to_kind_text(kind: ConnectionKind) -> &'static str {
     match kind {
         ConnectionKind::Ethernet => "ethernet",
         ConnectionKind::WiFi => "wifi",
-        ConnectionKind::Cellular => "cellulaire",
-        ConnectionKind::PhoneHotspot => "partage_de_connexion",
-        ConnectionKind::Other => "autre",
+        ConnectionKind::Cellular => "cellular",
+        ConnectionKind::PhoneHotspot => "phone_hotspot",
+        ConnectionKind::Other => "other",
     }
 }
 
 const fn to_event_text(kind: EventKind) -> &'static str {
     match kind {
-        EventKind::NetworkChanged => "changement_de_reseau",
-        EventKind::OfflineStarted => "debut_coupure",
-        EventKind::OfflineEnded => "fin_coupure",
-        EventKind::Sleep => "veille",
-        EventKind::Wake => "reveil",
+        EventKind::NetworkChanged => "network_changed",
+        EventKind::OfflineStarted => "offline_started",
+        EventKind::OfflineEnded => "offline_ended",
+        EventKind::Sleep => "sleep",
+        EventKind::Wake => "wake",
     }
 }
 
 const fn to_profile_text(profile: TestProfile) -> &'static str {
     match profile {
-        TestProfile::Quick => "rapide",
-        TestProfile::Full => "complet",
+        TestProfile::Quick => "quick",
+        TestProfile::Full => "full",
     }
 }

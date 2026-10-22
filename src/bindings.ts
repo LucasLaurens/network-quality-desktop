@@ -82,14 +82,31 @@ export const commands = {
 	 */
 	runThroughputTest: (profile: ProfileChoice, isConfirmed: boolean, utcOffsetSeconds: number) => typedError<ThroughputOutcome, string>(__TAURI_INVOKE("run_throughput_test", { profile, isConfirmed, utcOffsetSeconds })),
 	/**
-	 *  Writes the history of `period` as three CSV files into a new folder of Downloads, on a thread
-	 *  of its own, then shows the folder.
+	 *  Asks for the export folder in the system's dialog, attached to the dashboard; `false` when the
+	 *  dialog was closed without a choice.
 	 * 
 	 *  # Errors
 	 * 
-	 *  The sentence shown under the button: a history kept in memory, or a failed export.
+	 *  The sentence shown under the button when the dialog could not open.
 	 */
-	exportHistory: (period: ExportPeriodChoice, utcOffsetSeconds: number) => typedError<string, string>(__TAURI_INVOKE("export_history", { period, utcOffsetSeconds })),
+	chooseExportFolder: () => typedError<boolean, string>(__TAURI_INVOKE("choose_export_folder")),
+	/**
+	 *  Writes the history of `period` as three CSV files into the chosen folder, on a thread of its
+	 *  own.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The sentence shown under the button: a history kept in memory, no folder chosen, or a failed
+	 *  export.
+	 */
+	exportHistory: (period: ExportPeriodChoice) => typedError<ExportDone, string>(__TAURI_INVOKE("export_history", { period })),
+	/**  Shows the export folder in the system's file manager. */
+	revealExportFolder: () => __TAURI_INVOKE<void>("reveal_export_folder"),
+	/**
+	 *  Whether there is anything to export, and why not: a history kept in memory, or nothing kept
+	 *  yet.
+	 */
+	readExportAvailability: () => __TAURI_INVOKE<ExportAvailability>("read_export_availability"),
 	/**
 	 *  Erases every measure, event and throughput test; the settings stay.
 	 * 
@@ -182,6 +199,16 @@ export type EvolutionDisplay = {
 	coverage: string,
 	/**  Nothing measured in the period yet: a sentence replaces the chart. */
 	isEmpty: boolean,
+};
+
+/**  Whether « Exporter l'historique… » can be used, and why not. */
+export type ExportAvailability = { kind: "ready" } | { kind: "unavailable"; reason: string };
+
+/**  A finished export: what to say, and how to name the button that shows its folder. */
+export type ExportDone = {
+	message: string,
+	/**  « Afficher dans le Finder » on macOS, the file manager's name elsewhere. */
+	revealLabel: string,
 };
 
 export type ExportPeriodChoice = "lastDay" | "lastWeek" | "lastMonth" | "all";

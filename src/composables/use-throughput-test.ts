@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, ref, type InjectionKey, type Ref } from 'vue'
+import { ref, type InjectionKey, type Ref } from 'vue'
 import type { ProfileChoice } from '../bindings'
 import type { NetworkQualityClient } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
@@ -10,23 +10,6 @@ export const THROUGHPUT_PROFILES = [
 
 /** A test the tray menu asked the dashboard to run; consumed once started. */
 export const REQUESTED_TEST_KEY: InjectionKey<Ref<ProfileChoice | null>> = Symbol('RequestedTest')
-
-/**
- * Loads now, then again each time the window comes back: the popover is only hidden between two
- * openings, and a test may have run, or the setting changed, in another window meanwhile.
- */
-export function useLoadOnFocus(load: () => Promise<void>): void {
-  const reload = (): void => {
-    void load()
-  }
-  onMounted(() => {
-    window.addEventListener('focus', reload)
-    reload()
-  })
-  onUnmounted(() => {
-    window.removeEventListener('focus', reload)
-  })
-}
 
 /**
  * One test at a time per window, as the dashboard and the popover both run it; the core refuses a
