@@ -20,7 +20,7 @@ use crate::dashboard_display::{
 use crate::display::ConnectionDisplay;
 use crate::engine_inbox::EngineInbox;
 use crate::history_export::{
-    ExportOutcome, ExportPeriodChoice, HistoryLocation, LastExport, write_export,
+    ExportAvailability, ExportDone, ExportFolder, ExportPeriodChoice, HistoryLocation, write_export,
 };
 use crate::history_store::{DashboardHistory, HistoryNotice};
 use crate::settings_effects::apply_settings;
@@ -37,7 +37,8 @@ use crate::throughput_display::{
 use crate::throughput_lab::{LabRefusal, ThroughputLab};
 use crate::traffic_store::TrafficStore;
 use crate::windows::{
-    DashboardRequested, POPOVER_WINDOW, report_failure, request_from_dashboard, show_dashboard,
+    DashboardRequested, MAIN_WINDOW, POPOVER_WINDOW, report_failure, request_from_dashboard,
+    show_dashboard,
 };
 
 /// Identity of the running build, shown in the window footer.
@@ -367,44 +368,79 @@ pub async fn run_throughput_test(
     })
 }
 
-/// Asks for a folder in the system's dialog, then writes the history of `period` there as three
-/// CSV files, on a thread of its own.
+/// The catalogue key naming the file manager that shows an exported folder.
+const REVEAL_EXPORT_KEY: &str = if cfg!(target_os = "macos") {
+    "export-reveal-finder"
+} else if cfg!(target_os = "windows") {
+    "export-reveal-explorer"
+} else {
+    "export-reveal-folder"
+};
+
+/// Asks for the export folder in the system's dialog, attached to the dashboard; `false` when the
+/// dialog was closed without a choice.
 ///
 /// # Errors
 ///
-/// The sentence shown under the button: a history kept in memory, or a failed export.
+/// The sentence shown under the button when the dialog could not open.
+#[tauri::command]
+#[specta::specta]
+pub async fn choose_export_folder(
+    app: AppHandle,
+    export_folder: State<'_, ExportFolder>,
+    catalog: State<'_, TextCatalog>,
+) -> Result<bool, String> {
+    let (chosen, picked) = tokio::sync::oneshot::channel();
+    let mut dialog = app.dialog().file();
+    if let Some(dashboard) = app.get_webview_window(MAIN_WINDOW) {
+        dialog = dialog.set_parent(&dashboard);
+    }
+    dialog.pick_folder(move |folder| {
+        let _ = chosen.send(folder);
+    });
+    // A dropped sender means the dialog never opened: an error, not a choice.
+    let picked = picked.await.map_err(|_| {
+        eprintln!("The folder dialog could not open");
+        catalog.render("export-failed", None)
+    })?;
+    let Some(folder) = picked else {
+        return Ok(false);
+    };
+    let folder = folder.into_path().map_err(|error| {
+        eprintln!("The chosen folder is not a path: {error}");
+        catalog.render("export-failed", None)
+    })?;
+    export_folder.remember(folder);
+    Ok(true)
+}
+
+/// Writes the history of `period` as three CSV files into the chosen folder, on a thread of its
+/// own.
+///
+/// # Errors
+///
+/// The sentence shown under the button: a history kept in memory, no folder chosen, or a failed
+/// export.
 #[tauri::command]
 #[specta::specta]
 pub async fn export_history(
     period: ExportPeriodChoice,
-    app: AppHandle,
     location: State<'_, HistoryLocation>,
-    last_export: State<'_, LastExport>,
+    export_folder: State<'_, ExportFolder>,
     catalog: State<'_, TextCatalog>,
-) -> Result<ExportOutcome, String> {
+) -> Result<ExportDone, String> {
     let HistoryLocation::OnDisk(history) = location.inner() else {
         return Err(catalog.render("export-unavailable", None));
     };
     let failed = || catalog.render("export-failed", None);
-    let (chosen, picked) = tokio::sync::oneshot::channel();
-    app.dialog().file().pick_folder(move |folder| {
-        let _ = chosen.send(folder);
-    });
-    let Some(folder) = picked.await.ok().flatten() else {
-        return Ok(ExportOutcome::Cancelled);
-    };
-    let folder = folder.into_path().map_err(|error| {
-        eprintln!("The chosen folder is not a path: {error}");
-        failed()
-    })?;
+    let folder = export_folder.read().ok_or_else(failed)?;
     let history = history.clone();
     let now = SystemClock::start().read_utc_seconds();
     let (answer, answered) = tokio::sync::oneshot::channel();
-    let target = folder.clone();
     std::thread::Builder::new()
         .name("export".to_owned())
         .spawn(move || {
-            let _ = answer.send(write_export(&history, &target, period.into(), now));
+            let _ = answer.send(write_export(&history, &folder, period.into(), now));
         })
         .map_err(|error| {
             eprintln!("Starting the export failed: {error}");
@@ -420,21 +456,21 @@ pub async fn export_history(
             eprintln!("The export failed: {error:?}");
             failed()
         })?;
-    last_export.remember(folder);
-    Ok(ExportOutcome::Done {
+    Ok(ExportDone {
         message: catalog.render("export-done", None),
+        reveal_label: catalog.render(REVEAL_EXPORT_KEY, None),
     })
 }
 
-/// Shows the folder of the last export in the system's file manager.
+/// Shows the export folder in the system's file manager.
 #[tauri::command]
 #[specta::specta]
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Tauri injects command arguments by value"
 )]
-pub fn reveal_last_export(last_export: State<'_, LastExport>) {
-    let Some(folder) = last_export.read() else {
+pub fn reveal_export_folder(export_folder: State<'_, ExportFolder>) {
+    let Some(folder) = export_folder.read() else {
         return;
     };
     if let Err(error) = tauri_plugin_opener::reveal_item_in_dir(&folder) {
@@ -442,7 +478,8 @@ pub fn reveal_last_export(last_export: State<'_, LastExport>) {
     }
 }
 
-/// Whether there is anything to export: a history kept on disk, with something in it.
+/// Whether there is anything to export, and why not: a history kept in memory, or nothing kept
+/// yet.
 #[tauri::command]
 #[specta::specta]
 #[must_use]
@@ -450,14 +487,29 @@ pub fn reveal_last_export(last_export: State<'_, LastExport>) {
     clippy::needless_pass_by_value,
     reason = "Tauri injects command arguments by value"
 )]
-pub fn can_export_history(
+pub fn read_export_availability(
     location: State<'_, HistoryLocation>,
     history: State<'_, DashboardHistory>,
-) -> bool {
-    matches!(location.inner(), HistoryLocation::OnDisk(_))
-        && !history
-            .read(|reader| reader.is_history_empty())
-            .unwrap_or(true)
+    catalog: State<'_, TextCatalog>,
+) -> ExportAvailability {
+    let unavailable = |key: &str| ExportAvailability::Unavailable {
+        reason: catalog.render(key, None),
+    };
+    if matches!(location.inner(), HistoryLocation::InMemory) {
+        return unavailable("export-unavailable");
+    }
+    // Unreadable here, the export may still read it through its own connection: let it try.
+    let is_empty = history
+        .read(|reader| reader.is_history_empty())
+        .unwrap_or_else(|error| {
+            eprintln!("Reading whether the history is empty failed: {}", error.0);
+            false
+        });
+    if is_empty {
+        unavailable("export-nothing")
+    } else {
+        ExportAvailability::Ready
+    }
 }
 
 /// Erases every measure, event and throughput test; the settings stay.
@@ -530,6 +582,22 @@ pub async fn read_line_details(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_the_file_manager_of_each_system() {
+        // Arrange
+        let catalog = TextCatalog::load();
+
+        // Act & Assert
+        for key in [
+            "export-reveal-finder",
+            "export-reveal-explorer",
+            "export-reveal-folder",
+        ] {
+            assert!(!catalog.render(key, None).is_empty(), "{key}");
+        }
+        assert!(!catalog.render(REVEAL_EXPORT_KEY, None).is_empty());
+    }
 
     #[test]
     fn read_app_info_reports_the_package_name_and_version() {

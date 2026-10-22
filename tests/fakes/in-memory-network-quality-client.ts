@@ -7,7 +7,8 @@ import type {
   DisplayState,
   EvolutionDisplay,
   DetailSection,
-  ExportOutcome,
+  ExportAvailability,
+  ExportDone,
   ExportPeriodChoice,
   LineDetails,
   MetricDisplay,
@@ -211,6 +212,9 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   /** Empty while the line is read. */
   private lineRefusal = ''
   exportRevealings = 0
+  readonly revealLabel = faker.lorem.words(3)
+  readonly nothingToExport = faker.lorem.sentence()
+  private unavailableReason = ''
   private hasHistory = true
   private isFolderDialogClosed = false
   private isHoldingExports = false
@@ -450,24 +454,29 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     this.releaseThroughputTest()
   }
 
-  exportHistory(period: ExportPeriodChoice): Promise<ExportOutcome> {
+  chooseExportFolder(): Promise<boolean> {
     if (this.dataRefusal !== '') return Promise.reject(new Error(this.dataRefusal))
-    if (this.isFolderDialogClosed) return Promise.resolve({ kind: 'cancelled' })
+    return Promise.resolve(!this.isFolderDialogClosed)
+  }
+
+  exportHistory(period: ExportPeriodChoice): Promise<ExportDone> {
     this.exports.push(period)
-    const outcome: ExportOutcome = { kind: 'done', message: this.exportConfirmation }
-    if (!this.isHoldingExports) return Promise.resolve(outcome)
+    const done: ExportDone = { message: this.exportConfirmation, revealLabel: this.revealLabel }
+    if (!this.isHoldingExports) return Promise.resolve(done)
     return new Promise((resolve) => {
       this.releaseExport = () => {
-        resolve(outcome)
+        resolve(done)
       }
     })
   }
 
-  canExportHistory(): Promise<boolean> {
-    return Promise.resolve(this.hasHistory)
+  readExportAvailability(): Promise<ExportAvailability> {
+    if (this.unavailableReason !== '') return Promise.resolve({ kind: 'unavailable', reason: this.unavailableReason })
+    if (!this.hasHistory) return Promise.resolve({ kind: 'unavailable', reason: this.nothingToExport })
+    return Promise.resolve({ kind: 'ready' })
   }
 
-  revealLastExport(): Promise<void> {
+  revealExportFolder(): Promise<void> {
     this.exportRevealings += 1
     return Promise.resolve()
   }
@@ -480,8 +489,18 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   }
 
   /** Nothing measured yet: there is nothing to export. */
-  emptyHistory(): void {
+  startWithEmptyHistory(): void {
     this.hasHistory = false
+  }
+
+  /** The first minute is kept: there is something to export from now on. */
+  measureFirstMinute(): void {
+    this.hasHistory = true
+  }
+
+  /** The history lives in memory for the session: it cannot be exported. */
+  keepHistoryInMemory(reason: string): void {
+    this.unavailableReason = reason
   }
 
   /** The user closes the folder dialog without choosing. */

@@ -14,7 +14,7 @@ async function mountSection(client: InMemoryNetworkQualityClient) {
 }
 
 describe('SettingsView, data', () => {
-  it('exports the chosen period and offers to show the folder', async () => {
+  it('exports the chosen period into the chosen folder and offers to show it', async () => {
     // Arrange
     const client = new InMemoryNetworkQualityClient()
     const wrapper = await mountSection(client)
@@ -28,10 +28,11 @@ describe('SettingsView, data', () => {
     // Assert
     expect(client.exports).toEqual(['all'])
     expect(wrapper.get('[data-data-status]').text()).toBe(client.exportConfirmation)
+    expect(wrapper.get('[data-reveal-export]').text()).toBe(client.revealLabel)
     expect(client.exportRevealings).toBe(1)
   })
 
-  it('says nothing when the folder dialog is closed without a choice', async () => {
+  it('exports nothing and says nothing when the folder dialog is closed without a choice', async () => {
     // Arrange
     const client = new InMemoryNetworkQualityClient()
     client.closeFolderDialog()
@@ -42,11 +43,12 @@ describe('SettingsView, data', () => {
     await flushPromises()
 
     // Assert
+    expect(client.exports).toEqual([])
     expect(wrapper.get('[data-data-status]').text()).toBe('')
     expect(wrapper.find('[data-reveal-export]').exists()).toBe(false)
   })
 
-  it('shows the export running and cannot start it twice', async () => {
+  it('shows the export running once the folder is chosen, and cannot start it twice', async () => {
     // Arrange
     const client = new InMemoryNetworkQualityClient()
     client.holdExports()
@@ -54,6 +56,7 @@ describe('SettingsView, data', () => {
 
     // Act
     await wrapper.get('[data-export]').trigger('click')
+    await flushPromises()
     await wrapper.get('[data-export]').trigger('click')
 
     // Assert
@@ -63,24 +66,60 @@ describe('SettingsView, data', () => {
     client.finishExport()
   })
 
-  it('has nothing to export before the first measure, nor after an erase', async () => {
+  it('has nothing to export before the first measure', async () => {
     // Arrange
-    const empty = new InMemoryNetworkQualityClient()
-    empty.emptyHistory()
-    const erased = new InMemoryNetworkQualityClient()
-    const erasedWrapper = await mountSection(erased)
-    await erasedWrapper.get('[data-erase]').trigger('click')
+    const client = new InMemoryNetworkQualityClient()
+    client.startWithEmptyHistory()
 
     // Act
-    const emptyWrapper = await mountSection(empty)
-    await erasedWrapper.get('[data-erase-confirm]').trigger('click')
+    const wrapper = await mountSection(client)
+
+    // Assert
+    expect(wrapper.get('[data-export]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-export-unavailable]').text()).toBe(client.nothingToExport)
+  })
+
+  it('has nothing to export right after an erase', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountSection(client)
+    await wrapper.get('[data-erase]').trigger('click')
+
+    // Act
+    await wrapper.get('[data-erase-confirm]').trigger('click')
     await flushPromises()
 
     // Assert
-    for (const wrapper of [emptyWrapper, erasedWrapper]) {
-      expect(wrapper.get('[data-export]').attributes('disabled')).toBeDefined()
-      expect(wrapper.get('[data-nothing-to-export]').text()).toBe("Rien à exporter pour l'instant.")
-    }
+    expect(wrapper.get('[data-export]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-export-unavailable]').text()).toBe(client.nothingToExport)
+  })
+
+  it('says why a history kept in memory cannot be exported', async () => {
+    // Arrange
+    const reason = faker.lorem.sentence()
+    const client = new InMemoryNetworkQualityClient()
+    client.keepHistoryInMemory(reason)
+
+    // Act
+    const wrapper = await mountSection(client)
+
+    // Assert
+    expect(wrapper.get('[data-export-unavailable]').text()).toBe(reason)
+  })
+
+  it('allows the export once measures exist, when the window comes back', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    client.startWithEmptyHistory()
+    const wrapper = await mountSection(client)
+    client.measureFirstMinute()
+
+    // Act
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.get('[data-export]').attributes('disabled')).toBeUndefined()
   })
 
   it('says what goes before erasing, and erases only once confirmed', async () => {

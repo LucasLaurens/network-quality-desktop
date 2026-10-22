@@ -3,6 +3,7 @@ import { inject, onMounted, ref } from 'vue'
 import type { AppearanceChoice, ExportPeriodChoice, SettingsForm } from '../bindings'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
+import { useLoadOnFocus } from '../composables/use-load-on-focus'
 
 const PUBLIC_SERVERS = 'public'
 const OWN_SERVER = 'own'
@@ -61,8 +62,11 @@ const exportPeriod = ref<ExportPeriodChoice>('lastMonth')
 const isConfirmingErase = ref(false)
 const isBusy = ref(false)
 const isExporting = ref(false)
-const canExport = ref(true)
-const hasExported = ref(false)
+/** Empty while the export can be used; otherwise why not. Disabled until read. */
+const exportUnavailable = ref<string | null>(null)
+const isExportReady = ref(false)
+/** The button that shows the export folder, once an export is done. */
+const revealLabel = ref('')
 const dataStatus = ref('')
 const dataRefusal = ref('')
 
@@ -81,32 +85,41 @@ const runDataAction = async (action: () => Promise<string>): Promise<void> => {
 
 const loadExportAvailability = async (): Promise<void> => {
   try {
-    canExport.value = await client.canExportHistory()
+    const availability = await client.readExportAvailability()
+    isExportReady.value = availability.kind === 'ready'
+    exportUnavailable.value = availability.kind === 'unavailable' ? availability.reason : null
   } catch (error) {
     console.error('Reading whether there is anything to export failed', error)
   }
 }
 
-// A folder dialog closed without a choice says nothing.
+// The folder first: a dialog closed without a choice exports nothing and says nothing.
 const exportHistory = async (): Promise<void> => {
-  isExporting.value = true
-  hasExported.value = false
+  revealLabel.value = ''
   await runDataAction(async () => {
-    const outcome = await client.exportHistory(exportPeriod.value)
-    if (outcome.kind === 'cancelled') return ''
-    hasExported.value = true
-    return outcome.message
+    if (!(await client.chooseExportFolder())) return ''
+    isExporting.value = true
+    try {
+      const done = await client.exportHistory(exportPeriod.value)
+      revealLabel.value = done.revealLabel
+      return done.message
+    } finally {
+      isExporting.value = false
+    }
   })
-  isExporting.value = false
 }
 
 const revealExport = async (): Promise<void> => {
-  await client.revealLastExport()
+  try {
+    await client.revealExportFolder()
+  } catch (error) {
+    console.error('Showing the export folder failed', error)
+  }
 }
 
 const eraseHistory = async (): Promise<void> => {
   isConfirmingErase.value = false
-  hasExported.value = false
+  revealLabel.value = ''
   await runDataAction(() => client.eraseHistory())
   await loadExportAvailability()
 }
@@ -117,8 +130,9 @@ const chooseServers = async (): Promise<void> => {
   if (servers.value === PUBLIC_SERVERS) await queue(null)
 }
 
+useLoadOnFocus(loadExportAvailability)
+
 onMounted(async () => {
-  void loadExportAvailability()
   try {
     const read = await client.readSettings()
     form.value = read
@@ -254,7 +268,7 @@ onMounted(async () => {
             <button
               type="button"
               class="secondary"
-              :disabled="isBusy || !canExport"
+              :disabled="isBusy || !isExportReady"
               :aria-busy="isExporting"
               data-export
               @click="exportHistory"
@@ -262,11 +276,11 @@ onMounted(async () => {
               {{ isExporting ? 'Export en cours…' : 'Exporter…' }}
             </button>
           </div>
-          <span v-if="canExport" class="hint">
+          <span v-if="exportUnavailable === null" class="hint">
             Trois fichiers CSV dans le dossier de votre choix&nbsp;: mesures, événements, tests de débit. Sans adresse
             matérielle de la box.
           </span>
-          <span v-else class="hint" data-nothing-to-export>Rien à exporter pour l'instant.</span>
+          <span v-else class="hint" data-export-unavailable>{{ exportUnavailable }}</span>
         </div>
         <div class="setting">
           <span class="label">Effacer l'historique</span>
@@ -295,8 +309,8 @@ onMounted(async () => {
       </div>
       <p v-if="dataRefusal" class="refused" role="alert" data-data-refused>{{ dataRefusal }}</p>
       <p class="saved" role="status" data-data-status>{{ dataStatus }}</p>
-      <button v-if="hasExported" type="button" class="link" data-reveal-export @click="revealExport">
-        Afficher le dossier
+      <button v-if="revealLabel" type="button" class="link" data-reveal-export @click="revealExport">
+        {{ revealLabel }}
       </button>
     </div>
 

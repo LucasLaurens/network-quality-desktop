@@ -85,9 +85,10 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::save_settings,
             commands::read_throughput_panel,
             commands::run_throughput_test,
+            commands::choose_export_folder,
             commands::export_history,
-            commands::reveal_last_export,
-            commands::can_export_history,
+            commands::reveal_export_folder,
+            commands::read_export_availability,
             commands::erase_history,
             commands::read_technical_details,
             commands::read_line_details
@@ -154,7 +155,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(stores.dashboard);
     app.manage(stores.settings);
     app.manage(stores.location);
-    app.manage(history_export::LastExport::default());
+    app.manage(history_export::ExportFolder::default());
     let mode = ShellMode::detect(&SystemTrayHost);
     app.manage(mode);
     app.manage(WindowModeTexts::compose(mode, &catalog));

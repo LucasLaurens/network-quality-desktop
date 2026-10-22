@@ -6,9 +6,9 @@ Le contenu des trois fichiers CSV et leur import dans un tableur.
 
 Dans [Réglages](reglages.md#données), section « Données » : choisir la période, puis **Exporter…**, et choisir le dossier dans la fenêtre du système. La période se compte à partir du moment de l'export : 24 dernières heures, 7 derniers jours, 30 derniers jours (par défaut) ou Tout.
 
-L'app écrit les trois fichiers dans ce dossier, en remplaçant des fichiers du même nom. Pendant l'écriture, le bouton affiche « Export en cours… » et ne se relance pas. À la fin, la page dit « 3 fichiers enregistrés. » et propose **Afficher le dossier**, qui l'ouvre dans le gestionnaire de fichiers. Fermer la fenêtre sans choisir de dossier n'exporte rien et ne dit rien. Si l'export échoue, ses fichiers sont retirés : « L'export n'a pas pu être écrit. »
+L'app écrit les trois fichiers dans ce dossier, en remplaçant des fichiers du même nom une fois les trois complets. Pendant l'écriture, le bouton affiche « Export en cours… » et ne se relance pas. À la fin, la page dit « 3 fichiers enregistrés. » et propose **Afficher dans le Finder** (macOS), **Afficher dans l'Explorateur** (Windows) ou **Afficher le dossier** (Linux). Fermer la fenêtre sans choisir de dossier n'exporte rien et ne dit rien. Si l'export échoue, les fichiers déjà présents dans le dossier, un export précédent par exemple, restent intacts : « L'export n'a pas pu être écrit. »
 
-Tant que l'historique est vide (premier lancement, ou juste après un effacement), le bouton est désactivé et la page dit « Rien à exporter pour l'instant. ».
+Tant que l'historique est vide (premier lancement, ou juste après un effacement), le bouton est désactivé et la page dit « Rien à exporter pour l'instant. ». La page le vérifie de nouveau chaque fois que la fenêtre revient au premier plan.
 
 L'export lit l'historique ligne par ligne pendant que la mesure continue : un historique de plusieurs années s'exporte sans charger la mémoire. Un historique gardé en mémoire pour la session (voir [Historique](historique.md#si-le-fichier-est-abîmé)) ne s'exporte pas : « L'historique n'est pas enregistré sur le disque pendant cette session : il n'y a rien à exporter. »
 

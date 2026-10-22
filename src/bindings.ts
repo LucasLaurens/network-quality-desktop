@@ -82,18 +82,31 @@ export const commands = {
 	 */
 	runThroughputTest: (profile: ProfileChoice, isConfirmed: boolean, utcOffsetSeconds: number) => typedError<ThroughputOutcome, string>(__TAURI_INVOKE("run_throughput_test", { profile, isConfirmed, utcOffsetSeconds })),
 	/**
-	 *  Asks for a folder in the system's dialog, then writes the history of `period` there as three
-	 *  CSV files, on a thread of its own.
+	 *  Asks for the export folder in the system's dialog, attached to the dashboard; `false` when the
+	 *  dialog was closed without a choice.
 	 * 
 	 *  # Errors
 	 * 
-	 *  The sentence shown under the button: a history kept in memory, or a failed export.
+	 *  The sentence shown under the button when the dialog could not open.
 	 */
-	exportHistory: (period: ExportPeriodChoice) => typedError<ExportOutcome, string>(__TAURI_INVOKE("export_history", { period })),
-	/**  Shows the folder of the last export in the system's file manager. */
-	revealLastExport: () => __TAURI_INVOKE<void>("reveal_last_export"),
-	/**  Whether there is anything to export: a history kept on disk, with something in it. */
-	canExportHistory: () => __TAURI_INVOKE<boolean>("can_export_history"),
+	chooseExportFolder: () => typedError<boolean, string>(__TAURI_INVOKE("choose_export_folder")),
+	/**
+	 *  Writes the history of `period` as three CSV files into the chosen folder, on a thread of its
+	 *  own.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The sentence shown under the button: a history kept in memory, no folder chosen, or a failed
+	 *  export.
+	 */
+	exportHistory: (period: ExportPeriodChoice) => typedError<ExportDone, string>(__TAURI_INVOKE("export_history", { period })),
+	/**  Shows the export folder in the system's file manager. */
+	revealExportFolder: () => __TAURI_INVOKE<void>("reveal_export_folder"),
+	/**
+	 *  Whether there is anything to export, and why not: a history kept in memory, or nothing kept
+	 *  yet.
+	 */
+	readExportAvailability: () => __TAURI_INVOKE<ExportAvailability>("read_export_availability"),
 	/**
 	 *  Erases every measure, event and throughput test; the settings stay.
 	 * 
@@ -188,10 +201,15 @@ export type EvolutionDisplay = {
 	isEmpty: boolean,
 };
 
-/**  What a click on « Exporter l'historique… » gives. */
-export type ExportOutcome = 
-/**  The folder dialog was closed without a choice. */
-{ kind: "cancelled" } | { kind: "done"; message: string };
+/**  Whether « Exporter l'historique… » can be used, and why not. */
+export type ExportAvailability = { kind: "ready" } | { kind: "unavailable"; reason: string };
+
+/**  A finished export: what to say, and how to name the button that shows its folder. */
+export type ExportDone = {
+	message: string,
+	/**  « Afficher dans le Finder » on macOS, the file manager's name elsewhere. */
+	revealLabel: string,
+};
 
 export type ExportPeriodChoice = "lastDay" | "lastWeek" | "lastMonth" | "all";
 
