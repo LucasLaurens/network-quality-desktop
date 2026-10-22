@@ -6,9 +6,8 @@ use domain::{Appearance, Settings};
 use tauri::{AppHandle, Manager, Theme};
 use tauri_plugin_autostart::ManagerExt;
 
-use crate::shell_presenter::DisplayStore;
 use crate::text_catalog::TextCatalog;
-use crate::tray_menu::{TrayMenu, compose_menu_entries};
+use crate::tray_menu::TrayMenu;
 
 /// A development build never registers itself to start at login.
 const CAN_REGISTER_AT_LOGIN: bool = !cfg!(debug_assertions);
@@ -23,11 +22,7 @@ pub fn apply_settings(app: &AppHandle, settings: &Settings) {
     });
     // Absent at launch: the menu is then built with these settings.
     if let Some(menu) = app.try_state::<Arc<TrayMenu>>() {
-        menu.update(&compose_menu_entries(
-            &app.state::<DisplayStore>().read(),
-            settings.allows_throughput_tests,
-            &app.state::<TextCatalog>(),
-        ));
+        menu.show_settings(settings, &app.state::<TextCatalog>());
     }
     if !CAN_REGISTER_AT_LOGIN {
         return;

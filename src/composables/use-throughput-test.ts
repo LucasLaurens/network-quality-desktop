@@ -1,13 +1,36 @@
-import { ref, type InjectionKey, type Ref } from 'vue'
+import { onMounted, onUnmounted, ref, type InjectionKey, type Ref } from 'vue'
 import type { ProfileChoice } from '../bindings'
 import type { NetworkQualityClient } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
+
+export const THROUGHPUT_PROFILES = [
+  { value: 'quick', label: 'Test rapide' },
+  { value: 'full', label: 'Test complet' },
+] as const satisfies readonly { value: ProfileChoice; label: string }[]
 
 /** A test the tray menu asked the dashboard to run; consumed once started. */
 export const REQUESTED_TEST_KEY: InjectionKey<Ref<ProfileChoice | null>> = Symbol('RequestedTest')
 
 /**
- * One test at a time, as the dashboard and the popover both run it. The core decides whether to
+ * Loads now, then again each time the window comes back: the popover is only hidden between two
+ * openings, and a test may have run, or the setting changed, in another window meanwhile.
+ */
+export function useLoadOnFocus(load: () => Promise<void>): void {
+  const reload = (): void => {
+    void load()
+  }
+  onMounted(() => {
+    window.addEventListener('focus', reload)
+    reload()
+  })
+  onUnmounted(() => {
+    window.removeEventListener('focus', reload)
+  })
+}
+
+/**
+ * One test at a time per window, as the dashboard and the popover both run it; the core refuses a
+ * second one started elsewhere. The core decides whether to
  * ask first: it reads the connection at the click. `onDone` reloads what shows the result.
  */
 export function useThroughputTest(client: NetworkQualityClient, onDone: () => Promise<void>) {
@@ -16,6 +39,7 @@ export function useThroughputTest(client: NetworkQualityClient, onDone: () => Pr
   const asked = ref<{ profile: ProfileChoice; warning: string } | null>(null)
   const refusal = ref('')
 
+  // O(1), plus the test itself.
   const run = async (profile: ProfileChoice, isConfirmed: boolean): Promise<void> => {
     if (running.value) return
     asked.value = null

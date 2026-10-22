@@ -82,6 +82,7 @@ query
 quit
 read
 record
+refresh
 refuse
 relay
 release

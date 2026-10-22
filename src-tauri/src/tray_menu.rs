@@ -5,6 +5,8 @@ use std::sync::{Mutex, PoisonError};
 use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::{AppHandle, Wry};
 
+use domain::Settings;
+
 use crate::display::ConnectionDisplay;
 use crate::text_catalog::TextCatalog;
 use crate::throughput_display::ProfileChoice;
@@ -77,12 +79,12 @@ pub enum MenuEntry {
     Action(MenuAction, String),
 }
 
-/// The single menu definition for the three systems: the tests appear once the setting allows
+/// The single menu definition for the three systems: the tests appear once the settings allow
 /// them. O(1).
 #[must_use]
 pub fn compose_menu_entries(
     display: &ConnectionDisplay,
-    allows_throughput_tests: bool,
+    settings: &Settings,
     catalog: &TextCatalog,
 ) -> Vec<MenuEntry> {
     let mut entries = vec![
@@ -94,14 +96,14 @@ pub fn compose_menu_entries(
             display.open_dashboard_label.clone(),
         ),
     ];
-    if allows_throughput_tests {
+    if settings.allows_throughput_tests {
         entries.push(MenuEntry::Action(
             MenuAction::RunQuickTest,
-            catalog.render("throughput-run-quick", None),
+            catalog.render("menu-quick-test", None),
         ));
         entries.push(MenuEntry::Action(
             MenuAction::RunFullTest,
-            catalog.render("throughput-run-full", None),
+            catalog.render("menu-full-test", None),
         ));
     }
     entries.extend([
@@ -115,11 +117,19 @@ pub fn compose_menu_entries(
     entries
 }
 
-/// The built menu, with handles on its read-only lines so they can be rewritten in place.
+/// The built menu, with handles on its read-only lines so they can be rewritten in place. It keeps
+/// what it shows: the display and the settings change apart, and each change recomposes the menu
+/// under one lock, so a late display can never undo newer settings.
 pub struct TrayMenu {
     app: AppHandle,
     menu: Menu<Wry>,
-    built: Mutex<BuiltEntries>,
+    shown: Mutex<ShownMenu>,
+}
+
+struct ShownMenu {
+    display: ConnectionDisplay,
+    settings: Settings,
+    built: BuiltEntries,
 }
 
 /// The native items of some entries, and the read-only ones apart to rewrite them later.
@@ -137,18 +147,42 @@ struct BuiltEntries {
 
 impl TrayMenu {
     /// O(e) for e entries.
-    pub fn build(app: &AppHandle, entries: &[MenuEntry]) -> tauri::Result<Self> {
-        let CreatedItems { items, infos } = create_items(app, entries)?;
+    pub fn build(
+        app: &AppHandle,
+        display: &ConnectionDisplay,
+        settings: &Settings,
+        catalog: &TextCatalog,
+    ) -> tauri::Result<Self> {
+        let entries = compose_menu_entries(display, settings, catalog);
+        let CreatedItems { items, infos } = create_items(app, &entries)?;
         let references: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(AsRef::as_ref).collect();
         Ok(Self {
             app: app.clone(),
             menu: Menu::with_items(app, &references)?,
-            built: Mutex::new(BuiltEntries {
-                infos,
-                texts: read_info_texts(entries),
-                actions: list_actions(entries),
+            shown: Mutex::new(ShownMenu {
+                display: display.clone(),
+                settings: *settings,
+                built: BuiltEntries {
+                    infos,
+                    texts: read_info_texts(&entries),
+                    actions: list_actions(&entries),
+                },
             }),
         })
+    }
+
+    /// O(e) for e entries.
+    pub fn show_display(&self, display: &ConnectionDisplay, catalog: &TextCatalog) {
+        let mut shown = self.shown.lock().unwrap_or_else(PoisonError::into_inner);
+        shown.display = display.clone();
+        self.refresh(&mut shown, catalog);
+    }
+
+    /// O(e) for e entries.
+    pub fn show_settings(&self, settings: &Settings, catalog: &TextCatalog) {
+        let mut shown = self.shown.lock().unwrap_or_else(PoisonError::into_inner);
+        shown.settings = *settings;
+        self.refresh(&mut shown, catalog);
     }
 
     #[must_use]
@@ -158,8 +192,9 @@ impl TrayMenu {
 
     /// Rewrites the read-only lines when their text changed, and rebuilds the menu when its
     /// actions changed (the tests allowed or not). O(e) for e entries.
-    pub fn update(&self, entries: &[MenuEntry]) {
-        let mut built = self.built.lock().unwrap_or_else(PoisonError::into_inner);
+    fn refresh(&self, shown: &mut ShownMenu, catalog: &TextCatalog) {
+        let entries = &compose_menu_entries(&shown.display, &shown.settings, catalog);
+        let built = &mut shown.built;
         let actions = list_actions(entries);
         if built.actions != actions {
             match self.replace_items(entries) {
@@ -253,7 +288,7 @@ mod tests {
         let display = ConnectionDisplay::create_initial(&catalog);
 
         // Act
-        let entries = compose_menu_entries(&display, false, &catalog);
+        let entries = compose_menu_entries(&display, &Settings::default(), &catalog);
 
         // Assert
         assert_eq!(
@@ -278,9 +313,13 @@ mod tests {
         // Arrange
         let catalog = TextCatalog::load();
         let display = ConnectionDisplay::create_initial(&catalog);
+        let settings = Settings {
+            allows_throughput_tests: true,
+            ..Settings::default()
+        };
 
         // Act
-        let entries = compose_menu_entries(&display, true, &catalog);
+        let entries = compose_menu_entries(&display, &settings, &catalog);
 
         // Assert
         let actions = list_actions(&entries);

@@ -8,16 +8,15 @@ use std::time::Duration;
 use domain::{ConnectionContext, Verdict, WifiLink};
 use serde::Serialize;
 use specta::Type;
+use tauri::AppHandle;
 use tauri::image::Image;
 use tauri::tray::TrayIcon;
-use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
 
 use crate::display::{ConnectionDisplay, DisplayState};
-use crate::settings_store::SettingsStore;
 use crate::text_catalog::TextCatalog;
 use crate::tray_icon::{ICON_SIZE, render_verdict_icon};
-use crate::tray_menu::{TrayMenu, compose_menu_entries};
+use crate::tray_menu::TrayMenu;
 
 /// Sent to every window whenever what the popover shows changes.
 #[derive(Debug, Clone, Serialize, Type, Event)]
@@ -148,12 +147,7 @@ impl VerdictPresenter for ShellPresenter {
         if !self.store.replace(display.clone()) {
             return;
         }
-        let settings = self.app.state::<SettingsStore>().read();
-        self.menu.update(&compose_menu_entries(
-            &display,
-            settings.allows_throughput_tests,
-            &self.catalog,
-        ));
+        self.menu.show_display(&display, &self.catalog);
         if let Err(error) = ConnectionDisplayChanged(display).emit(&self.app) {
             eprintln!("Publishing the connection display failed: {error}");
         }

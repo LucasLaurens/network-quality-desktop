@@ -25,7 +25,7 @@ const requestedTest = ref<ProfileChoice | null>(null)
 provide(REQUESTED_TEST_KEY, requestedTest)
 let stopListening = (): void => undefined
 
-// The tray menu and the popover ask for a page, or for a test the dashboard runs.
+// The tray menu and the popover ask for a page, or for a test the dashboard runs. O(1).
 const followRequest = (request: DashboardRequested): void => {
   if (request.kind === 'settings') {
     page.value = 'settings'
@@ -86,9 +86,16 @@ const loadVersion = async (): Promise<void> => {
   }
 }
 
+const listenRequests = async (): Promise<void> => {
+  try {
+    stopListening = await client.listenDashboardRequests(followRequest)
+  } catch (error) {
+    console.error('Listening to the tray menu failed', error)
+  }
+}
+
 onMounted(async () => {
-  stopListening = await client.listenDashboardRequests(followRequest)
-  await Promise.all([loadWindowMode(), loadHistoryNotice(), loadVersion()])
+  await Promise.all([listenRequests(), loadWindowMode(), loadHistoryNotice(), loadVersion()])
 })
 
 onUnmounted(() => {

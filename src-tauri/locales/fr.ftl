@@ -102,8 +102,8 @@ connection-limited = { $connection }, connexion limitée
 
 menu-quit = Quitter
 menu-settings = Réglages…
-throughput-run-quick = Test rapide
-throughput-run-full = Test complet
+menu-quick-test = Test rapide
+menu-full-test = Test complet
 menu-edit = Édition
 menu-undo = Annuler
 menu-redo = Rétablir

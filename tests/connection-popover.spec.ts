@@ -264,8 +264,8 @@ describe('ConnectionPopover', () => {
     await flushPromises()
 
     // Assert
-    expect(shownBefore).toContain(last.download)
-    expect(shownBefore).toContain(last.upload)
+    expect(shownBefore).toContain(`réception ${last.download}`)
+    expect(shownBefore).toContain(`envoi ${last.upload}`)
     expect(client.throughputRuns).toEqual(['quick'])
     expect(wrapper.get('[data-last-test]').text()).toContain(client.readNextThroughputRow().download)
   })
@@ -286,5 +286,42 @@ describe('ConnectionPopover', () => {
 
     // Assert
     expect(client.throughputRuns).toEqual(['full'])
+  })
+
+  it('reads the tests again each time it comes back, as the setting may have changed', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: false }))
+    const wrapper = await mountPopover(client)
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: true }))
+
+    // Act
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.find('[data-run="quick"]').exists()).toBe(true)
+  })
+
+  it('shows the running test, blocks a second one, and says why a test did not run', async () => {
+    // Arrange
+    const refusal = faker.lorem.sentence()
+    const client = new InMemoryNetworkQualityClient()
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: true }))
+    client.holdThroughputTests()
+    const wrapper = await mountPopover(client)
+    await wrapper.get('[data-run="quick"]').trigger('click')
+    const busyLabel = wrapper.get('[data-run="quick"]').text()
+    const isFullBlocked = wrapper.get('[data-run="full"]').attributes('disabled') !== undefined
+    client.refuseThroughputTests(refusal)
+
+    // Act
+    client.finishThroughputTest()
+    await flushPromises()
+
+    // Assert
+    expect(busyLabel).toBe('Test en cours…')
+    expect(isFullBlocked).toBe(true)
+    expect(wrapper.get('[data-refused]').text()).toBe(refusal)
   })
 })

@@ -52,7 +52,7 @@ use tauri_specta::{Builder, collect_commands, collect_events};
 use text_catalog::TextCatalog;
 use tokio::sync::mpsc;
 use tokio::time::MissedTickBehavior;
-use tray_menu::{MenuAction, TrayMenu, apply_menu_action, compose_menu_entries};
+use tray_menu::{MenuAction, TrayMenu, apply_menu_action};
 use windows::{
     DashboardRequested, HAS_POPOVER, PopoverDismissal, apply_window_event, create_popover,
     show_dashboard, toggle_popover,
@@ -157,10 +157,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(PopoverDismissal::default());
     let store = DisplayStore::new(initial.clone());
     app.manage(store.clone());
-    let menu = Arc::new(TrayMenu::build(
-        app,
-        &compose_menu_entries(&initial, settings.allows_throughput_tests, &catalog),
-    )?);
+    let menu = Arc::new(TrayMenu::build(app, &initial, &settings, &catalog)?);
     app.manage(Arc::clone(&menu));
     // The icon is built in window mode too: a tray that appears later still gets its dot.
     let tray = TrayIconBuilder::with_id(TRAY_ID)
