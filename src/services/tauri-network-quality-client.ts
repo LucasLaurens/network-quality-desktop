@@ -3,6 +3,7 @@ import {
   events,
   type AppInfo,
   type ConnectionDisplay,
+  type DashboardRequested,
   type DashboardSummaryDisplay,
   type EvolutionDisplay,
   type ExportPeriodChoice,
@@ -35,6 +36,16 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
 
   openDashboard(): Promise<void> {
     return commands.openDashboard()
+  }
+
+  openSettings(): Promise<void> {
+    return commands.openSettings()
+  }
+
+  async listenDashboardRequests(onRequest: (request: DashboardRequested) => void): Promise<() => void> {
+    return events.dashboardRequested.listen((event) => {
+      onRequest(event.payload)
+    })
   }
 
   closePopover(): Promise<void> {

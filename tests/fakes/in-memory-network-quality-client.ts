@@ -2,6 +2,7 @@ import { faker } from '@faker-js/faker'
 import type {
   AppInfo,
   ConnectionDisplay,
+  DashboardRequested,
   DashboardSummaryDisplay,
   DisplayState,
   EvolutionDisplay,
@@ -197,6 +198,8 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   readonly exportConfirmation = faker.lorem.sentence()
   readonly eraseConfirmation = faker.lorem.sentence()
   erases = 0
+  settingsOpenings = 0
+  private requestListeners: ((request: DashboardRequested) => void)[] = []
   technicalDetailsReads = 0
   lineDetailsReads = 0
   technicalDetails: TechnicalDetails = {
@@ -275,6 +278,25 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   openDashboard(): Promise<void> {
     this.dashboardOpenings += 1
     return Promise.resolve()
+  }
+
+  openSettings(): Promise<void> {
+    this.settingsOpenings += 1
+    return Promise.resolve()
+  }
+
+  listenDashboardRequests(onRequest: (request: DashboardRequested) => void): Promise<() => void> {
+    this.requestListeners.push(onRequest)
+    return Promise.resolve(() => {
+      this.requestListeners = this.requestListeners.filter((listener) => listener !== onRequest)
+    })
+  }
+
+  /** What the tray menu would send. */
+  sendDashboardRequest(request: DashboardRequested): void {
+    this.requestListeners.forEach((listener) => {
+      listener(request)
+    })
   }
 
   closePopover(): Promise<void> {

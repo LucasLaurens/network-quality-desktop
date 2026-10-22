@@ -35,9 +35,9 @@ Dès que le système signale un changement d'interface ou d'adresse, l'app relit
 
 ## Menu de la pastille
 
-Un clic droit sur la pastille (macOS et Windows) ouvre un menu : l'état, le constat, « Ouvrir le tableau de bord » et « Quitter ». L'état et le constat se mettent à jour quand la connexion change. Sous Linux, ce même menu remplace le popover : la barre système n'y transmet pas le clic.
+Un clic droit sur la pastille (macOS et Windows) ouvre un menu : l'état, le constat, « Ouvrir le tableau de bord », « Test rapide » et « Test complet » quand les tests de débit sont autorisés, « Réglages… » et « Quitter ». L'état et le constat se mettent à jour quand la connexion change ; les deux tests apparaissent ou disparaissent dès que le réglage change. Sous Linux, ce même menu remplace le popover : la barre système n'y transmet pas le clic.
 
-Les entrées « Réglages » et « Tests de débit » s'ajouteront au menu avec leurs pages.
+Un test lancé depuis le menu ouvre le tableau de bord et s'y déroule : c'est là que s'affichent la confirmation éventuelle (partage de connexion, connexion limitée), le bouton « Test en cours… » et le résultat. « Réglages… » ouvre la page Réglages du tableau de bord.
 
 ## Sans barre système
 
