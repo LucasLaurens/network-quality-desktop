@@ -206,7 +206,7 @@ const fn to_access_key(access: AccessEstimate) -> &'static str {
     }
 }
 
-/// « ↓ 17 Mbit/s, ↑ – » when one way is known; `None` when neither is. O(1).
+/// « ↓ 17 Mbit/s, ↑ valeur inconnue » when one way is known; `None` when neither is. O(1).
 fn format_known_pair(
     [received, sent]: [Option<String>; 2],
     catalog: &TextCatalog,
@@ -415,7 +415,10 @@ mod tests {
         // Assert
         let rows = &details.section.rows;
         assert_eq!(rows.len(), 2, "the access and the one rate known");
-        assert_eq!(rows[1].value, insert_no_break_spaces("↓ 17~Mbit/s, ↑ –"));
+        assert_eq!(
+            rows[1].value,
+            insert_no_break_spaces("↓ 17~Mbit/s, ↑ valeur inconnue")
+        );
     }
 
     #[test]

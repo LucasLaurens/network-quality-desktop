@@ -10,7 +10,7 @@ const { metrics } = defineProps<{ metrics: MetricDisplay[] }>()
     <li v-for="metric in metrics" :key="metric.name" class="metric" data-metric>
       <span class="name">{{ metric.name }}</span>
       <span class="definition">{{ metric.definition }}</span>
-      <span class="value num">{{ metric.value ?? '–' }}</span>
+      <span class="value num">{{ metric.value }}</span>
       <MetricGauge :gauge="metric.gauge" class="gauge" />
       <span v-if="metric.gauge" class="small" data-thresholds>{{ metric.gauge.label }}</span>
       <span class="small">{{ metric.method }}</span>

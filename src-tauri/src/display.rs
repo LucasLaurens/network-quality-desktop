@@ -92,8 +92,8 @@ pub struct MetricDisplay {
     /// What the metric means, in plain words.
     pub definition: String,
     pub method: String,
-    /// `None` while the metric cannot be computed yet.
-    pub value: Option<String>,
+    /// « en cours » until the first value, « valeur inconnue » when it cannot be computed (offline).
+    pub value: String,
     pub gauge: Option<Gauge>,
     /// Shown under a metric close to its next threshold.
     pub hint: Option<String>,
@@ -154,6 +154,15 @@ impl ConnectionDisplay {
             ConnectionKind::from_context(view.context),
             wifi_band,
         );
+        // Measuring: the values arrive within seconds. Otherwise they cannot be computed now.
+        let missing = catalog.render(
+            if view.verdict == Verdict::Measuring {
+                "value-pending"
+            } else {
+                "value-unknown"
+            },
+            None,
+        );
         Self {
             state,
             state_label: catalog.render(state.to_catalogue_key(), None),
@@ -165,15 +174,23 @@ impl ConnectionDisplay {
                     Metric::Latency,
                     view.latency.as_ref(),
                     LATENCY_GAUGE_MAX,
+                    &missing,
                     catalog,
                 ),
                 compose_metric(
                     Metric::Jitter,
                     view.jitter.as_ref(),
                     JITTER_GAUGE_MAX,
+                    &missing,
                     catalog,
                 ),
-                compose_metric(Metric::Loss, view.loss.as_ref(), LOSS_GAUGE_MAX, catalog),
+                compose_metric(
+                    Metric::Loss,
+                    view.loss.as_ref(),
+                    LOSS_GAUGE_MAX,
+                    &missing,
+                    catalog,
+                ),
             ],
             open_dashboard_label: catalog.render("action-open-dashboard", None),
             path: PathDisplay::from_view(view, catalog),
@@ -252,18 +269,22 @@ const fn to_method_key(metric: Metric) -> &'static str {
     }
 }
 
-/// O(1).
+/// `missing` stands for a value that cannot be given. O(1).
 fn compose_metric<T: Displayable>(
     metric: Metric,
     reading: Option<&MetricReading<T>>,
     gauge_max: T,
+    missing: &str,
     catalog: &TextCatalog,
 ) -> MetricDisplay {
     MetricDisplay {
         name: catalog.render(to_name_key(metric), None),
         definition: catalog.render(to_definition_key(metric), None),
         method: catalog.render(to_method_key(metric), None),
-        value: reading.map(|reading| reading.value.format(catalog)),
+        value: reading.map_or_else(
+            || missing.to_owned(),
+            |reading| reading.value.format(catalog),
+        ),
         gauge: reading.map(|reading| compose_gauge(reading, gauge_max, catalog)),
         hint: reading
             .filter(|reading| reading.is_near_next_threshold)
@@ -513,7 +534,7 @@ mod tests {
         // Assert
         assert_eq!(display.state, DisplayState::Measuring);
         assert_eq!(display.detail.as_deref(), Some("6 sur 10"));
-        assert_eq!(display.metrics[0].value, None);
+        assert_eq!(display.metrics[0].value, "en cours");
         assert_eq!(display.metrics[0].gauge, None);
     }
 
@@ -537,6 +558,12 @@ mod tests {
         // Assert
         assert_eq!(display.state_label, "Hors ligne");
         assert_eq!(display.cause, "Aucun serveur ne répond.");
+        assert!(
+            display
+                .metrics
+                .iter()
+                .all(|metric| metric.value == "valeur inconnue")
+        );
         assert_eq!(
             display.action.as_deref(),
             Some("Vérifier le Wi-Fi ou le câble.")
@@ -811,10 +838,7 @@ mod tests {
             .map(|metric| metric.name.as_str())
             .collect();
         assert_eq!(names, ["Latence", "Gigue", "Perte"]);
-        assert_eq!(
-            display.metrics[2].value.as_deref(),
-            Some(format!("2,5{NBSP}%").as_str())
-        );
+        assert_eq!(display.metrics[2].value, format!("2,5{NBSP}%"));
         assert_eq!(display.metrics[0].method, "p90, 15\u{a0}s");
         assert_eq!(
             display.detail.as_deref(),

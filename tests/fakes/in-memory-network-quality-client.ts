@@ -117,6 +117,7 @@ export function createThroughputPanel(overrides: Partial<ThroughputPanel> = {}):
 export function createOverviewDisplay(overrides: Partial<OverviewDisplay> = {}): OverviewDisplay {
   return {
     today: faker.lorem.words(4),
+    todayCoverage: faker.lorem.words(5),
     outages: faker.lorem.words(2),
     worstMoment: faker.lorem.words(3),
     onNetworkSince: faker.lorem.words(2),
@@ -134,6 +135,7 @@ export function createNetworkRowDisplay(overrides: Partial<NetworkRowDisplay> = 
     sharesLabel: faker.lorem.sentence(),
     latencyP90: `${String(faker.number.int({ min: 5, max: 300 }))} ms`,
     loss: `${String(faker.number.int({ min: 0, max: 5 }))} %`,
+    measured: `${String(faker.number.int({ min: 1, max: 99 }))} h`,
     isCurrent: false,
     isMostReliable: false,
     ...overrides,

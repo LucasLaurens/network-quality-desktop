@@ -8,12 +8,12 @@ En haut, le même diagnostic que le popover : l'état (avec sa forme, jamais la 
 
 Dessous, quatre faits sur la journée, comptée depuis minuit à l'heure de l'ordinateur :
 
-| Fait                 | Ce qu'il dit                                                                                                                                                                                                      |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Aujourd'hui          | La part du temps mesuré passée en Solide, arrondie vers le bas : 100 % seulement si chaque seconde était Solide. « Pas encore assez de mesures » avant la première minute écrite.                                 |
-| Coupures aujourd'hui | « Aucune » ; une seule : son heure et sa durée ; plusieurs : leur nombre et la plus longue ; une coupure en cours : « En cours depuis … ». Une coupure interrompue par une fermeture de l'app compte, sans durée. |
-| Pire moment          | La minute la plus pénible pour un appel (une seconde Instable compte 1, Dégradée 2, Hors ligne 3), avec la mesure la plus au-delà de son seuil Instable, ou « coupure ». « Aucun, tout est resté Solide » sinon.  |
-| Sur ce réseau depuis | Depuis quand l'ordinateur est sur le réseau actuel, d'après les changements de réseau des 30 derniers jours. Un redémarrage de l'app sur le même réseau ne remet pas le compteur à zéro.                          |
+| Fait                 | Ce qu'il dit                                                                                                                                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Aujourd'hui          | La part du temps mesuré passée en Solide, arrondie vers le bas : 100 % seulement si chaque seconde était Solide. Dessous, ce sur quoi elle repose : « mesuré 8 h 40 min sur 9 h 12 min » depuis minuit. « Pas encore assez de mesures » avant la première minute écrite. |
+| Coupures aujourd'hui | « Aucune » ; une seule : son heure et sa durée ; plusieurs : leur nombre et la plus longue ; une coupure en cours : « En cours depuis … ». Une coupure interrompue par une fermeture de l'app compte, sans durée.                                                        |
+| Pire moment          | La minute la plus pénible pour un appel (une seconde Instable compte 1, Dégradée 2, Hors ligne 3), avec la mesure la plus au-delà de son seuil Instable, ou « coupure ». « Aucun, tout est resté Solide » sinon.                                                         |
+| Sur ce réseau depuis | Depuis quand l'ordinateur est sur le réseau actuel, d'après les changements de réseau des 30 derniers jours. Un redémarrage de l'app sur le même réseau ne remet pas le compteur à zéro.                                                                                 |
 
 ## Mesures actuelles
 
@@ -40,11 +40,15 @@ Une courbe par mesure (latence p90, gigue moyenne, perte) sur 1 h, 24 h, 7 j ou 
 
 ## Tes réseaux
 
-Chaque réseau des 30 derniers jours, le plus utilisé en premier : son nom (celui du Wi-Fi quand il est connu, sinon un nom générique), son type de connexion, la répartition de son temps entre les états, sa latence p90 et sa perte. Le réseau actuel porte la mention « actuel ». Quand au moins deux réseaux ont été mesurés une heure ou plus, celui qui a passé la plus grande part de son temps en Solide est désigné « le plus fiable pour la visio ».
+Chaque réseau des 30 derniers jours, le plus utilisé en premier : son nom (celui du Wi-Fi quand il est connu, sinon un nom générique), son type de connexion, la répartition de son temps entre les états, sa latence p90, sa perte et la durée mesurée sur laquelle reposent ces parts. Le réseau actuel porte la mention « actuel ». Quand au moins deux réseaux ont été mesurés une heure ou plus, celui qui a passé la plus grande part de son temps en Solide est désigné « le plus fiable pour la visio ».
 
 ## Débit
 
 Les tests de débit lancés d'un clic et les derniers résultats : voir [Tests de débit](tests-de-debit.md).
+
+## Valeurs inconnues
+
+Une valeur que l'app ne peut pas connaître s'écrit « valeur inconnue » : adresse de la box non lue, sens d'un test de débit qui n'a pas abouti, Wi-Fi qui ne donne pas son signal, mesures pendant une coupure. Une mesure pas encore faite, juste après le lancement, un réveil ou un changement de réseau, s'écrit « en cours » : elle arrive dans les secondes qui suivent. Les deux sont du texte, lu tel quel par un lecteur d'écran.
 
 ## Détails techniques
 
