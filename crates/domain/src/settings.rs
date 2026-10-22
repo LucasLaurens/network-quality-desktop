@@ -11,6 +11,15 @@ pub enum Appearance {
     Dark,
 }
 
+/// Whether the system shows light or dark: the menu bar follows it, whatever the app's own
+/// appearance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ColorScheme {
+    #[default]
+    Light,
+    Dark,
+}
+
 /// Where the latency probes go.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MeasurementServers {

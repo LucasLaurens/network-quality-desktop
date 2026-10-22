@@ -3,6 +3,7 @@
 
 mod background;
 mod cloudflare_throughput_probe;
+mod color_scheme;
 mod fallback_latency_probe;
 mod history;
 mod icmp_echo_sender;
@@ -19,6 +20,7 @@ mod wifi;
 
 pub use background::keep_measuring_in_background;
 pub use cloudflare_throughput_probe::CloudflareThroughputProbe;
+pub use color_scheme::SystemColorSchemeReader;
 pub use fallback_latency_probe::{ConnectionOpener, EchoResult, EchoSender, FallbackLatencyProbe};
 pub use history::{OpenedHistory, SqliteHistoryRecorder, SqliteMeasurementRepository};
 pub use icmp_echo_sender::IcmpEchoSender;

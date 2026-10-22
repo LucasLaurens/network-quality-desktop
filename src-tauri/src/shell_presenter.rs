@@ -5,7 +5,8 @@ use std::sync::{Arc, Mutex, PoisonError};
 use application::{VerdictPresenter, VerdictView};
 use std::time::Duration;
 
-use domain::{ConnectionContext, Verdict, WifiLink};
+use domain::{ColorScheme, ConnectionContext, Verdict, WifiLink};
+use infrastructure::SystemColorSchemeReader;
 use serde::Serialize;
 use specta::Type;
 use tauri::AppHandle;
@@ -17,6 +18,7 @@ use crate::display::{ConnectionDisplay, DisplayState};
 use crate::text_catalog::TextCatalog;
 use crate::tray_icon::{ICON_SIZE, render_verdict_icon};
 use crate::tray_menu::TrayMenu;
+use crate::tray_painter::{TrayCanvas, TrayPainter};
 
 /// Sent to every window whenever what the popover shows changes.
 #[derive(Debug, Clone, Serialize, Type, Event)]
@@ -93,49 +95,31 @@ impl ConnectionStore {
 pub struct ShellPresenter {
     app: AppHandle,
     connection: ConnectionStore,
-    tray: TrayIcon,
     menu: Arc<TrayMenu>,
     catalog: TextCatalog,
     store: DisplayStore,
-    shown: Mutex<Verdict>,
+    painter: Arc<ShellTrayPainter>,
 }
 
 impl ShellPresenter {
-    /// `tray` must already show `Verdict::Measuring`, as built by `create_icon_image`.
+    /// `painter` draws on the tray icon; the presenter hands it each verdict.
     #[must_use]
     pub fn new(
         app: AppHandle,
-        tray: TrayIcon,
         menu: Arc<TrayMenu>,
         catalog: TextCatalog,
         store: DisplayStore,
         connection: ConnectionStore,
+        painter: Arc<ShellTrayPainter>,
     ) -> Self {
         Self {
             app,
             connection,
-            tray,
             menu,
             catalog,
             store,
-            shown: Mutex::new(Verdict::Measuring),
+            painter,
         }
-    }
-
-    fn update_tray(&self, verdict: Verdict, label: &str) {
-        let mut shown = self.shown.lock().unwrap_or_else(PoisonError::into_inner);
-        if *shown == verdict {
-            return;
-        }
-        if let Err(error) = self.tray.set_icon(Some(create_icon_image(verdict))) {
-            eprintln!("Updating the menu-bar icon failed: {error}");
-            return;
-        }
-        // Linux ignores tooltips without failing; an error elsewhere is worth knowing about.
-        if let Err(error) = self.tray.set_tooltip(Some(label)) {
-            eprintln!("Updating the menu-bar tooltip failed: {error}");
-        }
-        *shown = verdict;
     }
 }
 
@@ -143,7 +127,8 @@ impl VerdictPresenter for ShellPresenter {
     fn present(&self, view: &VerdictView) {
         self.connection.replace(view);
         let display = ConnectionDisplay::from_view(view, &self.catalog);
-        self.update_tray(view.verdict, &display.state_label);
+        self.painter
+            .show_verdict(view.verdict, &display.state_label);
         if !self.store.replace(display.clone()) {
             return;
         }
@@ -154,10 +139,27 @@ impl VerdictPresenter for ShellPresenter {
     }
 }
 
+/// The dot on the real tray icon, its tooltip with it.
+pub type ShellTrayPainter = TrayPainter<TrayIcon, SystemColorSchemeReader>;
+
+impl TrayCanvas for TrayIcon {
+    fn paint(&self, verdict: Verdict, scheme: ColorScheme, label: &str) -> bool {
+        if let Err(error) = self.set_icon(Some(create_icon_image(verdict, scheme))) {
+            eprintln!("Updating the menu-bar icon failed: {error}");
+            return false;
+        }
+        // Linux ignores tooltips without failing; an error elsewhere is worth knowing about.
+        if let Err(error) = self.set_tooltip(Some(label)) {
+            eprintln!("Updating the menu-bar tooltip failed: {error}");
+        }
+        true
+    }
+}
+
 #[must_use]
-pub fn create_icon_image(verdict: Verdict) -> Image<'static> {
+pub fn create_icon_image(verdict: Verdict, scheme: ColorScheme) -> Image<'static> {
     Image::new_owned(
-        render_verdict_icon(verdict, ICON_SIZE),
+        render_verdict_icon(verdict, scheme, ICON_SIZE),
         ICON_SIZE,
         ICON_SIZE,
     )

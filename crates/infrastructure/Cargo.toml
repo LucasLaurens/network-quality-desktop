@@ -38,6 +38,7 @@ windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_NetworkManagement_WiFi",
     "Win32_System_Power",
+    "Win32_System_Registry",
     "Win32_UI_WindowsAndMessaging",
 ] }
 

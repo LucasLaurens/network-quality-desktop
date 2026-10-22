@@ -33,10 +33,10 @@ pub use history::{
     MINUTE_RETENTION, MeasuredSecond, NetworkKey, RepositoryError, ThroughputRecord,
 };
 pub use ports::{
-    AccessTechnologyDetector, Clock, ConnectionContextReader, GatewayProbe, HistoryReader,
-    HistoryRecorder, HistoryStream, LatencyProbe, MeasurementRepository, NetworkChangeWatcher,
-    Notifier, PowerEvent, PowerEventSource, SettingsRepository, ThroughputProbe,
-    TrafficCounterReader, TrayHost, VerdictPresenter, WifiReader,
+    AccessTechnologyDetector, Clock, ColorSchemeReader, ConnectionContextReader, GatewayProbe,
+    HistoryReader, HistoryRecorder, HistoryStream, LatencyProbe, MeasurementRepository,
+    NetworkChangeWatcher, Notifier, PowerEvent, PowerEventSource, SettingsRepository,
+    ThroughputProbe, TrafficCounterReader, TrayHost, VerdictPresenter, WifiReader,
 };
 pub use settings::can_measure_against;
 pub use targets::{list_default_targets, list_targets};
