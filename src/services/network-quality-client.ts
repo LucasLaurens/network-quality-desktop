@@ -17,7 +17,9 @@ import type {
   ThroughputPanel,
   WindowModeTexts,
 } from '../bindings'
-import type { InterfaceTexts } from '../composables/interface-texts'
+
+/** Every word of the windows, by catalogue key, read once from the core when a window opens. */
+export type InterfaceTexts = Partial<Record<string, string>>
 
 /** Port between the Vue front end and the Rust core. Components never call Tauri directly. */
 export interface NetworkQualityClient {

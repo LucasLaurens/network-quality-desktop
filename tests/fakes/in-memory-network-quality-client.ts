@@ -27,8 +27,12 @@ import type {
   ThroughputRow,
   WindowModeTexts,
 } from '../../src/bindings'
-import { INTERFACE_TEXTS_KEY, type InterfaceTexts } from '../../src/composables/interface-texts'
-import { NETWORK_QUALITY_CLIENT_KEY, type NetworkQualityClient } from '../../src/services/network-quality-client'
+import { INTERFACE_TEXTS_KEY } from '../../src/composables/interface-texts'
+import {
+  NETWORK_QUALITY_CLIENT_KEY,
+  type InterfaceTexts,
+  type NetworkQualityClient,
+} from '../../src/services/network-quality-client'
 import interfaceTexts from './interface-texts.json'
 
 /** What `main.ts` gives a window: the client, and the catalogue's texts as the core renders them. */

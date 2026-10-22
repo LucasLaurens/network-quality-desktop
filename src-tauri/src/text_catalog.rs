@@ -111,22 +111,23 @@ mod tests {
     fn hands_over_every_interface_text_with_its_slots_open() {
         // Arrange
         let catalog = TextCatalog::load();
+        let mut keys: Vec<&str> = list_messages()
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| key.starts_with(INTERFACE_PREFIX))
+            .collect();
+        keys.sort_unstable();
 
         // Act
         let texts = catalog.list_interface_texts();
 
         // Assert
-        let keys: Vec<&str> = list_messages()
-            .into_iter()
-            .map(|(key, _)| key)
-            .filter(|key| key.starts_with(INTERFACE_PREFIX))
-            .collect();
-        assert_eq!(texts.keys().map(String::as_str).collect::<Vec<_>>(), {
-            let mut sorted = keys;
-            sorted.sort_unstable();
-            sorted
-        });
+        assert_eq!(texts.keys().map(String::as_str).collect::<Vec<_>>(), keys);
         assert_eq!(texts["ui-cancel"], "Annuler");
+        assert_eq!(
+            texts["ui-chart-label"], "{metric} sur {period}, avec les seuils Instable et Dégradée",
+            "a referenced message is rendered"
+        );
         assert_eq!(texts["ui-updated-at"], "Mis à jour à {time}");
         assert_eq!(
             texts["ui-throughput-last"],

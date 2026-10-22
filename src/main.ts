@@ -10,7 +10,8 @@ import { TauriNetworkQualityClient } from './services/tauri-network-quality-clie
 const root = new URLSearchParams(window.location.search).get('view') === 'popover' ? ConnectionPopover : App
 const client = new TauriNetworkQualityClient()
 
-// The texts come first: a window never shows a word before it has the catalogue's.
+// The texts come first: a window never shows a word before it has the catalogue's. Without them
+// the window stays empty on purpose; the command only reads a catalogue the tests check.
 client
   .readInterfaceTexts()
   .then((texts) => {

@@ -1,7 +1,5 @@
 import { inject, type InjectionKey } from 'vue'
-
-/** Every word of the windows, by catalogue key, read once from the core when a window opens. */
-export type InterfaceTexts = Partial<Record<string, string>>
+import type { InterfaceTexts } from '../services/network-quality-client'
 /** What fills the `{name}` slots of a text. */
 export type TextSlots = Record<string, string>
 export type SayText = (key: string, slots?: TextSlots) => string

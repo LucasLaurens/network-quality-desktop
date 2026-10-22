@@ -49,6 +49,22 @@ describe('findHardcodedTexts', () => {
     expect(found).toEqual(['Exporter…', 'Annuler'])
   })
 
+  it('finds any word written where a template shows it', () => {
+    // Act
+    const found = find(`<p :title="'aide'">{{ version ?? 'inconnue' }}{{ say('ui-cancel') }}</p>`)
+
+    // Assert
+    expect(found).toEqual(['aide', 'inconnue'])
+  })
+
+  it('leaves the classes and the states of a template alone, but not an accented word', () => {
+    // Act
+    const found = find(`<p :class="busy ? 'btn primary' : 'btn'" :aria-current="'page'" @click="note = 'Effacé'"></p>`)
+
+    // Assert
+    expect(found).toEqual(['Effacé'])
+  })
+
   it('finds a label in the script and leaves keys, errors and logs alone', () => {
     // Arrange
     const script = `

@@ -59,7 +59,7 @@ const chartLabel = computed(() =>
 )
 
 watch(display, () => {
-  updatedAt.value = new Date().toLocaleTimeString('fr-FR')
+  updatedAt.value = new Date().toLocaleTimeString(say('ui-locale'))
 })
 
 const loadSummary = async (): Promise<void> => {
@@ -135,7 +135,7 @@ onUnmounted(() => {
     <section aria-labelledby="networks-title">
       <div class="section-head">
         <h2 id="networks-title">{{ say('ui-networks-title') }}</h2>
-        <span class="muted">{{ say('ui-last-month') }}</span>
+        <span class="muted">{{ say('ui-networks-period') }}</span>
       </div>
       <NetworksTable v-if="summary" :networks="summary.networks" />
     </section>

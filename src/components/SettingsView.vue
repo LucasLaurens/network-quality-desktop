@@ -19,7 +19,7 @@ const APPEARANCES = [
 const EXPORT_PERIODS = [
   { value: 'lastDay', labelKey: 'ui-export-last-day' },
   { value: 'lastWeek', labelKey: 'ui-export-last-week' },
-  { value: 'lastMonth', labelKey: 'ui-last-month' },
+  { value: 'lastMonth', labelKey: 'ui-export-last-month' },
   { value: 'all', labelKey: 'ui-export-all' },
 ] as const satisfies readonly { value: ExportPeriodChoice; labelKey: string }[]
 /** Shown in the address field: a private address, as an own server usually has. */
@@ -295,7 +295,7 @@ onMounted(async () => {
             </p>
             <div class="actions">
               <button type="button" class="secondary" data-erase-confirm @click="eraseHistory">
-                {{ say('ui-settings-erase') }}
+                {{ say('ui-settings-erase-confirm') }}
               </button>
               <button type="button" class="link" data-erase-cancel @click="isConfirmingErase = false">
                 {{ say('ui-cancel') }}
