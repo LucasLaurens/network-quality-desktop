@@ -21,7 +21,7 @@ Chaque règle a été cassée volontairement pour vérifier qu'un test échoue :
 
 ## Aperçu visuel
 
-Deux pages hors build, servies par `pnpm dev:web`, affichent les écrans avec des données préparées : `tests/preview/popover.html` (`?scenario=degraded` ou `offline`) et `tests/preview/dashboard.html` (`?scenario=window` pour la note du mode fenêtre). Elles servent aux contrôles visuels à la main (navigateur ou Playwright, dans les deux thèmes) : aucun débordement, deux rayons seulement (2 px et 8 px), focus visible au clavier. Ces contrôles ne sont pas automatisés.
+Deux pages hors build, servies par `pnpm dev:web`, affichent les écrans avec des données préparées : `tests/preview/popover.html` (`?scenario=degraded`, `offline` ou `undetermined` pour l'aide au ping) et `tests/preview/dashboard.html` (`?scenario=window` pour la note du mode fenêtre, `undetermined` pour l'aide au ping). Elles servent aux contrôles visuels à la main (navigateur ou Playwright, dans les deux thèmes) : aucun débordement, deux rayons seulement (2 px et 8 px), focus visible au clavier. Ces contrôles ne sont pas automatisés.
 
 ## Matrice de tests manuels Linux
 

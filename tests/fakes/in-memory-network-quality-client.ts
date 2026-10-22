@@ -10,6 +10,7 @@ import type {
   ExportAvailability,
   ExportDone,
   ExportPeriodChoice,
+  HelpDisplay,
   LineDetails,
   MetricDisplay,
   NetworkRowDisplay,
@@ -78,7 +79,20 @@ export function createConnectionDisplay(overrides: Partial<ConnectionDisplay> = 
     openDashboardLabel: faker.lorem.words(3),
     network: { label: faker.company.name(), connection: faker.lorem.words(2), wifiDetails: null, revealLabel: null },
     path: createPathDisplay(),
+    help: null,
     ...overrides,
+  }
+}
+
+export function createHelpDisplay(): HelpDisplay {
+  return {
+    title: faker.lorem.words(4),
+    why: faker.lorem.sentence(),
+    steps: [
+      { label: faker.lorem.words(3), command: `sudo ${faker.lorem.word()}` },
+      { label: faker.lorem.words(3), command: `sudo ${faker.lorem.word()}` },
+    ],
+    withoutPermission: faker.lorem.sentence(),
   }
 }
 

@@ -18,7 +18,11 @@ use crate::throughput_display::ProfileChoice;
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum DashboardRequested {
     Settings,
-    ThroughputTest { profile: ProfileChoice },
+    /// The help shown when the cause cannot be determined.
+    Help,
+    ThroughputTest {
+        profile: ProfileChoice,
+    },
 }
 
 pub const MAIN_WINDOW: &str = "main";

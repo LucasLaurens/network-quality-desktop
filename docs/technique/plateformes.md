@@ -8,7 +8,7 @@ Tauri a besoin des Common Controls v6, déclarés dans un manifeste Windows (`sr
 
 ## Linux : droit de ping
 
-La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le groupe de l'utilisateur (c'est le cas par défaut sur les distributions récentes basées sur systemd). Sinon, l'app mesure Internet par connexion TCP sur le port 443, et le tronçon local devient « non mesurable » : le popover le dit, avec le réglage à faire. Pour Internet, la latence reste juste, et la perte compte les connexions qui échouent, ce qui est moins fin qu'une perte de paquets ICMP.
+La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le groupe de l'utilisateur (c'est le cas par défaut sur les distributions récentes basées sur systemd). Sinon, l'app mesure Internet par connexion TCP sur le port 443, et le tronçon local devient « non mesurable » : le popover et le tableau de bord le disent, avec une aide repliée qui donne les commandes à copier (`HelpDisplay`, composée par le shell depuis le catalogue ; le menu de la pastille y mène par `DashboardRequested::Help`). Pour Internet, la latence reste juste, et la perte compte les connexions qui échouent, ce qui est moins fin qu'une perte de paquets ICMP.
 
 ## Contexte de connexion
 

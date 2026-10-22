@@ -51,7 +51,7 @@ Le lien avec la box n'est pas mesurable quand le système refuse le ping (Linux 
 - « Le Wi-Fi est en cause : la box répond lentement. » couvre un Wi-Fi lent dont le signal n'est pas faible.
 - « Redémarrer la box ou vérifier le réseau de l'opérateur. » au lieu de « … l'état du réseau de l'opérateur. », qui dépassait 60 caractères.
 - Les causes « Lien avec le téléphone », « Câble ou autre lien local », « Téléphone sans Internet » et « Rien ne répond » complètent le catalogue, avec les variantes de « Opérateur » (câble, autre lien) et de « Réseau mobile » (modem intégré), pour les connexions qu'il ne couvrait pas.
-- Le « lien d'aide » de Linux est une action qui nomme le réglage (`net.ipv4.ping_group_range`) : le dépôt n'est pas public.
+- Le « lien d'aide » de Linux est une aide repliée dans l'app, sous l'action « Autoriser le ping » du popover et du tableau de bord : le dépôt n'est pas public, un lien vers sa documentation mènerait nulle part. Elle reste là tant que le ping est refusé, même quand la connexion va bien : le tronçon vers la box reste alors non mesurable. Dépliée, elle dit pourquoi le ping est refusé, donne les deux commandes à copier (pour la session, puis pour la garder après un redémarrage) et ce que l'app mesure sans cela. Le menu de la pastille y mène aussi par « Comment autoriser le ping… », qui ouvre le tableau de bord avec l'aide dépliée : sous Linux, il n'y a pas de popover.
 - « La cause exacte ne peut pas être déterminée sur ce réseau. » s'ajoute pour une box muette ou cachée, que « sur ce système » décrirait mal.
 
 Sous chaque mesure proche de son seuil, le popover indique « Proche du seuil ». Chaque jauge est lue par les lecteurs d'écran avec ses seuils, par exemple « Solide sous 100 ms, Dégradée au-delà de 300 ms ».
