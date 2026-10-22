@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex, PoisonError};
 use application::{VerdictPresenter, VerdictView};
 use std::time::Duration;
 
-use application::ColorSchemeReader;
 use domain::{ColorScheme, ConnectionContext, Verdict, WifiLink};
 use infrastructure::SystemColorSchemeReader;
 use serde::Serialize;
@@ -19,6 +18,7 @@ use crate::display::{ConnectionDisplay, DisplayState};
 use crate::text_catalog::TextCatalog;
 use crate::tray_icon::{ICON_SIZE, render_verdict_icon};
 use crate::tray_menu::TrayMenu;
+use crate::tray_painter::{TrayCanvas, TrayPainter};
 
 /// Sent to every window whenever what the popover shows changes.
 #[derive(Debug, Clone, Serialize, Type, Event)]
@@ -95,60 +95,31 @@ impl ConnectionStore {
 pub struct ShellPresenter {
     app: AppHandle,
     connection: ConnectionStore,
-    tray: TrayIcon,
     menu: Arc<TrayMenu>,
     catalog: TextCatalog,
     store: DisplayStore,
-    color_scheme: SystemColorSchemeReader,
-    /// What the icon shows: the verdict, in the colours of the system's scheme.
-    shown: Mutex<(Verdict, ColorScheme)>,
+    painter: Arc<ShellTrayPainter>,
 }
 
 impl ShellPresenter {
-    /// `tray` must already show `Verdict::Measuring`, as built by `create_icon_image`, in the
-    /// colours of `scheme`.
+    /// `painter` draws on the tray icon; the presenter hands it each verdict.
     #[must_use]
     pub fn new(
         app: AppHandle,
-        tray: TrayIcon,
         menu: Arc<TrayMenu>,
         catalog: TextCatalog,
         store: DisplayStore,
         connection: ConnectionStore,
-        scheme: ColorScheme,
+        painter: Arc<ShellTrayPainter>,
     ) -> Self {
         Self {
             app,
             connection,
-            tray,
             menu,
             catalog,
             store,
-            color_scheme: SystemColorSchemeReader,
-            shown: Mutex::new((Verdict::Measuring, scheme)),
+            painter,
         }
-    }
-
-    /// Redrawn when the verdict or the system's scheme changes: the scheme is read each second,
-    /// so a switch to dark shows within a second, whatever the state. O(1) when nothing changed.
-    fn update_tray(&self, verdict: Verdict, label: &str) {
-        let wanted = (verdict, self.color_scheme.read_color_scheme());
-        let mut shown = self.shown.lock().unwrap_or_else(PoisonError::into_inner);
-        if *shown == wanted {
-            return;
-        }
-        if let Err(error) = self
-            .tray
-            .set_icon(Some(create_icon_image(verdict, wanted.1)))
-        {
-            eprintln!("Updating the menu-bar icon failed: {error}");
-            return;
-        }
-        // Linux ignores tooltips without failing; an error elsewhere is worth knowing about.
-        if let Err(error) = self.tray.set_tooltip(Some(label)) {
-            eprintln!("Updating the menu-bar tooltip failed: {error}");
-        }
-        *shown = wanted;
     }
 }
 
@@ -156,7 +127,8 @@ impl VerdictPresenter for ShellPresenter {
     fn present(&self, view: &VerdictView) {
         self.connection.replace(view);
         let display = ConnectionDisplay::from_view(view, &self.catalog);
-        self.update_tray(view.verdict, &display.state_label);
+        self.painter
+            .show_verdict(view.verdict, &display.state_label);
         if !self.store.replace(display.clone()) {
             return;
         }
@@ -164,6 +136,23 @@ impl VerdictPresenter for ShellPresenter {
         if let Err(error) = ConnectionDisplayChanged(display).emit(&self.app) {
             eprintln!("Publishing the connection display failed: {error}");
         }
+    }
+}
+
+/// The dot on the real tray icon, its tooltip with it.
+pub type ShellTrayPainter = TrayPainter<TrayIcon, SystemColorSchemeReader>;
+
+impl TrayCanvas for TrayIcon {
+    fn paint(&self, verdict: Verdict, scheme: ColorScheme, label: &str) -> bool {
+        if let Err(error) = self.set_icon(Some(create_icon_image(verdict, scheme))) {
+            eprintln!("Updating the menu-bar icon failed: {error}");
+            return false;
+        }
+        // Linux ignores tooltips without failing; an error elsewhere is worth knowing about.
+        if let Err(error) = self.set_tooltip(Some(label)) {
+            eprintln!("Updating the menu-bar tooltip failed: {error}");
+        }
+        true
     }
 }
 

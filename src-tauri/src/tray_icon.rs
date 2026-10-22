@@ -323,12 +323,18 @@ mod tests {
                 .expect("a dark block"),
         };
         let value = read_custom_property(block, name);
-        // Neutrals share their hue through `var(--hue)`; resolve it like the browser does.
+        // Neutrals share their hue through `var(--hue)`; resolve it like the browser does: from
+        // the block itself when it sets one, from `:root` otherwise.
+        let hue = if block.contains("--hue:") {
+            block
+        } else {
+            light_block
+        };
         let inside = value
             .strip_prefix("oklch(")
             .and_then(|rest| rest.strip_suffix(')'))
             .expect("an oklch value")
-            .replace("var(--hue)", &read_custom_property(light_block, "--hue"));
+            .replace("var(--hue)", &read_custom_property(hue, "--hue"));
         let mut parts = inside.split_whitespace();
         let lightness = parts
             .next()

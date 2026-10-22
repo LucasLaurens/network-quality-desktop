@@ -24,6 +24,7 @@ mod throughput_lab;
 mod traffic_store;
 mod tray_icon;
 mod tray_menu;
+mod tray_painter;
 mod windows;
 
 use std::sync::Arc;
@@ -34,7 +35,7 @@ use application::{
     PowerEventSource, list_default_targets, list_targets,
 };
 use display::ConnectionDisplay;
-use domain::Verdict;
+use domain::{ColorScheme, Verdict};
 use engine_inbox::EngineInbox;
 use infrastructure::{
     FallbackLatencyProbe, IcmpEchoSender, IcmpGatewayProbe, InterfaceChangeWatcher,
@@ -43,10 +44,10 @@ use infrastructure::{
 };
 use shell_mode::{ShellMode, WindowModeTexts};
 use shell_presenter::{
-    ConnectionDisplayChanged, ConnectionStore, DisplayStore, ShellPresenter, create_icon_image,
-    describe_verdict,
+    ConnectionDisplayChanged, ConnectionStore, DisplayStore, ShellPresenter, ShellTrayPainter,
+    create_icon_image, describe_verdict,
 };
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, RunEvent};
 use tauri_specta::{Builder, collect_commands, collect_events};
 use text_catalog::TextCatalog;
@@ -62,6 +63,7 @@ const TRAY_ID: &str = "connection-state";
 const TICK_EVERY: Duration = Duration::from_secs(1);
 /// A few pending ticks at most: if the engine falls behind, older ticks are not worth replaying.
 const ENGINE_INBOX_CAPACITY: usize = 4;
+const COLOR_SCHEME_EVERY: Duration = Duration::from_secs(1);
 
 /// Single list of the commands and events shared with the front end, used by the runtime and the
 /// bindings export.
@@ -166,30 +168,15 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     let menu = Arc::new(TrayMenu::build(app, &initial, &settings, &catalog)?);
     app.manage(Arc::clone(&menu));
     // The icon is built in window mode too: a tray that appears later still gets its dot.
-    let tray = TrayIconBuilder::with_id(TRAY_ID)
-        .icon(create_icon_image(Verdict::Measuring, scheme))
-        .icon_as_template(false)
-        .tooltip(describe_verdict(Verdict::Measuring, &catalog))
-        .menu(menu.read_menu())
-        .show_menu_on_left_click(!HAS_POPOVER)
-        .on_menu_event(|app, event| {
-            if let Some(action) = MenuAction::from_id(event.id().as_ref()) {
-                apply_menu_action(app, action);
-            }
-        })
-        .on_tray_icon_event(|tray, event| {
-            tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-                && HAS_POPOVER
-            {
-                toggle_popover(tray.app_handle());
-            }
-        })
-        .build(app)?;
+    let tray = build_tray(app, &menu, scheme, &catalog)?;
+    let painter = Arc::new(ShellTrayPainter::new(
+        tray,
+        SystemColorSchemeReader,
+        Verdict::Measuring,
+        scheme,
+        describe_verdict(Verdict::Measuring, &catalog),
+    ));
+    follow_color_scheme(Arc::clone(&painter));
     if mode == ShellMode::Window {
         show_dashboard(app);
     }
@@ -217,12 +204,11 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
             clock: SystemClock::start(),
             presenter: ShellPresenter::new(
                 app.clone(),
-                tray,
                 menu,
                 catalog,
                 store,
                 connection_store,
-                scheme,
+                painter,
             ),
             context_reader: NetdevContextReader::new(route_reference),
             gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
@@ -259,6 +245,55 @@ async fn send_ticks(sender: mpsc::Sender<EngineMessage>) {
         if sender.send(EngineMessage::Tick).await.is_err() {
             break;
         }
+    }
+}
+
+/// The menu-bar icon showing « Mesure en cours », with its menu and its clicks. O(1).
+fn build_tray(
+    app: &tauri::AppHandle,
+    menu: &TrayMenu,
+    scheme: ColorScheme,
+    catalog: &TextCatalog,
+) -> tauri::Result<TrayIcon> {
+    TrayIconBuilder::with_id(TRAY_ID)
+        .icon(create_icon_image(Verdict::Measuring, scheme))
+        .icon_as_template(false)
+        .tooltip(describe_verdict(Verdict::Measuring, catalog))
+        .menu(menu.read_menu())
+        .show_menu_on_left_click(!HAS_POPOVER)
+        .on_menu_event(|app, event| {
+            if let Some(action) = MenuAction::from_id(event.id().as_ref()) {
+                apply_menu_action(app, action);
+            }
+        })
+        .on_tray_icon_event(|tray, event| {
+            tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+                && HAS_POPOVER
+            {
+                toggle_popover(tray.app_handle());
+            }
+        })
+        .build(app)
+}
+
+/// Redraws the dot when the system's scheme changes, apart from the displays: none comes during a
+/// throughput test. One reading a second, on a thread of its own.
+fn follow_color_scheme(painter: Arc<ShellTrayPainter>) {
+    let spawned = std::thread::Builder::new()
+        .name("color-scheme".to_owned())
+        .spawn(move || {
+            loop {
+                std::thread::sleep(COLOR_SCHEME_EVERY);
+                painter.follow_scheme();
+            }
+        });
+    if let Err(error) = spawned {
+        eprintln!("Following the system's colour scheme failed: {error}");
     }
 }
 

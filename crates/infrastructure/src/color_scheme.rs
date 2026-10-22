@@ -18,8 +18,9 @@ mod platform {
     use domain::ColorScheme;
     use objc2_foundation::{NSString, NSUserDefaults};
 
-    /// The global `AppleInterfaceStyle` default, « Dark » or absent; `NSApp`'s appearance would
-    /// follow the app's own setting instead. O(1).
+    /// The global `AppleInterfaceStyle` default, "Dark" or absent; `NSApp`'s appearance would
+    /// follow the app's own setting instead. A bar tinted by a dark wallpaper in light mode is not
+    /// seen. O(1).
     pub fn read_color_scheme() -> ColorScheme {
         let style = NSUserDefaults::standardUserDefaults()
             .stringForKey(&NSString::from_str("AppleInterfaceStyle"));
@@ -37,11 +38,13 @@ mod platform {
     use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
     use windows::core::w;
 
+    const DWORD_SIZE: u32 = 4;
+
     /// `SystemUsesLightTheme` is the taskbar's setting; `AppsUseLightTheme` is the windows'.
     /// Absent before Windows 10 1903: light then. O(1).
     pub fn read_color_scheme() -> ColorScheme {
         let mut value: u32 = 1;
-        let mut size = u32::try_from(size_of::<u32>()).unwrap_or(u32::MAX);
+        let mut size = DWORD_SIZE;
         // SAFETY: `value` and `size` outlive the call; the flags ask for a 4-byte DWORD only.
         let status = unsafe {
             RegGetValueW(
@@ -98,16 +101,23 @@ mod platform {
         scheme
     }
 
+    /// `ReadOne` from portal version 2 on; older portals (Ubuntu 22.04, Debian 12) only have
+    /// `Read`, which wraps the value in one more variant.
     fn query_portal() -> Result<ColorScheme, dbus::Error> {
         let connection = Connection::new_session()?;
-        let (value,): (Variant<u32>,) = connection
-            .with_proxy(PORTAL, PORTAL_PATH, CALL_TIMEOUT)
-            .method_call(
-                SETTINGS,
-                "ReadOne",
-                ("org.freedesktop.appearance", "color-scheme"),
-            )?;
-        Ok(if value.0 == PREFER_DARK {
+        let proxy = connection.with_proxy(PORTAL, PORTAL_PATH, CALL_TIMEOUT);
+        let key = ("org.freedesktop.appearance", "color-scheme");
+        let read_one: Result<(Variant<u32>,), dbus::Error> =
+            proxy.method_call(SETTINGS, "ReadOne", key);
+        let value = match read_one {
+            Ok((value,)) => value.0,
+            Err(_) => {
+                let (value,): (Variant<Variant<u32>>,) =
+                    proxy.method_call(SETTINGS, "Read", key)?;
+                value.0.0
+            }
+        };
+        Ok(if value == PREFER_DARK {
             ColorScheme::Dark
         } else {
             ColorScheme::Light
@@ -119,16 +129,21 @@ mod platform {
 mod tests {
     use super::*;
 
-    // Reads the real setting: `cargo test -p infrastructure -- --ignored --nocapture`, once in
-    // each scheme.
+    // Reads the real setting, once in each scheme:
+    // `EXPECTED_SCHEME=dark cargo test -p infrastructure -- --ignored reads_the_scheme`.
     #[test]
     #[ignore = "reads the scheme of the system it runs on"]
     fn reads_the_scheme_of_the_system() {
+        // Arrange
+        let expected = match std::env::var("EXPECTED_SCHEME").as_deref() {
+            Ok("dark") => ColorScheme::Dark,
+            _ => ColorScheme::Light,
+        };
+
         // Act
         let scheme = SystemColorSchemeReader.read_color_scheme();
 
         // Assert
-        println!("{scheme:?}");
-        assert!(matches!(scheme, ColorScheme::Light | ColorScheme::Dark));
+        assert_eq!(scheme, expected);
     }
 }
