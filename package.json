@@ -1,6 +1,6 @@
 {
   "name": "network-quality-desktop",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.14.0",
@@ -11,6 +11,7 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "app:install": "node scripts/install-app.mjs",
+    "release": "node scripts/merge-release.mjs",
     "dev:web": "vite",
     "build:web": "vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.node.json",
