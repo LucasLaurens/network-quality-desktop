@@ -4,7 +4,7 @@
 use std::sync::mpsc::SyncSender;
 use std::time::{Duration, Instant};
 
-use application::{EngineMessage, LiveHistory, PowerEvent};
+use application::{EngineMessage, LiveHistory, NetworkChangeWatcher, PowerEvent, PowerEventSource};
 use domain::{Settings, ThroughputResult};
 use tokio::sync::{mpsc, oneshot};
 
@@ -80,6 +80,20 @@ impl EngineInbox {
 
     /// Before a sleep, returns once the minute in progress is written or the delay ran out; a
     /// wake is only posted: the engine catches up at its next tick.
+    /// Relays the system's network changes and power events to the engine, for the life of the app.
+    pub fn follow_system_events(
+        self,
+        watcher: impl NetworkChangeWatcher,
+        power: impl PowerEventSource,
+    ) {
+        let regular = self.regular.clone();
+        watcher.watch(move || {
+            // Dropped when the inbox is full: the periodic reading still catches the change within 10 s.
+            let _ = regular.try_send(EngineMessage::NetworkChanged);
+        });
+        power.watch(move |event| self.relay_power_event(event));
+    }
+
     pub fn relay_power_event(&self, event: PowerEvent) {
         match event {
             PowerEvent::WillSleep => {
@@ -123,6 +137,8 @@ impl EngineInbox {
 
 #[cfg(test)]
 mod tests {
+    use application::test_support::{InMemoryNetworkChangeWatcher, InMemoryPowerEventSource};
+
     use super::*;
 
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -162,6 +178,44 @@ mod tests {
             received
         });
         (EngineInbox { regular, urgent }, engine)
+    }
+
+    #[test]
+    fn hands_a_network_change_to_the_engine() {
+        // Arrange
+        let (regular, mut regular_inbox) = mpsc::channel(1);
+        let (urgent, _urgent_inbox) = mpsc::channel(URGENT_CAPACITY);
+        let watcher = InMemoryNetworkChangeWatcher::default();
+        EngineInbox { regular, urgent }
+            .follow_system_events(watcher.clone(), InMemoryPowerEventSource::default());
+
+        // Act
+        watcher.report_change();
+
+        // Assert
+        assert!(matches!(
+            regular_inbox.try_recv(),
+            Ok(EngineMessage::NetworkChanged)
+        ));
+    }
+
+    #[test]
+    fn hands_sleep_and_wake_to_the_engine() {
+        // Arrange
+        let (inbox, engine) = start_engine(Reply::Answers);
+        let power = InMemoryPowerEventSource::default();
+        inbox.follow_system_events(InMemoryNetworkChangeWatcher::default(), power.clone());
+
+        // Act
+        power.report(PowerEvent::WillSleep);
+        power.report(PowerEvent::DidWake);
+
+        // Assert
+        drop(power);
+        assert_eq!(
+            engine.join().expect("the engine"),
+            vec!["answering", "wake"]
+        );
     }
 
     #[test]

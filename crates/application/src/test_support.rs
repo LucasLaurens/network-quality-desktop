@@ -16,9 +16,9 @@ use domain::{
 use crate::{
     AccessTechnologyDetector, Clock, ConnectionContextReader, GatewayProbe, HistoryCommand,
     HistoryEvent, HistoryReader, HistoryRecorder, HistoryStream, LatencyProbe,
-    MeasurementRepository, NetworkKey, Notifier, RepositoryError, SettingsRepository,
-    ThroughputFailure, ThroughputProbe, ThroughputRecord, VerdictPresenter, VerdictView,
-    WifiReader,
+    MeasurementRepository, NetworkChangeWatcher, NetworkKey, Notifier, PowerEvent,
+    PowerEventSource, RepositoryError, SettingsRepository, ThroughputFailure, ThroughputProbe,
+    ThroughputRecord, VerdictPresenter, VerdictView, WifiReader,
 };
 
 /// The manual clock's wall-clock start: an arbitrary UTC second, on an hour boundary.
@@ -663,5 +663,66 @@ impl VerdictPresenter for InMemoryVerdictPresenter {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(view.clone());
+    }
+}
+
+type ChangeListener = Box<dyn FnMut() + Send>;
+type PowerListener = Box<dyn Fn(PowerEvent) + Send + Sync>;
+
+/// A watcher the test fires by hand; clones share the listeners, so the test keeps one.
+#[derive(Clone, Default)]
+pub struct InMemoryNetworkChangeWatcher {
+    listeners: Arc<Mutex<Vec<ChangeListener>>>,
+}
+
+impl InMemoryNetworkChangeWatcher {
+    /// Tells every listener, as the system does on an interface or address change.
+    pub fn report_change(&self) {
+        for listener in self
+            .listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter_mut()
+        {
+            listener();
+        }
+    }
+}
+
+impl NetworkChangeWatcher for InMemoryNetworkChangeWatcher {
+    fn watch(self, on_change: impl FnMut() + Send + 'static) {
+        self.listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(Box::new(on_change));
+    }
+}
+
+/// A power source the test drives by hand; clones share the listeners, so the test keeps one.
+#[derive(Clone, Default)]
+pub struct InMemoryPowerEventSource {
+    listeners: Arc<Mutex<Vec<PowerListener>>>,
+}
+
+impl InMemoryPowerEventSource {
+    /// Tells every listener and returns once they handled it, as the system waits on a sleep.
+    pub fn report(&self, event: PowerEvent) {
+        for listener in self
+            .listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+        {
+            listener(event);
+        }
+    }
+}
+
+impl PowerEventSource for InMemoryPowerEventSource {
+    fn watch(self, on_event: impl Fn(PowerEvent) + Send + Sync + 'static) {
+        self.listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(Box::new(on_event));
     }
 }
