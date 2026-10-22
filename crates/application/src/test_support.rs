@@ -444,6 +444,10 @@ impl HistoryReader for InMemoryMeasurementRepository {
         Ok(tests)
     }
 
+    fn is_history_empty(&self) -> Result<bool, RepositoryError> {
+        Ok(self.rows.is_empty() && self.events.is_empty() && self.throughput_tests.is_empty())
+    }
+
     fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
         let mut events: Vec<HistoryEvent> = self
             .events

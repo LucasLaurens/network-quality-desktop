@@ -1,22 +1,23 @@
-//! The history written as three CSV files into a new folder of Downloads, read through a
+//! The history written as three CSV files into the folder the user chose, read through a
 //! connection of its own so the dashboard and the writer go on meanwhile.
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 use application::{
     ExportError, ExportPeriod, HistoryStream, export_events, export_measures,
     export_throughput_tests,
 };
-use domain::CivilDateTime;
 use infrastructure::SqliteMeasurementRepository;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 
 const MEASURES_FILE: &str = "mesures.csv";
 const EVENTS_FILE: &str = "evenements.csv";
-const TESTS_FILE: &str = "tests-de-debit.csv";
+const TESTS_FILE: &str = "tests-debit.csv";
+const FILES: [&str; 3] = [MEASURES_FILE, EVENTS_FILE, TESTS_FILE];
 
 /// Where the history is kept: a history in memory has nothing to export.
 pub enum HistoryLocation {
@@ -44,28 +45,55 @@ impl From<ExportPeriodChoice> for ExportPeriod {
     }
 }
 
-/// Writes the three files into a new folder of `downloads` named after the local time, and
-/// returns it; a failed export leaves no folder behind. Blocking: run it off the async runtime.
-/// O(r) time for r rows, O(1) space.
+/// What a click on « Exporter l'historique… » gives.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ExportOutcome {
+    /// The folder dialog was closed without a choice.
+    Cancelled,
+    Done {
+        message: String,
+    },
+}
+
+/// Where the last export went, for « Afficher le dossier »: the front never sends a path.
+#[derive(Default)]
+pub struct LastExport(Mutex<Option<PathBuf>>);
+
+impl LastExport {
+    pub fn remember(&self, folder: PathBuf) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(folder);
+    }
+
+    #[must_use]
+    pub fn read(&self) -> Option<PathBuf> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}
+
+/// Writes the three files into `folder`, replacing files of the same name; a failed export takes
+/// its files back. Blocking: run it off the async runtime. O(r) time for r rows, O(1) space.
 ///
 /// # Errors
 ///
-/// The history could not be read, or the folder written.
+/// The history could not be read, or a file written.
 pub fn write_export(
     history: &Path,
-    downloads: &Path,
+    folder: &Path,
     period: ExportPeriod,
     now_utc: i64,
-    offset: i64,
-) -> Result<PathBuf, ExportError> {
+) -> Result<(), ExportError> {
     let stream = SqliteMeasurementRepository::open_read_only(history)?;
-    let folder = downloads.join(format_folder_name(now_utc + offset));
-    std::fs::create_dir(&folder)?;
-    let written = write_files(&stream, &folder, period, now_utc);
+    let written = write_files(&stream, folder, period, now_utc);
     if written.is_err() {
-        let _ = std::fs::remove_dir_all(&folder);
+        for file in FILES {
+            let _ = std::fs::remove_file(folder.join(file));
+        }
     }
-    written.map(|()| folder)
+    written
 }
 
 /// O(r) time, O(1) space.
@@ -87,20 +115,6 @@ fn write_files(
     Ok(())
 }
 
-/// "qualite-reseau-2026-10-21-140512", to the second: two exports never share a folder. O(1).
-fn format_folder_name(local: i64) -> String {
-    let moment = CivilDateTime::from_seconds(local);
-    format!(
-        "qualite-reseau-{:04}-{:02}-{:02}-{:02}{:02}{:02}",
-        moment.date.year,
-        moment.date.month,
-        moment.date.day,
-        moment.hour,
-        moment.minute,
-        moment.second
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -109,7 +123,6 @@ mod tests {
 
     /// 2023-11-14 22:13:20 UTC.
     const SOME_UTC: i64 = 1_700_000_000;
-    const PARIS: i64 = 3600;
 
     fn create_temporary_directory(test: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -122,31 +135,30 @@ mod tests {
     }
 
     #[test]
-    fn writes_three_files_into_a_folder_named_after_the_local_time() {
+    fn writes_three_files_into_the_chosen_folder() {
         // Arrange
         let directory = create_temporary_directory("files");
         let history = directory.join("history.sqlite3");
         SqliteMeasurementRepository::open(&history, SOME_UTC).expect("a history");
 
         // Act
-        let folder = write_export(&history, &directory, ExportPeriod::All, SOME_UTC, PARIS)
-            .expect("an export");
+        write_export(&history, &directory, ExportPeriod::All, SOME_UTC).expect("an export");
 
         // Assert
-        assert!(folder.ends_with("qualite-reseau-2023-11-14-231320"));
         for (file, header) in [
-            (MEASURES_FILE, "debut_utc,"),
-            (EVENTS_FILE, "horodatage_utc,"),
-            (TESTS_FILE, "horodatage_utc,"),
+            (MEASURES_FILE, "start_utc,"),
+            (EVENTS_FILE, "time_utc,"),
+            (TESTS_FILE, "time_utc,"),
         ] {
-            let text = std::fs::read_to_string(folder.join(file)).expect("a file");
+            let text = std::fs::read_to_string(directory.join(file)).expect("a file");
             assert!(text.starts_with(header), "{file}");
         }
+        assert_eq!(TESTS_FILE, "tests-debit.csv");
         let _ = std::fs::remove_dir_all(directory);
     }
 
     #[test]
-    fn leaves_no_folder_when_the_history_cannot_be_read() {
+    fn leaves_no_file_when_the_history_cannot_be_read() {
         // Arrange
         let directory = create_temporary_directory("unreadable");
 
@@ -156,7 +168,6 @@ mod tests {
             &directory,
             ExportPeriod::All,
             SOME_UTC,
-            PARIS,
         );
 
         // Assert

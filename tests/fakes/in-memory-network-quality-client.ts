@@ -7,6 +7,7 @@ import type {
   DisplayState,
   EvolutionDisplay,
   DetailSection,
+  ExportOutcome,
   ExportPeriodChoice,
   LineDetails,
   MetricDisplay,
@@ -209,6 +210,11 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   readonly lineDetails: LineDetails = { section: createDetailSection(), note: faker.lorem.sentence() }
   /** Empty while the line is read. */
   private lineRefusal = ''
+  exportRevealings = 0
+  private hasHistory = true
+  private isFolderDialogClosed = false
+  private isHoldingExports = false
+  private releaseExport = (): void => undefined
   /** Empty while exports and erases succeed. */
   private dataRefusal = ''
   private throughputPanel = createThroughputPanel()
@@ -444,16 +450,52 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     this.releaseThroughputTest()
   }
 
-  exportHistory(period: ExportPeriodChoice): Promise<string> {
+  exportHistory(period: ExportPeriodChoice): Promise<ExportOutcome> {
     if (this.dataRefusal !== '') return Promise.reject(new Error(this.dataRefusal))
+    if (this.isFolderDialogClosed) return Promise.resolve({ kind: 'cancelled' })
     this.exports.push(period)
-    return Promise.resolve(this.exportConfirmation)
+    const outcome: ExportOutcome = { kind: 'done', message: this.exportConfirmation }
+    if (!this.isHoldingExports) return Promise.resolve(outcome)
+    return new Promise((resolve) => {
+      this.releaseExport = () => {
+        resolve(outcome)
+      }
+    })
+  }
+
+  canExportHistory(): Promise<boolean> {
+    return Promise.resolve(this.hasHistory)
+  }
+
+  revealLastExport(): Promise<void> {
+    this.exportRevealings += 1
+    return Promise.resolve()
   }
 
   eraseHistory(): Promise<string> {
     if (this.dataRefusal !== '') return Promise.reject(new Error(this.dataRefusal))
     this.erases += 1
+    this.hasHistory = false
     return Promise.resolve(this.eraseConfirmation)
+  }
+
+  /** Nothing measured yet: there is nothing to export. */
+  emptyHistory(): void {
+    this.hasHistory = false
+  }
+
+  /** The user closes the folder dialog without choosing. */
+  closeFolderDialog(): void {
+    this.isFolderDialogClosed = true
+  }
+
+  /** The running export waits until `finishExport`. */
+  holdExports(): void {
+    this.isHoldingExports = true
+  }
+
+  finishExport(): void {
+    this.releaseExport()
   }
 
   /** Every export and erase is refused with `refusal`. */

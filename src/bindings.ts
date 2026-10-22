@@ -82,14 +82,18 @@ export const commands = {
 	 */
 	runThroughputTest: (profile: ProfileChoice, isConfirmed: boolean, utcOffsetSeconds: number) => typedError<ThroughputOutcome, string>(__TAURI_INVOKE("run_throughput_test", { profile, isConfirmed, utcOffsetSeconds })),
 	/**
-	 *  Writes the history of `period` as three CSV files into a new folder of Downloads, on a thread
-	 *  of its own, then shows the folder.
+	 *  Asks for a folder in the system's dialog, then writes the history of `period` there as three
+	 *  CSV files, on a thread of its own.
 	 * 
 	 *  # Errors
 	 * 
 	 *  The sentence shown under the button: a history kept in memory, or a failed export.
 	 */
-	exportHistory: (period: ExportPeriodChoice, utcOffsetSeconds: number) => typedError<string, string>(__TAURI_INVOKE("export_history", { period, utcOffsetSeconds })),
+	exportHistory: (period: ExportPeriodChoice) => typedError<ExportOutcome, string>(__TAURI_INVOKE("export_history", { period })),
+	/**  Shows the folder of the last export in the system's file manager. */
+	revealLastExport: () => __TAURI_INVOKE<void>("reveal_last_export"),
+	/**  Whether there is anything to export: a history kept on disk, with something in it. */
+	canExportHistory: () => __TAURI_INVOKE<boolean>("can_export_history"),
 	/**
 	 *  Erases every measure, event and throughput test; the settings stay.
 	 * 
@@ -183,6 +187,11 @@ export type EvolutionDisplay = {
 	/**  Nothing measured in the period yet: a sentence replaces the chart. */
 	isEmpty: boolean,
 };
+
+/**  What a click on « Exporter l'historique… » gives. */
+export type ExportOutcome = 
+/**  The folder dialog was closed without a choice. */
+{ kind: "cancelled" } | { kind: "done"; message: string };
 
 export type ExportPeriodChoice = "lastDay" | "lastWeek" | "lastMonth" | "all";
 

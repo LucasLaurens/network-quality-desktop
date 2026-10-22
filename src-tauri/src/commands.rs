@@ -1,9 +1,9 @@
 //! Typed commands exposed to the front end. Tauri cannot export `pub` commands from the crate root.
 
-use fluent_bundle::FluentArgs;
 use serde::Serialize;
 use specta::Type;
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_dialog::DialogExt;
 
 use application::{
     Clock, can_measure_against, detect_access, list_network_summaries, read_day_overview,
@@ -19,7 +19,9 @@ use crate::dashboard_display::{
 };
 use crate::display::ConnectionDisplay;
 use crate::engine_inbox::EngineInbox;
-use crate::history_export::{ExportPeriodChoice, HistoryLocation, write_export};
+use crate::history_export::{
+    ExportOutcome, ExportPeriodChoice, HistoryLocation, LastExport, write_export,
+};
 use crate::history_store::{DashboardHistory, HistoryNotice};
 use crate::settings_effects::apply_settings;
 use crate::settings_form::{SettingsForm, format_save_confirmation};
@@ -365,8 +367,8 @@ pub async fn run_throughput_test(
     })
 }
 
-/// Writes the history of `period` as three CSV files into a new folder of Downloads, on a thread
-/// of its own, then shows the folder.
+/// Asks for a folder in the system's dialog, then writes the history of `period` there as three
+/// CSV files, on a thread of its own.
 ///
 /// # Errors
 ///
@@ -375,39 +377,40 @@ pub async fn run_throughput_test(
 #[specta::specta]
 pub async fn export_history(
     period: ExportPeriodChoice,
-    utc_offset_seconds: i32,
     app: AppHandle,
     location: State<'_, HistoryLocation>,
+    last_export: State<'_, LastExport>,
     catalog: State<'_, TextCatalog>,
-) -> Result<String, String> {
+) -> Result<ExportOutcome, String> {
     let HistoryLocation::OnDisk(history) = location.inner() else {
         return Err(catalog.render("export-unavailable", None));
     };
     let failed = || catalog.render("export-failed", None);
-    let downloads = app.path().download_dir().map_err(|error| {
-        eprintln!("The Downloads folder cannot be found: {error}");
+    let (chosen, picked) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |folder| {
+        let _ = chosen.send(folder);
+    });
+    let Some(folder) = picked.await.ok().flatten() else {
+        return Ok(ExportOutcome::Cancelled);
+    };
+    let folder = folder.into_path().map_err(|error| {
+        eprintln!("The chosen folder is not a path: {error}");
         failed()
     })?;
     let history = history.clone();
     let now = SystemClock::start().read_utc_seconds();
-    let offset = i64::from(utc_offset_seconds);
     let (answer, answered) = tokio::sync::oneshot::channel();
+    let target = folder.clone();
     std::thread::Builder::new()
         .name("export".to_owned())
         .spawn(move || {
-            let _ = answer.send(write_export(
-                &history,
-                &downloads,
-                period.into(),
-                now,
-                offset,
-            ));
+            let _ = answer.send(write_export(&history, &target, period.into(), now));
         })
         .map_err(|error| {
             eprintln!("Starting the export failed: {error}");
             failed()
         })?;
-    let folder = answered
+    answered
         .await
         .map_err(|error| {
             eprintln!("The export thread stopped: {error}");
@@ -417,17 +420,44 @@ pub async fn export_history(
             eprintln!("The export failed: {error:?}");
             failed()
         })?;
+    last_export.remember(folder);
+    Ok(ExportOutcome::Done {
+        message: catalog.render("export-done", None),
+    })
+}
+
+/// Shows the folder of the last export in the system's file manager.
+#[tauri::command]
+#[specta::specta]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn reveal_last_export(last_export: State<'_, LastExport>) {
+    let Some(folder) = last_export.read() else {
+        return;
+    };
     if let Err(error) = tauri_plugin_opener::reveal_item_in_dir(&folder) {
         eprintln!("Showing the export failed: {error}");
     }
-    let mut args = FluentArgs::new();
-    args.set(
-        "folder",
-        folder
-            .file_name()
-            .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
-    );
-    Ok(catalog.render("export-done", Some(&args)))
+}
+
+/// Whether there is anything to export: a history kept on disk, with something in it.
+#[tauri::command]
+#[specta::specta]
+#[must_use]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn can_export_history(
+    location: State<'_, HistoryLocation>,
+    history: State<'_, DashboardHistory>,
+) -> bool {
+    matches!(location.inner(), HistoryLocation::OnDisk(_))
+        && !history
+            .read(|reader| reader.is_history_empty())
+            .unwrap_or(true)
 }
 
 /// Erases every measure, event and throughput test; the settings stay.

@@ -219,6 +219,12 @@ impl Aggregate {
         self.seconds.compute_dominant()
     }
 
+    /// The median latency, for an export. O(B).
+    #[must_use]
+    pub fn compute_latency_p50(&self) -> Option<Duration> {
+        self.latency.compute_percentile(50.0)
+    }
+
     /// The 90th percentile of latency, as the live gauge. O(B).
     #[must_use]
     pub fn compute_latency_p90(&self) -> Option<Duration> {

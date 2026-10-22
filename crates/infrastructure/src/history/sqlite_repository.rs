@@ -339,6 +339,18 @@ impl HistoryReader for SqliteMeasurementRepository {
         Ok(tests)
     }
 
+    /// O(1): each table is asked for one row at most.
+    fn is_history_empty(&self) -> Result<bool, RepositoryError> {
+        self.connection
+            .query_row(
+                "SELECT NOT EXISTS (SELECT 1 FROM aggregates) AND NOT EXISTS (SELECT 1 FROM events) \
+                 AND NOT EXISTS (SELECT 1 FROM throughput_tests)",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(to_error)
+    }
+
     /// O(log n + k) through the time index.
     fn list_events(&self, from: i64, to: i64) -> Result<Vec<HistoryEvent>, RepositoryError> {
         let mut events = Vec::new();

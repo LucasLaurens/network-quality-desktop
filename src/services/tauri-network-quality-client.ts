@@ -6,6 +6,7 @@ import {
   type DashboardRequested,
   type DashboardSummaryDisplay,
   type EvolutionDisplay,
+  type ExportOutcome,
   type ExportPeriodChoice,
   type LineDetails,
   type PeriodChoice,
@@ -100,8 +101,16 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
     return unwrap(await commands.runThroughputTest(profile, isConfirmed, utcOffsetSeconds))
   }
 
-  async exportHistory(period: ExportPeriodChoice, utcOffsetSeconds: number): Promise<string> {
-    return unwrap(await commands.exportHistory(period, utcOffsetSeconds))
+  async exportHistory(period: ExportPeriodChoice): Promise<ExportOutcome> {
+    return unwrap(await commands.exportHistory(period))
+  }
+
+  canExportHistory(): Promise<boolean> {
+    return commands.canExportHistory()
+  }
+
+  revealLastExport(): Promise<void> {
+    return commands.revealLastExport()
   }
 
   async eraseHistory(): Promise<string> {

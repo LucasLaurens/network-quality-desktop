@@ -86,6 +86,8 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_throughput_panel,
             commands::run_throughput_test,
             commands::export_history,
+            commands::reveal_last_export,
+            commands::can_export_history,
             commands::erase_history,
             commands::read_technical_details,
             commands::read_line_details
@@ -108,6 +110,7 @@ pub fn run() {
             show_dashboard(app);
         }))
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_positioner::init());
     #[cfg(target_os = "macos")]
@@ -151,6 +154,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(stores.dashboard);
     app.manage(stores.settings);
     app.manage(stores.location);
+    app.manage(history_export::LastExport::default());
     let mode = ShellMode::detect(&SystemTrayHost);
     app.manage(mode);
     app.manage(WindowModeTexts::compose(mode, &catalog));
