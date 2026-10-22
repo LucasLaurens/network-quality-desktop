@@ -26,7 +26,7 @@
         "title": "État de la connexion",
         "url": "index.html?view=popover",
         "width": 320,
-        "height": 440,
+        "height": 560,
         "visible": false,
         "decorations": false,
         "resizable": false,

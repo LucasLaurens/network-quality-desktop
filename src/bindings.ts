@@ -10,6 +10,8 @@ export const commands = {
 	readConnectionDisplay: () => __TAURI_INVOKE<ConnectionDisplay>("read_connection_display"),
 	/**  Brings the dashboard window forward and closes the popover. */
 	openDashboard: () => __TAURI_INVOKE<void>("open_dashboard"),
+	/**  Opens the settings page of the dashboard and closes the popover. */
+	openSettings: () => __TAURI_INVOKE<void>("open_settings"),
 	/**  Closes the popover from the keyboard (Escape). */
 	closePopover: () => __TAURI_INVOKE<void>("close_popover"),
 	/**  The note shown in window mode; `None` when the tray works. */
@@ -112,6 +114,7 @@ export const commands = {
 /** Events */
 export const events = {
 	connectionDisplayChanged: makeEvent<ConnectionDisplayChanged>("connection-display-changed"),
+	dashboardRequested: makeEvent<DashboardRequested>("dashboard-requested"),
 };
 
 /* Types */
@@ -140,6 +143,12 @@ export type ConnectionDisplay = {
 
 /**  Sent to every window whenever what the popover shows changes. */
 export type ConnectionDisplayChanged = ConnectionDisplay;
+
+/**
+ *  What the tray menu or the popover asks the dashboard to do once shown: it alone can ask for a
+ *  confirmation, show a test running and keep its result.
+ */
+export type DashboardRequested = { kind: "settings" } | { kind: "throughputTest"; profile: ProfileChoice };
 
 export type DashboardSummaryDisplay = {
 	overview: OverviewDisplay,

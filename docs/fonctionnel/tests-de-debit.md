@@ -4,7 +4,7 @@ Les tests Rapide et Complet, lancés uniquement sur clic, et les données qu'ils
 
 ## Activer les tests
 
-Les tests sont désactivés par défaut : la section « Débit » du tableau de bord dit alors « Tests de débit désactivés : aucune donnée n'est consommée. » et mène à Réglages (« Autoriser les tests de débit », voir [Réglages](reglages.md)). Une fois autorisés, deux boutons apparaissent : **Test rapide** et **Test complet**. Aucun test ne part jamais seul, ni au lancement, ni au changement de réseau, ni à intervalle régulier.
+Les tests sont désactivés par défaut : la section « Débit » du tableau de bord dit alors « Tests de débit désactivés : aucune donnée n'est consommée. » et mène à Réglages (« Autoriser les tests de débit », voir [Réglages](reglages.md)). Une fois autorisés, deux boutons apparaissent : **Test rapide** et **Test complet**, dans le tableau de bord, dans le popover (avec le dernier résultat) et dans le menu de la pastille (le test s'y déroule alors dans le tableau de bord). Tant qu'ils ne sont pas autorisés, le popover propose « Activer dans Réglages ». Aucun test ne part jamais seul, ni au lancement, ni au changement de réseau, ni à intervalle régulier.
 
 ## Les deux tests
 

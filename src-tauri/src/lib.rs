@@ -26,6 +26,7 @@ mod tray_icon;
 mod tray_menu;
 mod windows;
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use application::{
@@ -51,10 +52,10 @@ use tauri_specta::{Builder, collect_commands, collect_events};
 use text_catalog::TextCatalog;
 use tokio::sync::mpsc;
 use tokio::time::MissedTickBehavior;
-use tray_menu::{MenuAction, TrayMenu, compose_menu_entries};
+use tray_menu::{MenuAction, TrayMenu, apply_menu_action, compose_menu_entries};
 use windows::{
-    HAS_POPOVER, PopoverDismissal, apply_window_event, create_popover, show_dashboard,
-    toggle_popover,
+    DashboardRequested, HAS_POPOVER, PopoverDismissal, apply_window_event, create_popover,
+    show_dashboard, toggle_popover,
 };
 
 const TRAY_ID: &str = "connection-state";
@@ -71,6 +72,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_app_info,
             commands::read_connection_display,
             commands::open_dashboard,
+            commands::open_settings,
             commands::close_popover,
             commands::read_window_mode_texts,
             commands::open_tray_extension_page,
@@ -88,7 +90,10 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_technical_details,
             commands::read_line_details
         ])
-        .events(collect_events![ConnectionDisplayChanged])
+        .events(collect_events![
+            ConnectionDisplayChanged,
+            DashboardRequested
+        ])
 }
 
 /// # Panics
@@ -152,7 +157,11 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(PopoverDismissal::default());
     let store = DisplayStore::new(initial.clone());
     app.manage(store.clone());
-    let menu = TrayMenu::build(app, &compose_menu_entries(&initial, &catalog))?;
+    let menu = Arc::new(TrayMenu::build(
+        app,
+        &compose_menu_entries(&initial, settings.allows_throughput_tests, &catalog),
+    )?);
+    app.manage(Arc::clone(&menu));
     // The icon is built in window mode too: a tray that appears later still gets its dot.
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(create_icon_image(Verdict::Measuring))
@@ -160,13 +169,11 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         .tooltip(describe_verdict(Verdict::Measuring, &catalog))
         .menu(menu.read_menu())
         .show_menu_on_left_click(!HAS_POPOVER)
-        .on_menu_event(
-            |app, event| match MenuAction::from_id(event.id().as_ref()) {
-                Some(MenuAction::OpenDashboard) => show_dashboard(app),
-                Some(MenuAction::Quit) => app.exit(0),
-                None => {}
-            },
-        )
+        .on_menu_event(|app, event| {
+            if let Some(action) = MenuAction::from_id(event.id().as_ref()) {
+                apply_menu_action(app, action);
+            }
+        })
         .on_tray_icon_event(|tray, event| {
             tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
             if let TrayIconEvent::Click {

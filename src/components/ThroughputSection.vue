@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { inject, onMounted, ref } from 'vue'
+import { inject, onMounted, ref, watch } from 'vue'
 import type { ProfileChoice, ThroughputPanel } from '../bindings'
+import { REQUESTED_TEST_KEY, useThroughputTest } from '../composables/use-throughput-test'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
 
@@ -13,12 +14,9 @@ const emit = defineEmits<{ openSettings: [] }>()
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
+const requested = inject(REQUESTED_TEST_KEY, ref(null))
 
 const panel = ref<ThroughputPanel | null>(null)
-const running = ref<ProfileChoice | null>(null)
-/** The test waiting for the user's go-ahead, where data counts, and what it may use. */
-const asked = ref<{ profile: ProfileChoice; warning: string } | null>(null)
-const refusal = ref('')
 
 const loadPanel = async (): Promise<void> => {
   try {
@@ -28,25 +26,18 @@ const loadPanel = async (): Promise<void> => {
   }
 }
 
-// The core decides whether to ask first: it reads the connection at the click.
-const run = async (profile: ProfileChoice, isConfirmed: boolean): Promise<void> => {
-  if (running.value) return
-  asked.value = null
-  refusal.value = ''
-  running.value = profile
-  try {
-    const outcome = await client.runThroughputTest(profile, isConfirmed, readUtcOffsetSeconds())
-    if (outcome.kind === 'needsConfirmation') {
-      asked.value = { profile, warning: outcome.warning }
-      return
-    }
-    await loadPanel()
-  } catch (error) {
-    refusal.value = error instanceof Error ? error.message : String(error)
-  } finally {
-    running.value = null
-  }
-}
+const { running, asked, refusal, run, cancel } = useThroughputTest(client, loadPanel)
+
+// A test the tray menu asked for runs here, where a confirmation and the result can show.
+watch(
+  requested,
+  (profile) => {
+    if (!profile) return
+    requested.value = null
+    void run(profile, false)
+  },
+  { immediate: true },
+)
 
 onMounted(loadPanel)
 </script>
@@ -76,7 +67,7 @@ onMounted(loadPanel)
         <p id="throughput-warning">{{ asked.warning }}</p>
         <div class="actions">
           <button type="button" class="secondary" data-confirm @click="run(asked.profile, true)">Lancer le test</button>
-          <button type="button" class="link" data-cancel @click="asked = null">Annuler</button>
+          <button type="button" class="link" data-cancel @click="cancel">Annuler</button>
         </div>
       </div>
       <p v-if="refusal" class="refused" role="alert" data-refused>{{ refusal }}</p>

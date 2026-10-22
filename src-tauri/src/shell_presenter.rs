@@ -8,12 +8,13 @@ use std::time::Duration;
 use domain::{ConnectionContext, Verdict, WifiLink};
 use serde::Serialize;
 use specta::Type;
-use tauri::AppHandle;
 use tauri::image::Image;
 use tauri::tray::TrayIcon;
+use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
 
 use crate::display::{ConnectionDisplay, DisplayState};
+use crate::settings_store::SettingsStore;
 use crate::text_catalog::TextCatalog;
 use crate::tray_icon::{ICON_SIZE, render_verdict_icon};
 use crate::tray_menu::{TrayMenu, compose_menu_entries};
@@ -94,7 +95,7 @@ pub struct ShellPresenter {
     app: AppHandle,
     connection: ConnectionStore,
     tray: TrayIcon,
-    menu: TrayMenu,
+    menu: Arc<TrayMenu>,
     catalog: TextCatalog,
     store: DisplayStore,
     shown: Mutex<Verdict>,
@@ -106,7 +107,7 @@ impl ShellPresenter {
     pub fn new(
         app: AppHandle,
         tray: TrayIcon,
-        menu: TrayMenu,
+        menu: Arc<TrayMenu>,
         catalog: TextCatalog,
         store: DisplayStore,
         connection: ConnectionStore,
@@ -147,8 +148,12 @@ impl VerdictPresenter for ShellPresenter {
         if !self.store.replace(display.clone()) {
             return;
         }
-        self.menu
-            .update(&compose_menu_entries(&display, &self.catalog));
+        let settings = self.app.state::<SettingsStore>().read();
+        self.menu.update(&compose_menu_entries(
+            &display,
+            settings.allows_throughput_tests,
+            &self.catalog,
+        ));
         if let Err(error) = ConnectionDisplayChanged(display).emit(&self.app) {
             eprintln!("Publishing the connection display failed: {error}");
         }
