@@ -33,7 +33,7 @@ impl Target {
     }
 
     #[must_use]
-    pub const fn address(self) -> IpAddr {
+    pub const fn get_address(self) -> IpAddr {
         self.0
     }
 }

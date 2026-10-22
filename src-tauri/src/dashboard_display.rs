@@ -235,7 +235,7 @@ impl EvolutionDisplay {
         offset: i64,
         catalog: &TextCatalog,
     ) -> Self {
-        let thresholds = Thresholds::for_video_calls();
+        let thresholds = Thresholds::VIDEO_CALLS;
         let aggregates: Vec<&Aggregate> = evolution
             .buckets
             .iter()
@@ -428,7 +428,7 @@ fn describe_worst_minute(
     let mut args = FluentArgs::new();
     args.set("time", format_time_of_day(*start, offset, catalog));
     let metric = minute
-        .compute_worst_metric(&Thresholds::for_video_calls())
+        .compute_worst_metric(&Thresholds::VIDEO_CALLS)
         .filter(|_| minute.compute_dominant_state() != Some(CountedState::Offline));
     let value = match metric {
         Some(Metric::Latency) => minute

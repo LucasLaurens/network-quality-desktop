@@ -487,7 +487,7 @@ impl SettingsRepository for SqliteMeasurementRepository {
         let ping_target = settings
             .servers
             .to_own_target()
-            .map(|target| target.address().to_string());
+            .map(|target| target.get_address().to_string());
         self.write(|transaction| {
             transaction.execute(
                 "UPDATE settings SET autostart = ?1, theme = ?2, ping_target = ?3, notify = ?4, \

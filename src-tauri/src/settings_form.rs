@@ -41,7 +41,7 @@ impl SettingsForm {
             own_server: settings
                 .servers
                 .to_own_target()
-                .map(|target| target.address().to_string()),
+                .map(|target| target.get_address().to_string()),
             notifies_on_degradation: settings.notifies_on_degradation,
             allows_throughput_tests: settings.allows_throughput_tests,
         }

@@ -21,7 +21,7 @@ impl ConnectionOpener for TcpConnectionOpener {
         let started = Instant::now();
         let attempt = tokio::time::timeout(
             CONNECT_TIMEOUT,
-            TcpStream::connect(SocketAddr::new(target.address(), PORT)),
+            TcpStream::connect(SocketAddr::new(target.get_address(), PORT)),
         );
         match attempt.await {
             Ok(Ok(_stream)) => Some(started.elapsed()),

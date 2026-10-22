@@ -498,7 +498,7 @@ pub struct InMemoryAccessDetector(Option<BoxLine>);
 
 impl InMemoryAccessDetector {
     #[must_use]
-    pub const fn answering(line: BoxLine) -> Self {
+    pub const fn from_line(line: BoxLine) -> Self {
         Self(Some(line))
     }
 }

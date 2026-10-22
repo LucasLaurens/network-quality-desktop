@@ -60,7 +60,7 @@
 - `detect_access` (couche application) demande la box, puis prend l'envoi des 5 derniers tests de débit du réseau courant (`ACCESS_TESTS`, 3 au moins : `ACCESS_MIN_TESTS`, réseau comparé par `NetworkKey::is_likely_same`, tests sans envoi écartés) et la latence au repos affichée. `AccessEstimate::estimate` (domaine) décide :
   - `WanAccessType::Dsl` : `ReportedDsl` (« DSL (annoncé par la box) » : ADSL comme VDSL) ;
   - sinon, médiane des envois ≥ 20 Mbit/s et latence ≤ 8 ms : `EstimatedFibre` ; médiane ≤ 2 Mbit/s et latence ≥ 10 ms : `EstimatedAdsl` ;
-  - sinon `Unknown`, comme quand il manque l'un des deux signaux. `Ethernet`, `Cable`, `POTS` et les extensions propriétaires (`X_AVM-DE_Fiber`) ne prouvent rien : une box fibre voit son lien comme Ethernet.
+  - sinon `Unknown`, comme quand il manque l'un des deux signaux. `Ethernet`, `Cable`, `POTS` et les extensions propriétaires (`X_AVM-DE_Fiber`), tous lus `WanAccessType::Other`, ne prouvent rien : une box fibre voit son lien comme Ethernet.
 - Les seuils viennent de la note de recherche sur ADSL et fibre (branche `research/adsl-fibre`, `research/adsl-fibre.md`), qui les donne comme propositions non validées sur le terrain. La note proposait le RTT vers le premier saut de l'opérateur ; l'app prend la latence affichée vers Internet (p90 sur 15 s). Fibre et câble se confondent, le VDSL tombe entre les seuils : tous deux restent inconnus.
 - La médiane sur un nombre pair d'envois est la moyenne des deux valeurs du milieu, pour ne pencher ni vers la fibre ni vers l'ADSL.
 

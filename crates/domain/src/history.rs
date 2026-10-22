@@ -557,12 +557,12 @@ mod tests {
         });
 
         // Act
-        let worst = aggregate.compute_worst_metric(&Thresholds::for_video_calls());
+        let worst = aggregate.compute_worst_metric(&Thresholds::VIDEO_CALLS);
 
         // Assert
         assert_eq!(worst, Some(Metric::Loss));
         assert_eq!(
-            Aggregate::default().compute_worst_metric(&Thresholds::for_video_calls()),
+            Aggregate::default().compute_worst_metric(&Thresholds::VIDEO_CALLS),
             None
         );
     }

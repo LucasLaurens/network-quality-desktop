@@ -110,7 +110,7 @@ fn to_box_line(
     BoxLine {
         access_type: properties
             .get(ACCESS_TYPE_ARGUMENT)
-            .map_or(WanAccessType::Unknown, |value| {
+            .map_or(WanAccessType::Other, |value| {
                 WanAccessType::from_upnp(value)
             }),
         downstream_max: read_rate(DOWNSTREAM_MAX_ARGUMENT),

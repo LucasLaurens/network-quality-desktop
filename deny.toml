@@ -1,0 +1,33 @@
+# cargo deny check advisories licenses: run every week by the « Dépendances » workflow.
+
+[graph]
+all-features = true
+
+[advisories]
+# A vulnerability always fails; an unmaintained crate only when the app depends on it directly:
+# the GTK bindings Tauri pulls in on Linux are known to be unmaintained and cannot be swapped here.
+unmaintained = "workspace"
+
+[licenses]
+# Permissive licences, and MPL-2.0 (file-level copyleft, used unmodified).
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+# The app's own crates are not published.
+ignore = true

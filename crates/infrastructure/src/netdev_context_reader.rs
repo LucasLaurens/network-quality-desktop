@@ -66,7 +66,7 @@ impl TrafficCounterReader for NetdevContextReader {
         let source = find_source_address(self.route_reference)?;
         let mut interface = netdev::get_interfaces()
             .into_iter()
-            .find(|interface| !interface.is_loopback() && owns_address(interface, source))?;
+            .find(|interface| !interface.is_loopback() && has_address(interface, source))?;
         // Windows leaves the counters out of the listing. A failure leaves `stats` empty: read
         // every second, it would flood the log.
         let _ = interface.update_stats();
@@ -85,7 +85,7 @@ fn read_context_now(route_reference: IpAddr) -> Option<ConnectionContext> {
     let interfaces = netdev::get_interfaces();
     let measured = interfaces
         .iter()
-        .find(|interface| !interface.is_loopback() && owns_address(interface, source))?;
+        .find(|interface| !interface.is_loopback() && has_address(interface, source))?;
     let others: Vec<InterfaceSnapshot> = interfaces
         .iter()
         .filter(|interface| {
@@ -114,7 +114,7 @@ fn find_source_address(target: IpAddr) -> Option<IpAddr> {
 }
 
 /// O(a) for a addresses.
-fn owns_address(interface: &Interface, address: IpAddr) -> bool {
+fn has_address(interface: &Interface, address: IpAddr) -> bool {
     match address {
         IpAddr::V4(v4) => interface.ipv4.iter().any(|network| network.addr() == v4),
         IpAddr::V6(v6) => interface.ipv6.iter().any(|network| network.addr() == v6),

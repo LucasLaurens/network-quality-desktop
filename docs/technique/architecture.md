@@ -2,7 +2,7 @@
 
 ## Découpage hexagonal
 
-Le cœur est en Rust, organisé en workspace Cargo de quatre crates. Le sens des dépendances est garanti par le compilateur : une crate ne peut pas importer une crate de la couche au-dessus.
+Le cœur est en Rust, organisé en workspace Cargo de quatre crates, plus `conventions`, qui ne contient que des vérifications (voir [Outillage](outillage.md#règles-encodées)). Le sens des dépendances est garanti par le compilateur : une crate ne peut pas importer une crate de la couche au-dessus.
 
 | Crate                       | Rôle                                                                                              | Dépend de                                             |
 | --------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |

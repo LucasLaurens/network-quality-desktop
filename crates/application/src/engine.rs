@@ -208,7 +208,7 @@ where
             // Due at once: the first tick reads the connection.
             seconds_since_context: CONTEXT_REFRESH_SECONDS,
             targets,
-            thresholds: Thresholds::for_video_calls(),
+            thresholds: Thresholds::VIDEO_CALLS,
             latency: LatencyWindow::default(),
             jitter,
             loss: LossWindow::default(),
