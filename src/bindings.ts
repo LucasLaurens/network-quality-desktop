@@ -235,8 +235,8 @@ export type MetricDisplay = {
 	/**  What the metric means, in plain words. */
 	definition: string,
 	method: string,
-	/**  `None` while the metric cannot be computed yet. */
-	value: string | null,
+	/**  « en cours » until the first value, « valeur inconnue » when it cannot be computed (offline). */
+	value: string,
 	gauge: Gauge | null,
 	/**  Shown under a metric close to its next threshold. */
 	hint: string | null,
@@ -266,6 +266,8 @@ export type NetworkRowDisplay = {
 	sharesLabel: string,
 	latencyP90: string,
 	loss: string,
+	/**  How long the network was measured, which its shares rest on. */
+	measured: string,
 	isCurrent: boolean,
 	isMostReliable: boolean,
 };
@@ -273,6 +275,8 @@ export type NetworkRowDisplay = {
 /**  The four facts under the current state. */
 export type OverviewDisplay = {
 	today: string,
+	/**  What the share of the day rests on, « mesuré 18 h sur 24 h »; empty before any measure. */
+	todayCoverage: string,
 	outages: string,
 	worstMoment: string,
 	onNetworkSince: string,

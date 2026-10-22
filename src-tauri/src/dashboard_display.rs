@@ -43,6 +43,8 @@ impl From<PeriodChoice> for Period {
 #[serde(rename_all = "camelCase")]
 pub struct OverviewDisplay {
     pub today: String,
+    /// What the share of the day rests on, « mesuré 18 h sur 24 h »; empty before any measure.
+    pub today_coverage: String,
     pub outages: String,
     pub worst_moment: String,
     pub on_network_since: String,
@@ -69,6 +71,8 @@ pub struct NetworkRowDisplay {
     pub shares_label: String,
     pub latency_p90: String,
     pub loss: String,
+    /// How long the network was measured, which its shares rest on.
+    pub measured: String,
     pub is_current: bool,
     pub is_most_reliable: bool,
 }
@@ -171,6 +175,15 @@ impl OverviewDisplay {
             } else {
                 catalog.render("today-not-enough", None)
             },
+            today_coverage: if has_measures {
+                describe_coverage(
+                    i64::from(seconds.count_total()),
+                    now - compute_day_start(now, offset),
+                    catalog,
+                )
+            } else {
+                String::new()
+            },
             outages: describe_outages(overview, now, offset, catalog),
             worst_moment: if has_measures {
                 describe_worst_minute(overview.worst_minute.as_ref(), offset, catalog)
@@ -220,6 +233,7 @@ impl NetworkRowDisplay {
             shares_label: catalog.render("shares", Some(&args)),
             latency_p90: format_or_unknown(summary.aggregate.compute_latency_p90(), catalog),
             loss: format_or_unknown(summary.aggregate.compute_loss(), catalog),
+            measured: format_duration(i64::from(total), catalog),
             is_current: summary.is_current,
             is_most_reliable: summary.is_most_reliable,
         }
@@ -509,6 +523,14 @@ fn format_date_hour(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
     catalog.render("date-hour", Some(&args))
 }
 
+/// « mesuré 18 h sur 24 h »: the seconds counted in a state out of those elapsed. O(1).
+fn describe_coverage(measured: i64, elapsed: i64, catalog: &TextCatalog) -> String {
+    let mut args = FluentArgs::new();
+    args.set("measured", format_duration(measured, catalog));
+    args.set("elapsed", format_duration(elapsed, catalog));
+    catalog.render("today-coverage", Some(&args))
+}
+
 /// The two largest units: "42 s", "12 min", "3 h 12 min", "2 j 5 h". O(1).
 fn format_duration(seconds: i64, catalog: &TextCatalog) -> String {
     let seconds = seconds.max(0);
@@ -665,6 +687,11 @@ mod tests {
             display.today,
             insert_no_break_spaces("Solide 90~% du temps")
         );
+        // The day started at local midnight, an hour before midnight UTC in Paris.
+        assert_eq!(
+            display.today_coverage,
+            insert_no_break_spaces("mesuré 1~min sur 4~h 12~min")
+        );
         // The histogram keeps the upper edge of the bucket holding the p90.
         let p90 = worst
             .compute_latency_p90()
@@ -696,6 +723,7 @@ mod tests {
 
         // Assert
         assert_eq!(display.today, "Pas encore assez de mesures");
+        assert_eq!(display.today_coverage, "");
         assert_eq!(display.worst_moment, "Pas encore assez de mesures");
         assert_eq!(display.on_network_since, "Aucun réseau");
     }
@@ -797,6 +825,28 @@ mod tests {
             insert_no_break_spaces("75~% Solide, 25~% Instable, 0~% Dégradée, 0~% Hors ligne")
         );
         assert_eq!(row.loss, insert_no_break_spaces("0~%"));
+        assert_eq!(row.measured, insert_no_break_spaces("1~min"));
+    }
+
+    #[test]
+    fn counts_a_network_measured_for_days_in_days_and_hours() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let mut aggregate = Aggregate::default();
+        aggregate.seconds.solid =
+            u32::try_from(2 * SECONDS_PER_DAY + 14 * SECONDS_PER_HOUR).expect("fits a u32");
+        let summary = NetworkSummary {
+            network: create_network(None),
+            aggregate,
+            is_current: false,
+            is_most_reliable: false,
+        };
+
+        // Act
+        let row = NetworkRowDisplay::compose(&summary, &catalog);
+
+        // Assert
+        assert_eq!(row.measured, insert_no_break_spaces("2~j 14~h"));
     }
 
     #[test]

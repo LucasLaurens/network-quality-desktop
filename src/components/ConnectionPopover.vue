@@ -65,7 +65,7 @@ const openDashboard = async (): Promise<void> => {
         <span class="name">
           {{ metric.name }} <span class="method">{{ metric.method }}</span>
         </span>
-        <span class="value num">{{ metric.value ?? '–' }}</span>
+        <span class="value num">{{ metric.value }}</span>
         <MetricGauge :gauge="metric.gauge" class="gauge" />
         <span v-if="metric.hint" class="hint">{{ metric.hint }}</span>
       </li>
