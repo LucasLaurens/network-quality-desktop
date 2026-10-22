@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 
-use domain::{Grade, Verdict};
+use domain::{ColorScheme, Grade, Verdict};
 
 /// Pixel size of the drawn icon; the OS scales it to the menu-bar height.
 pub const ICON_SIZE: u32 = 44;
@@ -13,7 +13,8 @@ const MARGIN: f64 = 3.0;
 /// The triangle sits a little higher, so its base aligns with the bottom of the discs.
 const TRIANGLE_BASE_LIFT: f64 = 2.0;
 
-/// State colours, mirrored from the light values of `src/styles/tokens.css` (guarded by a test).
+/// State colours, mirrored from the light and dark values of `src/styles/tokens.css` (guarded by a
+/// test).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StateColour {
     Solid,
@@ -44,22 +45,28 @@ impl StateColour {
         }
     }
 
-    /// (lightness 0..1, chroma, hue in degrees)
+    /// (lightness 0..1, chroma, hue in degrees). The dark values are lighter, to stand out on a
+    /// dark bar.
     #[must_use]
-    pub const fn to_oklch(self) -> (f64, f64, f64) {
-        match self {
-            Self::Solid => (0.56, 0.13, 150.0),
-            Self::Unstable => (0.62, 0.14, 70.0),
-            Self::Degraded => (0.55, 0.18, 27.0),
-            Self::Measuring => (0.56, 0.1, 250.0),
-            Self::Offline => (0.56, 0.01, 85.0),
+    pub const fn to_oklch(self, scheme: ColorScheme) -> (f64, f64, f64) {
+        match (self, scheme) {
+            (Self::Solid, ColorScheme::Light) => (0.56, 0.13, 150.0),
+            (Self::Unstable, ColorScheme::Light) => (0.62, 0.14, 70.0),
+            (Self::Degraded, ColorScheme::Light) => (0.55, 0.18, 27.0),
+            (Self::Measuring, ColorScheme::Light) => (0.56, 0.1, 250.0),
+            (Self::Offline, ColorScheme::Light) => (0.56, 0.01, 85.0),
+            (Self::Solid, ColorScheme::Dark) => (0.72, 0.14, 150.0),
+            (Self::Unstable, ColorScheme::Dark) => (0.8, 0.14, 75.0),
+            (Self::Degraded, ColorScheme::Dark) => (0.68, 0.17, 27.0),
+            (Self::Measuring, ColorScheme::Dark) => (0.7, 0.1, 250.0),
+            (Self::Offline, ColorScheme::Dark) => (0.66, 0.01, 85.0),
         }
     }
 
     /// OKLCH to gamma-encoded sRGB (Björn Ottosson's reference matrices). O(1).
     #[must_use]
-    pub fn to_srgb(self) -> [u8; 3] {
-        let (lightness, chroma, hue) = self.to_oklch();
+    pub fn to_srgb(self, scheme: ColorScheme) -> [u8; 3] {
+        let (lightness, chroma, hue) = self.to_oklch(scheme);
         let (green_red, blue_yellow) = (
             chroma * hue.to_radians().cos(),
             chroma * hue.to_radians().sin(),
@@ -102,10 +109,11 @@ fn encode_srgb_channel(linear: f64) -> u8 {
     channel
 }
 
-/// Returns `size`×`size` RGBA pixels for the verdict. O(size²) time and space.
+/// Returns `size`×`size` RGBA pixels for the verdict, in the colours of `scheme`. O(size²) time
+/// and space.
 #[must_use]
-pub fn render_verdict_icon(verdict: Verdict, size: u32) -> Vec<u8> {
-    let colour = StateColour::from(verdict).to_srgb();
+pub fn render_verdict_icon(verdict: Verdict, scheme: ColorScheme, size: u32) -> Vec<u8> {
+    let colour = StateColour::from(verdict).to_srgb(scheme);
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
     for y in 0..size {
         for x in 0..size {
@@ -166,7 +174,7 @@ fn compute_edge_distance((x, y): (f64, f64), from: (f64, f64), to: (f64, f64)) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{Grade, Verdict};
+    use domain::{ColorScheme, Grade, Verdict};
 
     const SIZE: u32 = ICON_SIZE;
 
@@ -191,19 +199,33 @@ mod tests {
     #[test]
     fn draws_solid_as_a_filled_disc_in_the_solid_colour() {
         // Act
-        let rgba = render_verdict_icon(Verdict::Graded(Grade::Solid), SIZE);
+        let rgba = render_verdict_icon(Verdict::Graded(Grade::Solid), ColorScheme::Light, SIZE);
 
         // Assert
         let centre = read_pixel(&rgba, SIZE / 2, SIZE / 2);
         assert!(is_opaque(centre));
-        assert_eq!(centre[..3], StateColour::Solid.to_srgb());
+        assert_eq!(centre[..3], StateColour::Solid.to_srgb(ColorScheme::Light));
         assert!(is_transparent(read_pixel(&rgba, 0, 0)));
+    }
+
+    #[test]
+    fn draws_in_the_dark_colours_on_a_dark_bar() {
+        // Act
+        let rgba = render_verdict_icon(Verdict::Graded(Grade::Solid), ColorScheme::Dark, SIZE);
+
+        // Assert
+        let centre = read_pixel(&rgba, SIZE / 2, SIZE / 2);
+        assert_eq!(centre[..3], StateColour::Solid.to_srgb(ColorScheme::Dark));
+        assert_ne!(
+            StateColour::Solid.to_srgb(ColorScheme::Dark),
+            StateColour::Solid.to_srgb(ColorScheme::Light)
+        );
     }
 
     #[test]
     fn draws_unstable_as_a_ring_filled_on_its_right_half() {
         // Act
-        let rgba = render_verdict_icon(Verdict::Graded(Grade::Unstable), SIZE);
+        let rgba = render_verdict_icon(Verdict::Graded(Grade::Unstable), ColorScheme::Light, SIZE);
 
         // Assert
         assert!(is_opaque(read_pixel(&rgba, SIZE / 2 + 8, SIZE / 2)));
@@ -214,12 +236,15 @@ mod tests {
     #[test]
     fn draws_degraded_as_a_triangle() {
         // Act
-        let rgba = render_verdict_icon(Verdict::Graded(Grade::Degraded), SIZE);
+        let rgba = render_verdict_icon(Verdict::Graded(Grade::Degraded), ColorScheme::Light, SIZE);
 
         // Assert
         let centre = read_pixel(&rgba, SIZE / 2, SIZE / 2 + 4);
         assert!(is_opaque(centre));
-        assert_eq!(centre[..3], StateColour::Degraded.to_srgb());
+        assert_eq!(
+            centre[..3],
+            StateColour::Degraded.to_srgb(ColorScheme::Light)
+        );
         assert!(is_transparent(read_pixel(&rgba, 4, 6)));
         assert!(is_transparent(read_pixel(&rgba, SIZE - 5, 6)));
     }
@@ -227,7 +252,7 @@ mod tests {
     #[test]
     fn draws_measuring_as_an_empty_dotted_ring() {
         // Act
-        let rgba = render_verdict_icon(Verdict::Measuring, SIZE);
+        let rgba = render_verdict_icon(Verdict::Measuring, ColorScheme::Light, SIZE);
 
         // Assert
         assert!(is_transparent(read_pixel(&rgba, SIZE / 2, SIZE / 2)));
@@ -240,12 +265,15 @@ mod tests {
     #[test]
     fn draws_offline_as_a_crossed_out_ring_in_the_offline_colour() {
         // Act
-        let rgba = render_verdict_icon(Verdict::Offline, SIZE);
+        let rgba = render_verdict_icon(Verdict::Offline, ColorScheme::Light, SIZE);
 
         // Assert
         let on_the_slash = read_pixel(&rgba, SIZE / 2, SIZE / 2);
         assert!(is_opaque(on_the_slash));
-        assert_eq!(on_the_slash[..3], StateColour::Offline.to_srgb());
+        assert_eq!(
+            on_the_slash[..3],
+            StateColour::Offline.to_srgb(ColorScheme::Light)
+        );
         assert!(is_opaque(read_pixel(&rgba, 4, SIZE / 2)));
         assert!(is_transparent(read_pixel(
             &rgba,
@@ -262,13 +290,15 @@ mod tests {
 
         // Act & Assert
         for colour in StateColour::ALL {
-            let declared = read_light_token(tokens, colour.to_token_name());
-            assert_eq!(
-                declared,
-                colour.to_oklch(),
-                "{} drifted from tokens.css",
-                colour.to_token_name()
-            );
+            for scheme in [ColorScheme::Light, ColorScheme::Dark] {
+                let declared = read_token(tokens, scheme, colour.to_token_name());
+                assert_eq!(
+                    declared,
+                    colour.to_oklch(scheme),
+                    "{} ({scheme:?}) drifted from tokens.css",
+                    colour.to_token_name()
+                );
+            }
         }
     }
 
@@ -282,15 +312,29 @@ mod tests {
             )
     }
 
-    fn read_light_token(tokens: &str, name: &str) -> (f64, f64, f64) {
+    /// The dark values live in the `prefers-color-scheme: dark` block, the hue in the light one.
+    fn read_token(tokens: &str, scheme: ColorScheme, name: &str) -> (f64, f64, f64) {
         let light_block = tokens.split("@media").next().expect("a light block");
-        let value = read_custom_property(light_block, name);
-        // Neutrals share their hue through `var(--hue)`; resolve it like the browser does.
+        let block = match scheme {
+            ColorScheme::Light => light_block,
+            ColorScheme::Dark => tokens
+                .split("@media (prefers-color-scheme: dark)")
+                .nth(1)
+                .expect("a dark block"),
+        };
+        let value = read_custom_property(block, name);
+        // Neutrals share their hue through `var(--hue)`; resolve it like the browser does: from
+        // the block itself when it sets one, from `:root` otherwise.
+        let hue = if block.contains("--hue:") {
+            block
+        } else {
+            light_block
+        };
         let inside = value
             .strip_prefix("oklch(")
             .and_then(|rest| rest.strip_suffix(')'))
             .expect("an oklch value")
-            .replace("var(--hue)", &read_custom_property(light_block, "--hue"));
+            .replace("var(--hue)", &read_custom_property(hue, "--hue"));
         let mut parts = inside.split_whitespace();
         let lightness = parts
             .next()

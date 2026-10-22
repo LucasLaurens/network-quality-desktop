@@ -71,6 +71,7 @@ move
 notify
 observe
 open
+paint
 parse
 ping
 predict

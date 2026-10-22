@@ -1,6 +1,6 @@
 # États et verdict
 
-La pastille de la barre des menus montre l'état de la connexion. Chaque état a une forme et une couleur, pour rester lisible sans distinguer les couleurs.
+La pastille de la barre des menus montre l'état de la connexion. Chaque état a une forme et une couleur, pour rester lisible sans distinguer les couleurs. Les couleurs suivent le thème clair ou sombre du système, celui de la barre des menus, même quand l'apparence de l'app est forcée dans les Réglages ; la pastille change de couleurs dans la seconde où le thème change (quelques secondes sous Linux), même pendant un test de débit.
 
 | État            | Forme                 | Quand                                                                                                                                                                   |
 | --------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

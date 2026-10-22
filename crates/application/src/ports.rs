@@ -3,8 +3,8 @@ use std::future::Future;
 use std::net::Ipv4Addr;
 
 use domain::{
-    Aggregate, BoxLine, ByteCounters, ConnectionContext, Direction, GatewayEcho, Granularity,
-    ProbeOutcome, Settings, Target, Timestamp, Transfer, WifiLink,
+    Aggregate, BoxLine, ByteCounters, ColorScheme, ConnectionContext, Direction, GatewayEcho,
+    Granularity, ProbeOutcome, Settings, Target, Timestamp, Transfer, WifiLink,
 };
 
 use crate::{
@@ -181,6 +181,12 @@ pub trait HistoryReader {
         from: i64,
         to: i64,
     ) -> Result<Vec<ThroughputRecord>, RepositoryError>;
+}
+
+/// Reads whether the system shows light or dark, as its menu bar does. Called once a second:
+/// cheap, never blocking long.
+pub trait ColorSchemeReader {
+    fn read_color_scheme(&self) -> ColorScheme;
 }
 
 /// Reads the byte counters of the interface carrying the default route; `None` without one.
