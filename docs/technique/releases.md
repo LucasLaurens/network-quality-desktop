@@ -25,5 +25,5 @@ Chaque évolution fusionnée sur `main` alimente une PR de release ; la fusionne
 ## Prérequis côté GitHub
 
 - Chaque job ne reçoit que les droits qu'il utilise : contenu, issues et PR pour `release-please`, contenu seul pour `Cargo.lock` et les installeurs. Les runs se suivent sans s'annuler (`concurrency`), pour ne jamais couper une construction d'installeurs.
-- Réglage du dépôt « Allow GitHub Actions to create and approve pull requests » (Settings, Actions, General) : sans lui, `release-please` ne peut pas ouvrir la PR de release.
+- Réglage du dépôt « Allow GitHub Actions to create and approve pull requests » (Settings, Actions, General), activé : sans lui, `release-please` ne pourrait pas ouvrir la PR de release. Les droits par défaut du jeton des workflows restent en lecture seule ; chaque job demande ce qu'il lui faut.
 - La PR de release est créée avec le jeton du workflow : GitHub ne lance pas la CI sur elle. Elle ne change que des versions et le changelog, vérifiés par le test des versions au push suivant sur `main`.
