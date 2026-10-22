@@ -601,10 +601,7 @@ async fn gives_each_reading_the_bounds_it_was_graded_against() {
 
     // Assert
     let latency = harness.read_last_view().latency.expect("a latency reading");
-    assert_eq!(
-        latency.bounds,
-        domain::Thresholds::for_video_calls().latency
-    );
+    assert_eq!(latency.bounds, domain::Thresholds::VIDEO_CALLS.latency);
     assert_eq!(
         latency.bounds.find_reference_threshold(latency.value),
         Duration::from_millis(100)

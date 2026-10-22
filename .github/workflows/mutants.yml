@@ -1,0 +1,17 @@
+name: Mutants
+
+# Long: launched by hand from the Actions tab, or locally with `pnpm mutants:domain`.
+on:
+  workflow_dispatch:
+
+jobs:
+  mutants:
+    name: Mutants du domaine
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - run: cargo mutants -p domain

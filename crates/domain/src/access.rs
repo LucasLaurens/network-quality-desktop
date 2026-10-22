@@ -21,22 +21,18 @@ pub const ACCESS_MIN_TESTS: usize = 3;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WanAccessType {
     Dsl,
-    Ethernet,
-    Cable,
-    Pots,
-    Unknown,
+    /// `Ethernet`, `Cable`, `POTS`, `Unknown`, a vendor extension (`X_AVM-DE_Fiber`): no proof.
+    Other,
 }
 
 impl WanAccessType {
-    /// Vendor extensions (`X_AVM-DE_Fiber`) read as unknown. O(length).
+    /// O(length).
     #[must_use]
     pub fn from_upnp(value: &str) -> Self {
-        match value.trim() {
-            "DSL" => Self::Dsl,
-            "Ethernet" => Self::Ethernet,
-            "Cable" => Self::Cable,
-            "POTS" => Self::Pots,
-            _ => Self::Unknown,
+        if value.trim() == "DSL" {
+            Self::Dsl
+        } else {
+            Self::Other
         }
     }
 }
@@ -137,7 +133,7 @@ mod tests {
         assert_eq!(unproven, AccessEstimate::Unknown);
         assert_eq!(
             WanAccessType::from_upnp("X_AVM-DE_Fiber"),
-            WanAccessType::Unknown
+            WanAccessType::Other
         );
     }
 
@@ -190,6 +186,38 @@ mod tests {
             "150 Mbit/s is no ADSL"
         );
         assert_eq!(fibre_near, AccessEstimate::EstimatedFibre);
+    }
+
+    #[test]
+    fn takes_the_middle_test() {
+        // Arrange
+        let around_fibre = [
+            create_megabits(5),
+            create_megabits(20),
+            create_megabits(300),
+        ];
+        let around_adsl = [
+            create_megabits(1),
+            create_megabits(1),
+            create_megabits(3),
+            create_megabits(300),
+        ];
+
+        // Act
+        let fibre = AccessEstimate::estimate(None, &around_fibre, Some(Duration::from_millis(4)));
+        let adsl = AccessEstimate::estimate(None, &around_adsl, Some(Duration::from_millis(30)));
+
+        // Assert
+        assert_eq!(
+            fibre,
+            AccessEstimate::EstimatedFibre,
+            "the middle is 20 Mbit/s"
+        );
+        assert_eq!(
+            adsl,
+            AccessEstimate::EstimatedAdsl,
+            "the middles average 2 Mbit/s"
+        );
     }
 
     #[test]

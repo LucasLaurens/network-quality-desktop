@@ -214,7 +214,7 @@ mod tests {
     const NBSP: char = '\u{a0}';
 
     fn create_view(diagnosis: Diagnosis, verdict: Verdict, local: LocalSegment) -> VerdictView {
-        let bounds = Thresholds::for_video_calls().latency;
+        let bounds = Thresholds::VIDEO_CALLS.latency;
         let latency = Duration::from_millis(180);
         VerdictView {
             verdict,
@@ -246,7 +246,7 @@ mod tests {
         lost: 0,
     };
 
-    fn catalog_computer() -> String {
+    fn render_computer_label() -> String {
         TextCatalog::load().render(COMPUTER_KEY, None)
     }
 
@@ -279,7 +279,7 @@ mod tests {
             format!(
                 "Chemin{NBSP}: Ce Mac, Box, Internet. Wi-Fi, 4{NBSP}ms, puis Opérateur, 180{NBSP}ms. Tronçon Opérateur en cause."
             )
-            .replace("Ce Mac", &catalog_computer())
+            .replace("Ce Mac", &render_computer_label())
         );
     }
 

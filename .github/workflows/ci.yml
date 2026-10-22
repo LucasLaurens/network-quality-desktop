@@ -43,3 +43,19 @@ jobs:
       # Same gate as `make ci`, defined once in package.json.
       - run: pnpm verify
         shell: bash
+
+  coverage:
+    name: Couverture
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - run: rustup component add llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      # The gates live in the script; called directly, as pnpm would install everything first.
+      - run: node scripts/coverage-back.mjs

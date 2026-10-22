@@ -35,7 +35,7 @@ pub fn watch(on_event: PowerHandler) {
         IORegisterForSystemPower(
             std::ptr::from_ref(registration).cast_mut().cast(),
             &raw mut port,
-            Some(on_power_change),
+            Some(relay_power_change),
             &raw mut notifier,
         )
     };
@@ -54,7 +54,7 @@ pub fn watch(on_event: PowerHandler) {
 
 /// Called by `IOKit` on the power queue. Idle sleep is never vetoed; a sleep is acknowledged once
 /// the minute is written. O(1) plus the engine's answer.
-unsafe extern "C-unwind" fn on_power_change(
+unsafe extern "C-unwind" fn relay_power_change(
     context: *mut c_void,
     _service: io_service_t,
     message_type: u32,

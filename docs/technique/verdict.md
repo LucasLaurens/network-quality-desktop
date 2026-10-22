@@ -2,7 +2,7 @@
 
 ## Seuils
 
-Les seuils des trois métriques vivent dans un seul objet du domaine, `Thresholds::for_video_calls()` :
+Les seuils des trois métriques vivent dans un seul objet du domaine, `Thresholds::VIDEO_CALLS` :
 
 | Métrique      | Instable à partir de | Dégradée au-delà de |
 | ------------- | -------------------- | ------------------- |

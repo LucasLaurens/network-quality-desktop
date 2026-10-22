@@ -10,6 +10,7 @@ App de bureau (macOS, Linux, Windows) qui affiche en temps réel l'état de la c
 - Node : version de `.node-version`. pnpm : version du champ `packageManager` de `package.json` (`npm i -g pnpm@<version>`).
 - Dépendances système de Tauri 2 : voir <https://v2.tauri.app/start/prerequisites/>.
 - `cargo-nextest` pour les tests Rust : `cargo install cargo-nextest --locked`.
+- Pour les contrôles hors barrière quotidienne : `cargo-llvm-cov` (avec `rustup component add llvm-tools-preview`), `cargo-deny` et `cargo-mutants`, chacun par `cargo install <outil> --locked`.
 
 ## Démarrer
 
@@ -20,16 +21,19 @@ make dev
 
 ## Commandes
 
-| Commande                             | Effet                                                         |
-| ------------------------------------ | ------------------------------------------------------------- |
-| `make dev`                           | Lance l'app en développement (rechargement à chaud du front). |
-| `make build`                         | Construit les installeurs de l'app.                           |
-| `make install`                       | Construit l'app ; sur macOS, la copie dans Applications.      |
-| `make test`                          | Tous les tests (front puis Rust).                             |
-| `make test-front` / `make test-back` | Tests du front (Vitest) ou de Rust (nextest).                 |
-| `make lint`                          | Lint du front (ESLint) et de Rust (rustfmt, clippy).          |
-| `make fmt`                           | Formate tout le code.                                         |
-| `make ci`                            | Rejoue en local toute la barrière de la CI.                   |
+| Commande                             | Effet                                                             |
+| ------------------------------------ | ----------------------------------------------------------------- |
+| `make dev`                           | Lance l'app en développement (rechargement à chaud du front).     |
+| `make build`                         | Construit les installeurs de l'app.                               |
+| `make install`                       | Construit l'app ; sur macOS, la copie dans Applications.          |
+| `make test`                          | Tous les tests (front puis Rust).                                 |
+| `make test-front` / `make test-back` | Tests du front (Vitest) ou de Rust (nextest).                     |
+| `make lint`                          | Lint du front (ESLint) et de Rust (rustfmt, clippy).              |
+| `make fmt`                           | Formate tout le code.                                             |
+| `make ci`                            | Rejoue en local toute la barrière de la CI.                       |
+| `make coverage`                      | Couverture bloquante : `domain` ≥ 90 %, `application` ≥ 80 %.     |
+| `make audit`                         | Licences et failles des dépendances (`cargo-deny`, `pnpm audit`). |
+| `make mutants`                       | Tests de mutation du domaine (long).                              |
 
 Les commandes sont définies une seule fois dans `package.json` ; le `Makefile` n'est qu'un raccourci (sous Windows, utiliser `pnpm <script>`).
 
