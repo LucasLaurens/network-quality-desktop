@@ -57,3 +57,51 @@ impl LossWindow {
             .then(|| LossRate(f64::from(self.lost) * 100.0 / f64::from(self.sent)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn waits_for_sixty_probes() {
+        // Arrange
+        let mut window = LossWindow::default();
+        for _ in 0..29 {
+            window.record_second(2, 0);
+        }
+
+        // Act
+        let before = window.compute_rate();
+        window.record_second(2, 1);
+        let after = window.compute_rate();
+
+        // Assert
+        assert_eq!(before, None);
+        assert_eq!(after.map(LossRate::to_percent), Some(100.0 / 60.0));
+    }
+
+    #[test]
+    fn forgets_what_is_older_than_a_minute() {
+        // Arrange
+        let mut window = LossWindow::default();
+        window.record_second(2, 2);
+        for _ in 1..WINDOW_SECONDS {
+            window.record_second(2, 0);
+        }
+
+        // Act
+        window.record_second(2, 0);
+
+        // Assert
+        assert_eq!(window.compute_rate(), Some(LossRate::from_percent(0.0)));
+    }
+
+    #[test]
+    fn scales_a_rate() {
+        // Act & Assert
+        assert_eq!(
+            LossRate::from_percent(5.0).scale_by(0.8),
+            LossRate::from_percent(4.0)
+        );
+    }
+}

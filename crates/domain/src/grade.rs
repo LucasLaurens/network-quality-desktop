@@ -99,3 +99,69 @@ impl Thresholds {
         loss: GradeBounds::new(LossRate::from_percent(1.0), LossRate::from_percent(5.0)),
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LATENCY: GradeBounds<Duration> = Thresholds::VIDEO_CALLS.latency;
+
+    fn create_millis(millis: u64) -> Duration {
+        Duration::from_millis(millis)
+    }
+
+    #[test]
+    fn grades_below_between_and_above_the_bounds() {
+        // Act & Assert
+        assert_eq!(LATENCY.compute_grade(create_millis(99)), Grade::Solid);
+        assert_eq!(LATENCY.compute_grade(create_millis(100)), Grade::Unstable);
+        assert_eq!(LATENCY.compute_grade(create_millis(300)), Grade::Unstable);
+        assert_eq!(LATENCY.compute_grade(create_millis(301)), Grade::Degraded);
+    }
+
+    #[test]
+    fn shows_the_boundary_crossed_or_the_next_one() {
+        // Act & Assert
+        assert_eq!(
+            LATENCY.find_reference_threshold(create_millis(20)),
+            create_millis(100)
+        );
+        assert_eq!(
+            LATENCY.find_reference_threshold(create_millis(200)),
+            create_millis(100)
+        );
+        assert_eq!(
+            LATENCY.find_reference_threshold(create_millis(400)),
+            create_millis(300)
+        );
+        assert_eq!(LATENCY.read_unstable_from(), create_millis(100));
+        assert_eq!(LATENCY.read_degraded_above(), create_millis(300));
+    }
+
+    #[test]
+    fn warns_within_a_fifth_of_the_next_boundary() {
+        // Act & Assert
+        assert!(!LATENCY.is_near_next_threshold(create_millis(79)));
+        assert!(LATENCY.is_near_next_threshold(create_millis(80)));
+        assert!(!LATENCY.is_near_next_threshold(create_millis(239)));
+        assert!(LATENCY.is_near_next_threshold(create_millis(240)));
+        assert!(!LATENCY.is_near_next_threshold(create_millis(500)));
+    }
+
+    #[test]
+    fn grades_loss_with_the_same_rules() {
+        // Arrange
+        let loss = Thresholds::VIDEO_CALLS.loss;
+
+        // Act & Assert
+        assert_eq!(
+            loss.compute_grade(LossRate::from_percent(0.5)),
+            Grade::Solid
+        );
+        assert_eq!(
+            loss.compute_grade(LossRate::from_percent(6.0)),
+            Grade::Degraded
+        );
+        assert!(loss.is_near_next_threshold(LossRate::from_percent(0.8)));
+    }
+}
