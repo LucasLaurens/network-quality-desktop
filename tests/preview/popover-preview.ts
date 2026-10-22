@@ -2,7 +2,9 @@
 import { createApp } from 'vue'
 import ConnectionPopover from '../../src/components/ConnectionPopover.vue'
 import '../../src/styles/tokens.css'
+import { INTERFACE_TEXTS_KEY } from '../../src/composables/interface-texts'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../../src/services/network-quality-client'
+import interfaceTexts from '../fakes/interface-texts.json'
 import {
   InMemoryNetworkQualityClient,
   createThroughputPanel,
@@ -31,4 +33,7 @@ client.setThroughputPanel(
       })
     : createThroughputPanel({ isAllowed: false }),
 )
-createApp(ConnectionPopover).provide(NETWORK_QUALITY_CLIENT_KEY, client).mount('#app')
+createApp(ConnectionPopover)
+  .provide(NETWORK_QUALITY_CLIENT_KEY, client)
+  .provide(INTERFACE_TEXTS_KEY, interfaceTexts)
+  .mount('#app')

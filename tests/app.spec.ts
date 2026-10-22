@@ -2,17 +2,17 @@ import { faker } from '@faker-js/faker'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '../src/App.vue'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../src/services/network-quality-client'
 import {
   InMemoryNetworkQualityClient,
   createConnectionDisplay,
   createHelpDisplay,
   createThroughputPanel,
   createWindowModeTexts,
+  createWindowProvisions,
 } from './fakes/in-memory-network-quality-client'
 
 async function mountApp(client: InMemoryNetworkQualityClient) {
-  const wrapper = mount(App, { global: { provide: { [NETWORK_QUALITY_CLIENT_KEY as symbol]: client } } })
+  const wrapper = mount(App, { global: { provide: createWindowProvisions(client) } })
   await flushPromises()
   return wrapper
 }
@@ -28,7 +28,7 @@ describe('App', () => {
     const client = new InMemoryNetworkQualityClient({ name: faker.word.noun(), version })
 
     // Act
-    const wrapper = mount(App, { global: { provide: { [NETWORK_QUALITY_CLIENT_KEY as symbol]: client } } })
+    const wrapper = mount(App, { global: { provide: createWindowProvisions(client) } })
     await flushPromises()
 
     // Assert

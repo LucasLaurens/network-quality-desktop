@@ -4,6 +4,7 @@ import type { DashboardRequested, ProfileChoice, WindowModeTexts } from './bindi
 import DashboardView from './components/DashboardView.vue'
 import SettingsView from './components/SettingsView.vue'
 import { HELP_REQUESTED_KEY, REQUESTED_TEST_KEY } from './composables/dashboard-requests'
+import { useInterfaceTexts } from './composables/interface-texts'
 import { NETWORK_QUALITY_CLIENT_KEY } from './services/network-quality-client'
 
 // Remembered in the webview's own storage: a convenience, losing it only shows the note again.
@@ -11,14 +12,15 @@ const TRAY_HINT_DISMISSED_KEY = 'tray-hint-dismissed'
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
 if (!client) throw new Error('NetworkQualityClient is not provided')
+const say = useInterfaceTexts()
 
 const version = ref('…')
 const historyNotice = ref<string | null>(null)
 const windowMode = ref<WindowModeTexts | null>(null)
 const isTrayHintVisible = ref(false)
 const PAGES = [
-  { value: 'dashboard', label: 'Tableau de bord' },
-  { value: 'settings', label: 'Réglages' },
+  { value: 'dashboard', labelKey: 'ui-dashboard' },
+  { value: 'settings', labelKey: 'ui-settings' },
 ] as const
 const page = ref<(typeof PAGES)[number]['value']>('dashboard')
 const requestedTest = ref<ProfileChoice | null>(null)
@@ -88,7 +90,7 @@ const loadVersion = async (): Promise<void> => {
     version.value = (await client.readAppInfo()).version
   } catch (error) {
     console.error('Reading the app version failed', error)
-    version.value = 'inconnue'
+    version.value = say('ui-version-unknown')
   }
 }
 
@@ -124,8 +126,8 @@ onUnmounted(() => {
     </aside>
     <p v-if="historyNotice" class="hint" data-history-notice>{{ historyNotice }}</p>
     <header class="titlebar">
-      <h1>Qualité de connexion</h1>
-      <nav class="pages" aria-label="Pages">
+      <h1>{{ say('ui-app-title') }}</h1>
+      <nav class="pages" :aria-label="say('ui-pages')">
         <button
           v-for="entry in PAGES"
           :key="entry.value"
@@ -134,14 +136,14 @@ onUnmounted(() => {
           :data-page="entry.value"
           @click="page = entry.value"
         >
-          {{ entry.label }}
+          {{ say(entry.labelKey) }}
         </button>
       </nav>
     </header>
     <DashboardView v-if="page === 'dashboard'" @open-settings="page = 'settings'" />
     <SettingsView v-else />
     <footer class="foot">
-      <span>Version {{ version }}</span>
+      <span>{{ say('ui-version', { version }) }}</span>
       <button v-if="windowMode" type="button" class="link" data-quit @click="quitApp">
         {{ windowMode.quitLabel }}
       </button>

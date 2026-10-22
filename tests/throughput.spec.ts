@@ -2,16 +2,16 @@ import { faker } from '@faker-js/faker'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import ThroughputSection from '../src/components/ThroughputSection.vue'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../src/services/network-quality-client'
 import {
   InMemoryNetworkQualityClient,
   createThroughputPanel,
   createThroughputRow,
+  createWindowProvisions,
 } from './fakes/in-memory-network-quality-client'
 
 async function mountSection(client: InMemoryNetworkQualityClient) {
   const wrapper = mount(ThroughputSection, {
-    global: { provide: { [NETWORK_QUALITY_CLIENT_KEY as symbol]: client } },
+    global: { provide: createWindowProvisions(client) },
   })
   await flushPromises()
   return wrapper

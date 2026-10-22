@@ -3,7 +3,9 @@ import { createApp } from 'vue'
 import App from '../../src/App.vue'
 import '../../src/styles/tokens.css'
 import type { DashboardSummaryDisplay, DisplayState, EvolutionDisplay, SeriesDisplay } from '../../src/bindings'
+import { INTERFACE_TEXTS_KEY } from '../../src/composables/interface-texts'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../../src/services/network-quality-client'
+import interfaceTexts from '../fakes/interface-texts.json'
 import { InMemoryNetworkQualityClient } from '../fakes/in-memory-network-quality-client'
 import { NBSP, connectionScenarios } from './connection-scenarios'
 
@@ -178,4 +180,4 @@ if (scenario === 'first') {
   client.setEvolution(evolution)
 }
 client.warnBeforeThroughputTests(`Connexion limitée${NBSP}: ce test consomme jusqu'à 155,8${NBSP}Mo.`)
-createApp(App).provide(NETWORK_QUALITY_CLIENT_KEY, client).mount('#app')
+createApp(App).provide(NETWORK_QUALITY_CLIENT_KEY, client).provide(INTERFACE_TEXTS_KEY, interfaceTexts).mount('#app')

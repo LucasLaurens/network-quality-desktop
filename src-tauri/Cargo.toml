@@ -12,6 +12,7 @@ tauri-build = { workspace = true, features = [] }
 application.workspace = true
 domain.workspace = true
 fluent-bundle.workspace = true
+fluent-syntax.workspace = true
 infrastructure.workspace = true
 serde.workspace = true
 specta.workspace = true
@@ -27,6 +28,7 @@ tauri-plugin-single-instance.workspace = true
 tauri-specta.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
 specta-typescript.workspace = true
 
 [features]
