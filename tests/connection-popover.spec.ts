@@ -9,6 +9,8 @@ import {
   createMetricDisplay,
   createPathDisplay,
   createSegmentDisplay,
+  createThroughputPanel,
+  createThroughputRow,
 } from './fakes/in-memory-network-quality-client'
 
 async function mountPopover(client: InMemoryNetworkQualityClient) {
@@ -233,5 +235,93 @@ describe('ConnectionPopover', () => {
 
     // Assert
     expect(client.listenerCount).toBe(0)
+  })
+
+  it('points to the settings while the throughput tests are not allowed', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: false }))
+    const wrapper = await mountPopover(client)
+
+    // Act
+    await wrapper.get('[data-open-settings]').trigger('click')
+
+    // Assert
+    expect(client.settingsOpenings).toBe(1)
+    expect(wrapper.find('[data-run="quick"]').exists()).toBe(false)
+  })
+
+  it('shows the last test and runs a new one on a click', async () => {
+    // Arrange
+    const last = createThroughputRow()
+    const client = new InMemoryNetworkQualityClient()
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: true, tests: [last] }))
+    const wrapper = await mountPopover(client)
+    const shownBefore = wrapper.get('[data-last-test]').text()
+
+    // Act
+    await wrapper.get('[data-run="quick"]').trigger('click')
+    await flushPromises()
+
+    // Assert
+    expect(shownBefore).toContain(`réception ${last.download}`)
+    expect(shownBefore).toContain(`envoi ${last.upload}`)
+    expect(client.throughputRuns).toEqual(['quick'])
+    expect(wrapper.get('[data-last-test]').text()).toContain(client.readNextThroughputRow().download)
+  })
+
+  it('asks first where data counts, as the dashboard does', async () => {
+    // Arrange
+    const warning = faker.lorem.sentence()
+    const client = new InMemoryNetworkQualityClient()
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: true }))
+    client.warnBeforeThroughputTests(warning)
+    const wrapper = await mountPopover(client)
+    await wrapper.get('[data-run="full"]').trigger('click')
+    await flushPromises()
+
+    // Act
+    await wrapper.get('[data-confirm]').trigger('click')
+    await flushPromises()
+
+    // Assert
+    expect(client.throughputRuns).toEqual(['full'])
+  })
+
+  it('reads the tests again each time it comes back, as the setting may have changed', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: false }))
+    const wrapper = await mountPopover(client)
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: true }))
+
+    // Act
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.find('[data-run="quick"]').exists()).toBe(true)
+  })
+
+  it('shows the running test, blocks a second one, and says why a test did not run', async () => {
+    // Arrange
+    const refusal = faker.lorem.sentence()
+    const client = new InMemoryNetworkQualityClient()
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: true }))
+    client.holdThroughputTests()
+    const wrapper = await mountPopover(client)
+    await wrapper.get('[data-run="quick"]').trigger('click')
+    const busyLabel = wrapper.get('[data-run="quick"]').text()
+    const isFullBlocked = wrapper.get('[data-run="full"]').attributes('disabled') !== undefined
+    client.refuseThroughputTests(refusal)
+
+    // Act
+    client.finishThroughputTest()
+    await flushPromises()
+
+    // Assert
+    expect(busyLabel).toBe('Test en cours…')
+    expect(isFullBlocked).toBe(true)
+    expect(wrapper.get('[data-refused]').text()).toBe(refusal)
   })
 })

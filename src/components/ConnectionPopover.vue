@@ -4,6 +4,7 @@ import { useConnectionDisplay } from '../composables/use-connection-display'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import ConnectionPath from './ConnectionPath.vue'
 import MetricGauge from './MetricGauge.vue'
+import PopoverThroughput from './PopoverThroughput.vue'
 import StateShape from './StateShape.vue'
 
 const client = inject(NETWORK_QUALITY_CLIENT_KEY)
@@ -70,6 +71,7 @@ const openDashboard = async (): Promise<void> => {
       </li>
     </ul>
 
+    <PopoverThroughput />
     <button type="button" class="primary" data-primary @click="openDashboard">{{ display.openDashboardLabel }}</button>
   </main>
 </template>

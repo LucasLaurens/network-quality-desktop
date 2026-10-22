@@ -101,6 +101,9 @@ connection-limited = { $connection }, connexion limitée
 ## Menu
 
 menu-quit = Quitter
+menu-settings = Réglages…
+menu-quick-test = Test rapide
+menu-full-test = Test complet
 menu-edit = Édition
 menu-undo = Annuler
 menu-redo = Rétablir

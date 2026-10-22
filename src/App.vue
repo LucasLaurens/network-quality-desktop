@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { inject, onMounted, ref } from 'vue'
-import type { WindowModeTexts } from './bindings'
+import { inject, onMounted, onUnmounted, provide, ref } from 'vue'
+import type { DashboardRequested, ProfileChoice, WindowModeTexts } from './bindings'
 import DashboardView from './components/DashboardView.vue'
 import SettingsView from './components/SettingsView.vue'
+import { REQUESTED_TEST_KEY } from './composables/use-throughput-test'
 import { NETWORK_QUALITY_CLIENT_KEY } from './services/network-quality-client'
 
 // Remembered in the webview's own storage: a convenience, losing it only shows the note again.
@@ -20,6 +21,19 @@ const PAGES = [
   { value: 'settings', label: 'Réglages' },
 ] as const
 const page = ref<(typeof PAGES)[number]['value']>('dashboard')
+const requestedTest = ref<ProfileChoice | null>(null)
+provide(REQUESTED_TEST_KEY, requestedTest)
+let stopListening = (): void => undefined
+
+// The tray menu and the popover ask for a page, or for a test the dashboard runs. O(1).
+const followRequest = (request: DashboardRequested): void => {
+  if (request.kind === 'settings') {
+    page.value = 'settings'
+    return
+  }
+  page.value = 'dashboard'
+  requestedTest.value = request.profile
+}
 
 const isTrayHintDismissed = (): boolean => {
   try {
@@ -72,8 +86,20 @@ const loadVersion = async (): Promise<void> => {
   }
 }
 
+const listenRequests = async (): Promise<void> => {
+  try {
+    stopListening = await client.listenDashboardRequests(followRequest)
+  } catch (error) {
+    console.error('Listening to the tray menu failed', error)
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([loadWindowMode(), loadHistoryNotice(), loadVersion()])
+  await Promise.all([listenRequests(), loadWindowMode(), loadHistoryNotice(), loadVersion()])
+})
+
+onUnmounted(() => {
+  stopListening()
 })
 </script>
 

@@ -34,7 +34,9 @@ use crate::throughput_display::{
 };
 use crate::throughput_lab::{LabRefusal, ThroughputLab};
 use crate::traffic_store::TrafficStore;
-use crate::windows::{POPOVER_WINDOW, report_failure, show_dashboard};
+use crate::windows::{
+    DashboardRequested, POPOVER_WINDOW, report_failure, request_from_dashboard, show_dashboard,
+};
 
 /// Identity of the running build, shown in the window footer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -75,6 +77,18 @@ pub fn read_connection_display(store: State<'_, DisplayStore>) -> ConnectionDisp
 pub fn open_dashboard(app: AppHandle) {
     close_popover(app.clone());
     show_dashboard(&app);
+}
+
+/// Opens the settings page of the dashboard and closes the popover.
+#[tauri::command]
+#[specta::specta]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
+pub fn open_settings(app: AppHandle) {
+    close_popover(app.clone());
+    request_from_dashboard(&app, DashboardRequested::Settings);
 }
 
 /// Closes the popover from the keyboard (Escape).

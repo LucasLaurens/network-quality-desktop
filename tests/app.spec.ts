@@ -169,4 +169,34 @@ describe('App', () => {
     // Assert
     expect(wrapper.find('#settings-title').exists()).toBe(true)
   })
+
+  it('opens the settings page when the tray menu asks for it', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountApp(client)
+
+    // Act
+    client.sendDashboardRequest({ kind: 'settings' })
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.find('#settings-title').exists()).toBe(true)
+  })
+
+  it('runs on the dashboard the test the tray menu asked for, even from the settings page', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    client.setThroughputPanel(createThroughputPanel({ isAllowed: true }))
+    const wrapper = await mountApp(client)
+    client.sendDashboardRequest({ kind: 'settings' })
+    await flushPromises()
+
+    // Act
+    client.sendDashboardRequest({ kind: 'throughputTest', profile: 'full' })
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.find('#settings-title').exists()).toBe(false)
+    expect(client.throughputRuns).toEqual(['full'])
+  })
 })

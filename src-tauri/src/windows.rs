@@ -3,10 +3,23 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use serde::Serialize;
+use specta::Type;
 use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 use tauri_plugin_positioner::{Position, WindowExt};
+use tauri_specta::Event;
 
 use crate::shell_mode::{CloseAction, ShellMode};
+use crate::throughput_display::ProfileChoice;
+
+/// What the tray menu or the popover asks the dashboard to do once shown: it alone can ask for a
+/// confirmation, show a test running and keep its result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type, Event)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum DashboardRequested {
+    Settings,
+    ThroughputTest { profile: ProfileChoice },
+}
 
 pub const MAIN_WINDOW: &str = "main";
 pub const POPOVER_WINDOW: &str = "popover";
@@ -112,6 +125,14 @@ pub fn show_dashboard(app: &AppHandle) {
                 .and_then(|()| main.set_focus()),
         ),
         None => eprintln!("The dashboard window is missing"),
+    }
+}
+
+/// Shows the dashboard, then hands it the request. O(1).
+pub fn request_from_dashboard(app: &AppHandle, request: DashboardRequested) {
+    show_dashboard(app);
+    if let Err(error) = request.emit_to(app, MAIN_WINDOW) {
+        eprintln!("Asking the dashboard failed: {error}");
     }
 }
 

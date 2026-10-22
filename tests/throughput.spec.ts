@@ -119,4 +119,19 @@ describe('ThroughputSection', () => {
     expect(wrapper.get('[data-refused]').text()).toBe(refusal)
     expect(wrapper.get('[data-run="quick"]').attributes('disabled')).toBeUndefined()
   })
+
+  it('reads the tests again when the window comes back, after a test run elsewhere', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = await mountSection(client)
+    const newer = createThroughputRow()
+    client.setThroughputPanel(createThroughputPanel({ tests: [newer] }))
+
+    // Act
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.get('[data-test-row]').text()).toContain(newer.download)
+  })
 })

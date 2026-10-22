@@ -2,6 +2,7 @@ import type { InjectionKey } from 'vue'
 import type {
   AppInfo,
   ConnectionDisplay,
+  DashboardRequested,
   DashboardSummaryDisplay,
   EvolutionDisplay,
   LineDetails,
@@ -22,6 +23,10 @@ export interface NetworkQualityClient {
   /** Calls `onChange` with every new display; resolves to the function that stops listening. */
   listenConnectionDisplay(onChange: (display: ConnectionDisplay) => void): Promise<() => void>
   openDashboard(): Promise<void>
+  /** Opens the settings page of the dashboard and closes the popover. */
+  openSettings(): Promise<void>
+  /** Calls `onRequest` when the tray menu or the popover asks the dashboard for something. */
+  listenDashboardRequests(onRequest: (request: DashboardRequested) => void): Promise<() => void>
   closePopover(): Promise<void>
   /** The note shown when the desktop has no tray; `null` when the dot is visible. */
   readWindowModeTexts(): Promise<WindowModeTexts | null>
