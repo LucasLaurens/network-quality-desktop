@@ -33,6 +33,34 @@ describe('findMisnamedFunctions', () => {
     expect(misnamed).toEqual(['shippingCity', 'candidates', 'rows'])
   })
 
+  it('follows a function exported by name, and the function-typed members of an interface', () => {
+    // Arrange
+    const source = `
+      function priceList() {}
+      function readPrices() {}
+      export { priceList, readPrices }
+      export interface Port { readValue: () => string; valueLabel: () => string; label: string }
+    `
+
+    // Act
+    const misnamed = find(source)
+
+    // Assert
+    expect(misnamed).toEqual(['priceList', 'valueLabel'])
+  })
+
+  it('reads arrow functions held by a class, and skips the underscore of a private name', () => {
+    // Arrange
+    const source =
+      'export class Store { totalSize = () => 0; readSize = () => 0; _readCache(): void {} _cache(): void {} }'
+
+    // Act
+    const misnamed = find(source)
+
+    // Assert
+    expect(misnamed).toEqual(['totalSize', '_cache'])
+  })
+
   it('leaves what is not exported, constructors, conversions and predicates alone', () => {
     // Arrange
     const source = `

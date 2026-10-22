@@ -25,14 +25,13 @@ Le format et le lint ne regardent que les fichiers du projet : les fichiers igno
 
 ## Règles encodées
 
-Les règles de code décidées sont vérifiées par la machine :
+Les règles de code décidées sont vérifiées par la machine. Chaque vérification a été vue échouer sur un cas fautif ajouté exprès, puis passer une fois le cas retiré : un nom de fonction fautif (`total_price` en Rust, `totalPrice` en TypeScript), une PR de code sans docs (tests de la règle), un seuil de couverture au-dessus de la valeur réelle, une licence retirée de `deny.toml`.
 
-- **Noms de fonctions** : une fonction est une action, son nom commence par un verbe. La liste des verbes permis est unique, `scripts/method-verbs.txt` (un verbe par ligne) ; on y ajoute un verbe seulement s'il dit vrai de ce que fait la fonction.
-  - Rust : la crate `conventions` parcourt chaque source du workspace avec `syn` (test `names_every_function_with_a_verb`, lancé par `pnpm test:back`). Sont vérifiées les fonctions libres, les méthodes propres et les méthodes déclarées dans un trait. Exemptions : `new`, `main`, les préfixes `from_`, `to_`, `is_`, `has_`, les méthodes d'une implémentation de trait (le trait impose le nom) et les tests (`#[test]`, `#[tokio::test]`), dont le nom se lit comme une phrase.
-  - TypeScript : `scripts/check-method-names.mjs` lit avec l'API du compilateur les fonctions exportées, les méthodes des classes et des interfaces exportées de `src/`, `scripts/` et `tests/fakes/` (lancé par `pnpm lint`). Exemptions : constructeurs, accesseurs `get`, préfixes `from`, `to`, `is`, `has` ; `src/bindings.ts`, généré à partir des commandes Rust, n'est pas relu.
-  - Chaque vérification a été vue échouer sur un nom fautif ajouté exprès (`total_price`, `totalPrice`), puis passer une fois le nom retiré.
-- **Documentation** : une PR qui touche `crates/`, `src/`, `src-tauri/`, `scripts/` ou `tests/` sans toucher `docs/` ni `README.md` échoue au contrôle « Documentation à jour » (`.github/workflows/docs.yml`, règle dans `scripts/docs-check.mjs`), sauf si elle porte le label `sans-doc`. Le contrôle est relancé quand on pose ou retire un label.
-- **Couverture** : `pnpm coverage:back` (`cargo-llvm-cov`) échoue sous 90 % des lignes de `domain` et 80 % de celles d'`application`. Au moment de l'écrire : 91,3 % et 98,3 %.
+- **Noms de fonctions** : une fonction est une action, son nom commence par un verbe. Les premiers mots permis vivent dans un seul fichier, `scripts/method-verbs.txt` (un mot par ligne) : les verbes, les idiomes `from`, `to`, `is`, `has`, et `get`, réservé à un accesseur sur un champ déjà en main (règle relue en revue, la machine ne peut pas la vérifier). On ajoute un verbe seulement s'il dit vrai de ce que fait la fonction.
+  - Rust : la crate `conventions` parcourt chaque source du workspace avec `syn` (test `names_every_function_with_a_verb`, lancé par `pnpm test:back`). Sont vérifiées les fonctions libres, les méthodes propres et les méthodes déclarées dans un trait, privées comprises. Exemptions : `new`, `main`, les méthodes d'une implémentation de trait (le trait impose le nom) et les tests (`#[test]`, `#[tokio::test]`), dont le nom se lit comme une phrase.
+  - TypeScript : `scripts/check-method-names.mjs` lit avec l'API du compilateur ce que chaque module exporte, dans `src/`, `scripts/`, `tests/fakes/` et `tests/preview/` : fonctions (y compris par `export { … }`), constantes qui valent une fonction, méthodes et propriétés-fonctions des classes et des interfaces (lancé par `pnpm lint`). Comme en Rust, un `_` en tête est ignoré. Exemptions : constructeurs, accesseurs `get`. Le ticket demande les fonctions exportées : les fonctions locales et le `<script setup>` des `.vue`, qui n'exporte rien, ne sont pas relus. `src/bindings.ts`, généré à partir des commandes Rust, non plus.
+- **Documentation** : une PR qui touche `crates/`, `src/`, `src-tauri/`, `scripts/` ou `tests/` sans toucher `docs/` ni `README.md` échoue au contrôle « Documentation à jour » (`.github/workflows/docs.yml`, règle dans `scripts/docs-check.mjs`), sauf si elle porte le label `sans-doc`. Le contrôle est relancé quand on pose ou retire un label et quand la branche de base change. Les fichiers de configuration (`Cargo.toml`, `package.json`, workflows) ne comptent pas comme du code.
+- **Couverture** : `pnpm coverage:back` (`scripts/coverage-back.mjs`, `cargo-llvm-cov`) échoue sous 90 % des lignes de `domain` et 80 % de celles d'`application`, sans compter les faux et le contrat partagé des dépôts (`test_support.rs`, `repository_contract.rs`).
 - **Dépendances** : `pnpm deps:audit` lance `cargo deny check advisories licenses` (`deny.toml` : licences permissives et MPL-2.0 permises ; toute faille bloque, un crate abandonné seulement si l'app en dépend directement, car Tauri tire sous Linux des liaisons GTK abandonnées qu'on ne peut pas remplacer) puis `pnpm audit`.
 - **Mutants** : `pnpm mutants:domain` (`cargo-mutants`) modifie le domaine pour vérifier qu'un test échoue à chaque fois ; environ 500 mutants, donc lancé à la main. Un premier passage sur `access.rs` a révélé trois variantes inutiles de `WanAccessType` et un test manquant sur la médiane, corrigés.
 
@@ -48,7 +47,9 @@ Un poste peut ajouter ses propres contrôles dans `lefthook-local.yml`, non vers
 
 ## Intégration continue
 
-- `.github/workflows/ci.yml` lance `pnpm verify` sur Ubuntu 22.04, macOS et Windows, à chaque PR et à chaque push sur `main`, et la couverture (`pnpm coverage:back`) sur Ubuntu.
+- `.github/workflows/ci.yml` lance `pnpm verify` sur Ubuntu 22.04, macOS et Windows, à chaque PR et à chaque push sur `main`, et la couverture sur Ubuntu.
 - `.github/workflows/docs.yml` vérifie qu'une PR qui change le code change aussi la documentation.
-- `.github/workflows/dependencies.yml` lance `pnpm deps:audit` chaque lundi à 6 h UTC, et à la demande.
-- `.github/workflows/mutants.yml` lance `pnpm mutants:domain` à la demande (onglet Actions).
+- `.github/workflows/dependencies.yml` vérifie licences et failles chaque lundi à 6 h UTC, à la demande, et sur toute PR qui change `Cargo.lock`, `pnpm-lock.yaml` ou `deny.toml`.
+- `.github/workflows/mutants.yml` lance les mutants du domaine à la demande (onglet Actions).
+- Ces trois contrôles lancent les outils directement : un script pnpm installerait d'abord toutes les dépendances du front.
+- La branche `main` n'est pas protégée : GitHub ne le permet sur un dépôt privé qu'avec l'offre Pro. Les contrôles échouent visiblement mais n'empêchent pas une fusion.

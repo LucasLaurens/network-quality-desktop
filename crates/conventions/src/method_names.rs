@@ -1,5 +1,5 @@
 //! A function is an action: its name starts with a verb from `scripts/method-verbs.txt`, the list
-//! the TypeScript check reads too. Exempt: `new`, `main`, the `from_`, `to_`, `is_` and `has_` idioms,
+//! the TypeScript check reads too, with the `from_`, `to_`, `is_` and `has_` idioms. Exempt: `new`, `main`,
 //! methods whose name a trait imposes, and tests (their names read as sentences).
 
 use std::collections::HashSet;
@@ -11,7 +11,6 @@ use syn::{Attribute, ImplItemFn, ItemFn, ItemImpl, TraitItemFn};
 const VERBS: &str = include_str!("../../../scripts/method-verbs.txt");
 /// `main` is the entry point Rust imposes.
 const EXEMPT_NAMES: [&str; 2] = ["new", "main"];
-const EXEMPT_PREFIXES: [&str; 4] = ["from", "to", "is", "has"];
 const TEST_ATTRIBUTES: [&str; 2] = ["test", "tokio::test"];
 
 /// One verb a line; blank lines and `#` comments are skipped. Read once.
@@ -43,6 +42,7 @@ struct MisnamedFinder {
 }
 
 impl MisnamedFinder {
+    /// O(a) for a attributes.
     fn check(&mut self, name: String, attributes: &[Attribute]) {
         if is_test(attributes) || Self::is_well_named(&name) {
             return;
@@ -57,9 +57,7 @@ impl MisnamedFinder {
             .split('_')
             .next()
             .unwrap_or_default();
-        EXEMPT_NAMES.contains(&name)
-            || EXEMPT_PREFIXES.contains(&first_word)
-            || ALLOWED_VERBS.contains(first_word)
+        EXEMPT_NAMES.contains(&name) || ALLOWED_VERBS.contains(first_word)
     }
 }
 

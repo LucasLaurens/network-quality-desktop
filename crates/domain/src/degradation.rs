@@ -70,7 +70,7 @@ mod tests {
     const UNSTABLE: Verdict = Verdict::Graded(Grade::Unstable);
     const DEGRADED: Verdict = Verdict::Graded(Grade::Degraded);
 
-    fn to_timestamp(seconds: u64) -> Timestamp {
+    fn create_timestamp(seconds: u64) -> Timestamp {
         Timestamp::from_elapsed(Duration::from_secs(seconds))
     }
 
@@ -78,7 +78,7 @@ mod tests {
     fn observe_all(watch: &mut DegradationWatch, start: u64, shown: &[Verdict]) -> Vec<bool> {
         (start..)
             .zip(shown)
-            .map(|(second, verdict)| watch.observe(*verdict, to_timestamp(second)))
+            .map(|(second, verdict)| watch.observe(*verdict, create_timestamp(second)))
             .collect()
     }
 
@@ -122,7 +122,7 @@ mod tests {
     fn announces_a_cut_once_it_has_lasted_ten_seconds() {
         // Arrange
         let mut watch = DegradationWatch::default();
-        watch.observe(SOLID, to_timestamp(0));
+        watch.observe(SOLID, create_timestamp(0));
 
         // Act
         // Offline shows after 5 s without any server: 5 s more make 10 s of cut.
@@ -141,7 +141,7 @@ mod tests {
     fn announces_a_long_cut_even_right_after_measuring_started_over() {
         // Arrange
         let mut watch = DegradationWatch::default();
-        watch.observe(Verdict::Measuring, to_timestamp(0));
+        watch.observe(Verdict::Measuring, create_timestamp(0));
 
         // Act
         let answers = observe_all(&mut watch, 1, &[Verdict::Offline; 6]);
@@ -154,7 +154,7 @@ mod tests {
     fn says_nothing_of_a_short_cut() {
         // Arrange
         let mut watch = DegradationWatch::default();
-        watch.observe(SOLID, to_timestamp(0));
+        watch.observe(SOLID, create_timestamp(0));
 
         // Act
         let answers = observe_all(&mut watch, 1, &[Verdict::Offline; 5]);

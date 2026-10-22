@@ -21,7 +21,7 @@
     "test": "pnpm test:front && pnpm test:back",
     "test:front": "vitest run",
     "test:back": "cargo nextest run --workspace && cargo test --workspace --doc",
-    "coverage:back": "cargo llvm-cov -p domain --summary-only --fail-under-lines 90 && cargo llvm-cov -p application --all-features --summary-only --fail-under-lines 80",
+    "coverage:back": "node scripts/coverage-back.mjs",
     "deps:audit": "cargo deny check advisories licenses && pnpm audit",
     "mutants:domain": "cargo mutants -p domain",
     "bindings:check": "cargo test -p app --lib exports_typescript_bindings && git diff --exit-code -- src/bindings.ts",

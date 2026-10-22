@@ -187,7 +187,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     let route_reference = list_default_targets()
         .first()
         .expect("the default targets are listed")
-        .to_address();
+        .get_address();
     let connection_store = ConnectionStore::default();
     app.manage(connection_store.clone());
     app.manage(traffic_store::TrafficStore::start(

@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findMisnamedFunctions, readAllowedVerbs } from './method-names.mjs'
 
-const FOLDERS = ['src', 'scripts', 'tests/fakes']
+const FOLDERS = ['src', 'scripts', 'tests/fakes', 'tests/preview']
 // Written by tauri-specta: its names follow the Rust commands, checked on the Rust side.
 const GENERATED = new Set([join('src', 'bindings.ts')])
 const SOURCE = /\.(ts|mjs)$/

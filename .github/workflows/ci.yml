@@ -49,7 +49,6 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
@@ -58,5 +57,5 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
-      # domain ≥ 90 % and application ≥ 80 % of lines, defined once in package.json.
-      - run: pnpm coverage:back
+      # The gates live in the script; called directly, as pnpm would install everything first.
+      - run: node scripts/coverage-back.mjs

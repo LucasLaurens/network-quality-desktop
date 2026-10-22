@@ -5,6 +5,9 @@ on:
     # Every Monday at 06:00 UTC.
     - cron: '0 6 * * 1'
   workflow_dispatch:
+  # A new dependency is checked on its pull request, not the next Monday.
+  pull_request:
+    paths: [Cargo.lock, pnpm-lock.yaml, deny.toml]
 
 jobs:
   audit:
@@ -19,4 +22,6 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny
-      - run: pnpm deps:audit
+      # Called directly: a pnpm script would install everything first.
+      - run: cargo deny check advisories licenses
+      - run: pnpm audit

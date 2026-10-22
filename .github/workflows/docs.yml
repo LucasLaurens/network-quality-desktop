@@ -1,9 +1,10 @@
 name: Documentation
 
-# Read again when a label is added or removed: « sans-doc » lifts the check.
+# Read again when a label is added or removed (« sans-doc » lifts the check), and when the base
+# branch changes.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 jobs:
   docs:

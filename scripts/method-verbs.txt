@@ -1,5 +1,16 @@
 # Allowed first words of a function name, shared by the Rust and TypeScript checks.
-# One verb a line. Add a verb only when it is true of what the function does.
+# One word a line. Add a verb only when it is true of what the function does.
+
+# Idioms that read as actions: named constructors, conversions, predicates.
+from
+has
+is
+to
+
+# A plain accessor over a field already held, never in front of a query or a computation.
+get
+
+# Verbs.
 accept
 add
 advance
