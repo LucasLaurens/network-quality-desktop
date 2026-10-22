@@ -15,6 +15,8 @@ const POPOVER = findWindow('popover')
 /** Half a pixel either way: sub-pixel layout, not a misalignment. */
 const TOLERANCE = 0.5
 const POPOVER_SCENARIOS = ['degraded', 'offline', 'undetermined']
+/** A maximised window on a common desktop screen. */
+const FULL_SCREEN = { width: 1920, height: 1080 }
 
 /**
  * Every element that runs past the window's right edge unless a box within the window clips it,
@@ -52,6 +54,21 @@ function findOverflows(page: Page): Promise<string[]> {
 /** Whether the page needs scrolling down to show everything. */
 function isTallerThanTheWindow(page: Page): Promise<boolean> {
   return page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight)
+}
+
+/** The right edges of the elements `selector` finds. O(e). */
+function readRightEdges(page: Page, selector: string): Promise<number[]> {
+  return page
+    .locator(selector)
+    .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().right))
+}
+
+/** The empty space left and right of the window's column. */
+function readSideMargins(page: Page): Promise<[number, number]> {
+  return page.locator('.window').evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    return [box.left, window.innerWidth - box.right]
+  })
 }
 
 /** Opens every folded part (help, technical details, chart values): folded, it measures nothing. */
@@ -112,6 +129,7 @@ for (const scenario of POPOVER_SCENARIOS) {
 }
 
 for (const size of [
+  FULL_SCREEN,
   { width: MAIN.width, height: MAIN.height },
   { width: MAIN.minWidth ?? MAIN.width, height: MAIN.minHeight ?? MAIN.height },
 ]) {
@@ -127,6 +145,8 @@ for (const size of [
     // Assert
     expect(await findOverflows(page)).toEqual([])
     expectAligned(await readLeftEdges(page, '.dashboard > section, .section-head h2'))
+    expectAligned(await readRightEdges(page, '.pages, .dashboard > section'))
+    expectAligned(await readSideMargins(page))
     await expectTheme(page, String(testInfo.project.use.colorScheme))
   })
 
@@ -143,6 +163,8 @@ for (const size of [
     expect(await findOverflows(page)).toEqual([])
     expectAligned(await readLeftEdges(page, '.settings h3'))
     expectAligned(await readLeftEdges(page, '.setting > :first-child'))
+    expectAligned(await readRightEdges(page, '.pages, .settings .rows'))
+    expectAligned(await readSideMargins(page))
     await expectTheme(page, String(testInfo.project.use.colorScheme))
   })
 }
