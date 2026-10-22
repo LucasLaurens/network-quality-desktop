@@ -31,8 +31,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use application::{
-    Clock, ColorSchemeReader, EngineMessage, EnginePorts, MeasurementEngine, NetworkChangeWatcher,
-    PowerEventSource, list_default_targets, list_targets,
+    Clock, ColorSchemeReader, EngineMessage, EnginePorts, MeasurementEngine, list_default_targets,
+    list_targets,
 };
 use display::ConnectionDisplay;
 use domain::{ColorScheme, Verdict};
@@ -220,12 +220,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
         list_targets(settings.servers),
     );
     engine.apply_settings(settings);
-    let change_sender = sender.clone();
-    InterfaceChangeWatcher.watch(move || {
-        // Dropped when the inbox is full: the periodic reading still catches the change within 10 s.
-        let _ = change_sender.try_send(EngineMessage::NetworkChanged);
-    });
-    SystemPowerEventSource.watch(move |event| engine_inbox.relay_power_event(event));
+    engine_inbox.follow_system_events(InterfaceChangeWatcher, SystemPowerEventSource);
     keep_measuring_in_background();
     tauri::async_runtime::spawn(engine.run(inbox, urgent));
     tauri::async_runtime::spawn(send_ticks(sender));

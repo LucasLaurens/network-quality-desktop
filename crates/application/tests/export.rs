@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use application::test_support::InMemoryMeasurementRepository;
+use application::test_support::{InMemoryMeasurementRepository, generate_network_name};
 use application::{
     EventKind, ExportPeriod, HistoryEvent, MINUTE_RETENTION, MeasurementRepository, NetworkKey,
     ThroughputRecord, encode_csv_line, export_events, export_measures, export_throughput_tests,
@@ -16,7 +16,11 @@ use domain::{
 /// 2023-11-14 22:13:20 UTC.
 const SOME_UTC: i64 = 1_700_000_000;
 
-fn create_network(name: &str) -> NetworkKey {
+fn create_network() -> NetworkKey {
+    create_network_named(&generate_network_name())
+}
+
+fn create_network_named(name: &str) -> NetworkKey {
     NetworkKey {
         gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, 0x41]),
         kind: ConnectionKind::WiFi,
@@ -73,8 +77,10 @@ fn writes_times_in_utc_iso_8601() {
 fn exports_the_measures_by_network_name_without_mac_nor_histogram() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
+    let network = create_network();
+    let name = network.name.clone().expect("a named network");
     repository
-        .add_minute(&create_network("Box"), SOME_UTC - 20, &create_minute())
+        .add_minute(&network, SOME_UTC - 20, &create_minute())
         .expect("a minute");
 
     // Act
@@ -85,7 +91,7 @@ fn exports_the_measures_by_network_name_without_mac_nor_histogram() {
     assert!(lines[0].starts_with(
         "start_utc,granularity,network,connection_type,latency_p50_ms,latency_p90_ms"
     ));
-    assert!(lines[1].starts_with("2023-11-14T22:13:00Z,minute,Box,wifi,"));
+    assert!(lines[1].starts_with(&format!("2023-11-14T22:13:00Z,minute,{name},wifi,")));
     assert!(!measures.contains("54:9b"));
     assert_eq!(lines.len(), 3, "a header, one row and the last line break");
 }
@@ -94,7 +100,8 @@ fn exports_the_measures_by_network_name_without_mac_nor_histogram() {
 fn exports_events_and_throughput_tests_in_their_own_files() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let network = create_network("Bureau");
+    let network = create_network();
+    let name = network.name.clone().expect("a named network");
     repository
         .record_event(&HistoryEvent {
             utc: SOME_UTC,
@@ -121,8 +128,12 @@ fn exports_events_and_throughput_tests_in_their_own_files() {
     let [_, events, tests] = export(&repository, ExportPeriod::All);
 
     // Assert
-    assert!(events.contains("2023-11-14T22:13:20Z,Bureau,wifi,offline_started\r\n"));
-    assert!(tests.contains("2023-11-14T22:13:20Z,Bureau,wifi,quick,85000,,46,4200000,3100\r\n"));
+    assert!(events.contains(&format!(
+        "2023-11-14T22:13:20Z,{name},wifi,offline_started\r\n"
+    )));
+    assert!(tests.contains(&format!(
+        "2023-11-14T22:13:20Z,{name},wifi,quick,85000,,46,4200000,3100\r\n"
+    )));
 }
 
 #[test]
@@ -131,7 +142,7 @@ fn leaves_out_what_is_older_than_the_period() {
     let mut repository = InMemoryMeasurementRepository::default();
     repository
         .add_minute(
-            &create_network("Box"),
+            &create_network(),
             SOME_UTC - 3 * SECONDS_PER_DAY,
             &create_minute(),
         )
@@ -148,7 +159,7 @@ fn leaves_out_what_is_older_than_the_period() {
 fn exports_hours_where_minutes_are_gone_and_never_a_second_twice() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let network = create_network("Box");
+    let network = create_network();
     let recent_hour = SOME_UTC - SOME_UTC % SECONDS_PER_HOUR;
     repository
         .save_hour(
@@ -188,7 +199,7 @@ fn exports_hours_where_minutes_are_gone_and_never_a_second_twice() {
 fn exports_the_hour_where_the_purge_cut_its_minutes() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let network = create_network("Box");
+    let network = create_network();
     let purge_cutoff = SOME_UTC + SECONDS_PER_HOUR - MINUTE_RETENTION.as_secs().cast_signed();
     let cut_hour = Granularity::Hour.find_start(purge_cutoff);
     repository
@@ -217,7 +228,7 @@ fn keeps_a_network_name_from_becoming_a_spreadsheet_formula() {
     let mut repository = InMemoryMeasurementRepository::default();
     repository
         .add_minute(
-            &create_network("=HYPERLINK(\"x\")"),
+            &create_network_named("=HYPERLINK(\"x\")"),
             SOME_UTC - 20,
             &create_minute(),
         )
@@ -235,9 +246,11 @@ fn starts_the_last_month_with_the_whole_hour_it_falls_in() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
     let month_start = SOME_UTC + SECONDS_PER_HOUR - 30 * SECONDS_PER_DAY;
+    let network = create_network();
+    let name = network.name.clone().expect("a named network");
     repository
         .save_hour(
-            &create_network("Box"),
+            &network,
             Granularity::Hour.find_start(month_start),
             &create_minute(),
         )
@@ -247,7 +260,7 @@ fn starts_the_last_month_with_the_whole_hour_it_falls_in() {
     let [measures, ..] = export(&repository, ExportPeriod::LastMonth);
 
     // Assert
-    assert!(measures.contains(",hour,Box,"));
+    assert!(measures.contains(&format!(",hour,{name},")));
 }
 
 #[test]
@@ -255,7 +268,7 @@ fn gives_the_median_beside_the_ninetieth_percentile() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
     repository
-        .add_minute(&create_network("Box"), SOME_UTC - 20, &create_minute())
+        .add_minute(&create_network(), SOME_UTC - 20, &create_minute())
         .expect("a minute");
 
     // Act

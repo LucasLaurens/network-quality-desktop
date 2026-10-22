@@ -32,6 +32,8 @@ make dev
 | `make install`                       | Construit l'app ; sur macOS, la copie dans Applications.            |
 | `make test`                          | Tous les tests (front puis Rust).                                   |
 | `make test-front` / `make test-back` | Tests du front (Vitest) ou de Rust (nextest).                       |
+| `make test-smoke`                    | Les vrais adaptateurs du système (réseau, Wi-Fi, horloge, barre).   |
+| `make test-visual`                   | Mise en page mesurée en clair et sombre (Playwright).               |
 | `make lint`                          | Lint du front (ESLint) et de Rust (rustfmt, clippy).                |
 | `make fmt`                           | Formate tout le code.                                               |
 | `make ci`                            | Rejoue en local toute la barrière de la CI.                         |

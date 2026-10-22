@@ -1,5 +1,5 @@
 # Shortcuts only: every command is defined once, in package.json (works on the three OSes).
-.PHONY: dev build install test test-back test-front lint fmt ci coverage audit mutants release
+.PHONY: dev build install test test-back test-front test-smoke test-visual lint fmt ci coverage audit mutants release
 
 dev:
 	pnpm dev
@@ -18,6 +18,12 @@ test-back:
 
 test-front:
 	pnpm test:front
+
+test-smoke:
+	pnpm test:smoke
+
+test-visual:
+	pnpm test:visual
 
 lint:
 	pnpm lint:all

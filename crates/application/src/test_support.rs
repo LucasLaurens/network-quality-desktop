@@ -6,7 +6,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
+
+use fake::faker::lorem::en::Word;
+use fake::{Fake, Faker};
 
 use domain::{
     Aggregate, BoxLine, ConnectionContext, Direction, GatewayEcho, Granularity, ProbeOutcome,
@@ -16,9 +19,9 @@ use domain::{
 use crate::{
     AccessTechnologyDetector, Clock, ConnectionContextReader, GatewayProbe, HistoryCommand,
     HistoryEvent, HistoryReader, HistoryRecorder, HistoryStream, LatencyProbe,
-    MeasurementRepository, NetworkKey, Notifier, RepositoryError, SettingsRepository,
-    ThroughputFailure, ThroughputProbe, ThroughputRecord, VerdictPresenter, VerdictView,
-    WifiReader,
+    MeasurementRepository, NetworkChangeWatcher, NetworkKey, Notifier, PowerEvent,
+    PowerEventSource, RepositoryError, SettingsRepository, ThroughputFailure, ThroughputProbe,
+    ThroughputRecord, VerdictPresenter, VerdictView, WifiReader,
 };
 
 /// The manual clock's wall-clock start: an arbitrary UTC second, on an hour boundary.
@@ -664,4 +667,93 @@ impl VerdictPresenter for InMemoryVerdictPresenter {
             .unwrap_or_else(PoisonError::into_inner)
             .push(view.clone());
     }
+}
+
+type ChangeListener = Box<dyn FnMut() + Send>;
+type PowerListener = Box<dyn Fn(PowerEvent) + Send + Sync>;
+
+/// A watcher the test fires by hand; clones share the listeners, so the test keeps one.
+#[derive(Clone, Default)]
+pub struct InMemoryNetworkChangeWatcher {
+    listeners: Arc<Mutex<Vec<ChangeListener>>>,
+}
+
+impl InMemoryNetworkChangeWatcher {
+    /// Tells every listener, as the system does on an interface or address change.
+    pub fn report_change(&self) {
+        for listener in self
+            .listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter_mut()
+        {
+            listener();
+        }
+    }
+}
+
+impl NetworkChangeWatcher for InMemoryNetworkChangeWatcher {
+    fn watch(self, on_change: impl FnMut() + Send + 'static) {
+        self.listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(Box::new(on_change));
+    }
+}
+
+/// A power source the test drives by hand; clones share the listeners, so the test keeps one.
+#[derive(Clone, Default)]
+pub struct InMemoryPowerEventSource {
+    listeners: Arc<Mutex<Vec<PowerListener>>>,
+}
+
+impl InMemoryPowerEventSource {
+    /// Tells every listener and returns once they handled it, as the system waits on a sleep.
+    pub fn report(&self, event: PowerEvent) {
+        for listener in self
+            .listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+        {
+            listener(event);
+        }
+    }
+}
+
+impl PowerEventSource for InMemoryPowerEventSource {
+    fn watch(self, on_event: impl Fn(PowerEvent) + Send + Sync + 'static) {
+        self.listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(Box::new(on_event));
+    }
+}
+
+/// A network name, as a box or a phone gives one: data a test needs but does not test.
+#[must_use]
+pub fn generate_network_name() -> String {
+    format!("{}-{:04X}", Word().fake::<String>(), Faker.fake::<u16>())
+}
+
+/// `N` different addresses, for measurement targets or an own server. O(N²): a test asks for a
+/// handful.
+#[must_use]
+pub fn generate_targets<const N: usize>() -> [Target; N] {
+    let mut targets: Vec<Target> = Vec::with_capacity(N);
+    while targets.len() < N {
+        let target = Target::new(IpAddr::V4(generate_address()));
+        if !targets.contains(&target) {
+            targets.push(target);
+        }
+    }
+    targets
+        .try_into()
+        .unwrap_or_else(|_| unreachable!("as many targets as asked"))
+}
+
+/// An address on the local network, a box's for instance.
+#[must_use]
+pub fn generate_address() -> Ipv4Addr {
+    Ipv4Addr::from(Faker.fake::<u32>())
 }

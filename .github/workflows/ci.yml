@@ -17,6 +17,8 @@ jobs:
       matrix:
         os: [ubuntu-22.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # Windows takes about 12 minutes; past an hour, something hangs.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
@@ -40,6 +42,25 @@ jobs:
       # Same gate as `make ci`, defined once in package.json.
       - run: pnpm verify
         shell: bash
+      # The real adapters on this system: probe, connection, Wi-Fi, clock, tray.
+      - run: pnpm test:smoke
+        shell: bash
+
+  visual:
+    name: Mise en page (clair et sombre)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # The preview pages measured in both themes: overflows and alignments.
+      - run: pnpm test:visual
 
   coverage:
     name: Couverture

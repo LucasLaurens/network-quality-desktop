@@ -6,6 +6,7 @@ use std::time::Duration;
 use application::test_support::{
     InMemoryConnection, InMemoryGateway, InMemoryHistoryRecorder, InMemoryNetwork,
     InMemoryNotifier, InMemoryVerdictPresenter, InMemoryWifi, MANUAL_CLOCK_EPOCH, ManualClock,
+    generate_targets,
 };
 use application::{
     CONTEXT_REFRESH_SECONDS, EngineMessage, EnginePorts, EventKind, MeasurementEngine, VerdictView,
@@ -17,9 +18,6 @@ use domain::{
     WifiBand, WifiLink,
 };
 
-// Documentation-only addresses (RFC 5737): the engine must not depend on which targets are used.
-const FIRST_TARGET: &str = "192.0.2.1";
-const SECOND_TARGET: &str = "198.51.100.1";
 const FAST: Duration = Duration::from_millis(20);
 const NEAR_LIMIT: Duration = Duration::from_millis(85);
 const SLOW: Duration = Duration::from_millis(180);
@@ -28,6 +26,10 @@ const VERY_SLOW: Duration = Duration::from_millis(400);
 const WARM_UP: u32 = 10;
 
 struct Harness {
+    /// Generated: the engine must not depend on which targets are used.
+    first_target: Target,
+    second_target: Target,
+    own_server: Target,
     network: InMemoryNetwork,
     clock: ManualClock,
     presenter: InMemoryVerdictPresenter,
@@ -57,7 +59,7 @@ fn create_harness() -> Harness {
     let wifi = InMemoryWifi::default();
     let history = InMemoryHistoryRecorder::default();
     let notifier = InMemoryNotifier::default();
-    let targets = vec![Target::parse(FIRST_TARGET), Target::parse(SECOND_TARGET)];
+    let [first_target, second_target, own_server] = generate_targets();
     let engine = MeasurementEngine::new(
         EnginePorts {
             probe: network.clone(),
@@ -69,9 +71,12 @@ fn create_harness() -> Harness {
             history_recorder: history.clone(),
             notifier: notifier.clone(),
         },
-        targets,
+        vec![first_target, second_target],
     );
     Harness {
+        first_target,
+        second_target,
+        own_server,
         network,
         clock,
         presenter,
@@ -86,10 +91,8 @@ fn create_harness() -> Harness {
 
 impl Harness {
     fn set_every_target(&self, outcome: ProbeOutcome) {
-        self.network
-            .set_outcome(Target::parse(FIRST_TARGET), outcome);
-        self.network
-            .set_outcome(Target::parse(SECOND_TARGET), outcome);
+        self.network.set_outcome(self.first_target, outcome);
+        self.network.set_outcome(self.second_target, outcome);
     }
 
     fn set_latency(&self, round_trip: Duration) {
@@ -180,10 +183,10 @@ async fn uses_the_median_of_the_targets_that_answered() {
     let mut harness = create_harness();
     harness
         .network
-        .set_outcome(Target::parse(FIRST_TARGET), ProbeOutcome::Answered(FAST));
+        .set_outcome(harness.first_target, ProbeOutcome::Answered(FAST));
     harness
         .network
-        .set_outcome(Target::parse(SECOND_TARGET), ProbeOutcome::LostButReachable);
+        .set_outcome(harness.second_target, ProbeOutcome::LostButReachable);
 
     // Act
     harness.run_seconds(WARM_UP).await;
@@ -299,7 +302,7 @@ async fn counts_lost_probes_over_the_last_minute_across_targets() {
     harness.run_seconds(50).await;
     harness
         .network
-        .set_outcome(Target::parse(SECOND_TARGET), ProbeOutcome::LostButReachable);
+        .set_outcome(harness.second_target, ProbeOutcome::LostButReachable);
 
     // Act: 3 lost probes out of 120 sent in the last 60 seconds.
     harness.run_seconds(3).await;
@@ -317,10 +320,10 @@ async fn shows_the_worst_metric_as_the_verdict() {
     let mut harness = create_harness();
     harness
         .network
-        .set_outcome(Target::parse(FIRST_TARGET), ProbeOutcome::Answered(FAST));
+        .set_outcome(harness.first_target, ProbeOutcome::Answered(FAST));
     harness
         .network
-        .set_outcome(Target::parse(SECOND_TARGET), ProbeOutcome::LostButReachable);
+        .set_outcome(harness.second_target, ProbeOutcome::LostButReachable);
 
     // Act: half of the probes are lost while the latency stays low. The loss is graded from 30 s
     // on, then the hysteresis needs 10 more seconds to show the degradation.
@@ -383,10 +386,10 @@ async fn does_not_show_offline_while_a_target_is_reachable_over_tcp() {
     harness.warm_up_with_latency(FAST).await;
     harness
         .network
-        .set_outcome(Target::parse(FIRST_TARGET), ProbeOutcome::Unreachable);
+        .set_outcome(harness.first_target, ProbeOutcome::Unreachable);
     harness
         .network
-        .set_outcome(Target::parse(SECOND_TARGET), ProbeOutcome::LostButReachable);
+        .set_outcome(harness.second_target, ProbeOutcome::LostButReachable);
 
     // Act
     harness.run_seconds(20).await;
@@ -439,7 +442,7 @@ async fn does_not_invent_jitter_when_one_target_drops_packets() {
     let mut harness = create_harness();
     harness
         .network
-        .set_outcome(Target::parse(FIRST_TARGET), ProbeOutcome::Answered(FAST));
+        .set_outcome(harness.first_target, ProbeOutcome::Answered(FAST));
 
     // Act: the second target, steadily slower, loses every other echo.
     for second in 0..WARM_UP * 2 {
@@ -448,9 +451,7 @@ async fn does_not_invent_jitter_when_one_target_drops_packets() {
         } else {
             ProbeOutcome::LostButReachable
         };
-        harness
-            .network
-            .set_outcome(Target::parse(SECOND_TARGET), outcome);
+        harness.network.set_outcome(harness.second_target, outcome);
         harness.run_seconds(1).await;
     }
 
@@ -467,14 +468,14 @@ async fn does_not_grade_loss_before_30_seconds_of_probes() {
     harness.run_seconds(WARM_UP).await;
     harness
         .network
-        .set_outcome(Target::parse(SECOND_TARGET), ProbeOutcome::LostButReachable);
+        .set_outcome(harness.second_target, ProbeOutcome::LostButReachable);
 
     // Act: one lost probe out of 22 would read as Unstable on so few probes.
     harness.run_seconds(1).await;
     let early = harness.read_last_view();
     harness
         .network
-        .set_outcome(Target::parse(SECOND_TARGET), ProbeOutcome::Answered(FAST));
+        .set_outcome(harness.second_target, ProbeOutcome::Answered(FAST));
     harness.run_seconds(19).await;
 
     // Assert
@@ -1485,6 +1486,7 @@ async fn discards_the_probes_that_waited_through_a_sleep() {
     let clock = ManualClock::default();
     let network = InMemoryNetwork::default();
     let presenter = InMemoryVerdictPresenter::default();
+    let [target] = generate_targets();
     let dozing = DozingNetwork {
         network: network.clone(),
         clock: clock.clone(),
@@ -1501,14 +1503,14 @@ async fn discards_the_probes_that_waited_through_a_sleep() {
             history_recorder: InMemoryHistoryRecorder::default(),
             notifier: InMemoryNotifier::default(),
         },
-        vec![Target::parse(FIRST_TARGET)],
+        vec![target],
     );
-    network.set_outcome(Target::parse(FIRST_TARGET), ProbeOutcome::Answered(FAST));
+    network.set_outcome(target, ProbeOutcome::Answered(FAST));
     for _ in 0..WARM_UP {
         clock.advance(Duration::from_secs(1));
         engine.handle(EngineMessage::Tick).await;
     }
-    network.set_outcome(Target::parse(FIRST_TARGET), ProbeOutcome::Unreachable);
+    network.set_outcome(target, ProbeOutcome::Unreachable);
     dozing.doze_during_next_probe(Duration::from_secs(600));
 
     // Act
@@ -1557,8 +1559,6 @@ async fn handles_a_sleep_notice_before_the_ticks_already_waiting() {
 
 // Settings
 
-const OWN_SERVER: &str = "203.0.113.7";
-
 fn create_settings(servers: MeasurementServers) -> Settings {
     Settings {
         servers,
@@ -1573,11 +1573,11 @@ async fn create_harness_moving_to_the_own_server() -> Harness {
     harness.set_every_target(ProbeOutcome::Unreachable);
     harness
         .network
-        .set_outcome(Target::parse(OWN_SERVER), ProbeOutcome::Answered(FAST));
+        .set_outcome(harness.own_server, ProbeOutcome::Answered(FAST));
     harness
         .engine
         .handle(EngineMessage::SettingsChanged(create_settings(
-            MeasurementServers::Custom(Target::parse(OWN_SERVER)),
+            MeasurementServers::Custom(harness.own_server),
         )))
         .await;
     harness
@@ -1630,10 +1630,10 @@ async fn measures_the_own_server_alone_once_picked() {
 async fn keeps_measuring_when_the_servers_stay_the_same() {
     // Arrange
     let mut harness = create_harness();
-    let own_server = MeasurementServers::Custom(Target::parse(OWN_SERVER));
+    let own_server = MeasurementServers::Custom(harness.own_server);
     harness
         .network
-        .set_outcome(Target::parse(OWN_SERVER), ProbeOutcome::Answered(FAST));
+        .set_outcome(harness.own_server, ProbeOutcome::Answered(FAST));
     harness
         .engine
         .handle(EngineMessage::SettingsChanged(create_settings(own_server)))
@@ -1706,7 +1706,7 @@ async fn stays_silent_when_notifications_are_turned_off() {
         .engine
         .handle(EngineMessage::SettingsChanged(Settings {
             notifies_on_degradation: false,
-            ..create_settings(MeasurementServers::Custom(Target::parse(FIRST_TARGET)))
+            ..create_settings(MeasurementServers::Custom(harness.first_target))
         }))
         .await;
     harness.warm_up_with_latency(FAST).await;
