@@ -782,6 +782,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use application::repository_contract::{check_contract, check_settings_contract};
+    use application::test_support::generate_network_name;
 
     use super::*;
 
@@ -950,7 +951,7 @@ mod tests {
             network: NetworkKey {
                 gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, 0x49]),
                 kind: ConnectionKind::WiFi,
-                name: Some("Box".to_owned()),
+                name: Some(generate_network_name()),
             },
             kind: EventKind::NetworkChanged,
         };

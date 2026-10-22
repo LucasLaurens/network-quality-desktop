@@ -248,8 +248,7 @@ fn format_bytes(bytes: u64, catalog: &TextCatalog) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
-
+    use application::test_support::{generate_address, generate_network_name};
     use domain::{BoxLine, ConnectionKind, MacAddress, Medium, Metering, WanAccessType, WifiBand};
 
     use super::*;
@@ -265,12 +264,12 @@ mod tests {
                 kind: ConnectionKind::WiFi,
                 is_vpn: false,
                 gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, 0x31]),
-                gateway_address: Some(Ipv4Addr::new(192, 168, 1, 254)),
+                gateway_address: Some(generate_address()),
                 metering: Metering::Unmetered,
                 medium,
             }),
             wifi: Some(WifiLink {
-                name: Some("Maison".to_owned()),
+                name: Some(generate_network_name()),
                 signal_dbm: Some(-58),
                 rate_mbps: Some(866),
                 channel: Some(36),
@@ -296,10 +295,15 @@ mod tests {
             received: Bitrate::from_bits_per_second(85_000_000),
             sent: Bitrate::from_bits_per_second(2_500_000),
         };
+        let reading = create_reading(Medium::WiFi);
+        let gateway = reading
+            .context
+            .and_then(|context| context.gateway_address)
+            .expect("a gateway address");
 
         // Act
         let details = TechnicalDetails::compose(
-            &create_reading(Medium::WiFi),
+            &reading,
             TrafficReading {
                 current: Some(rate),
                 peak: None,
@@ -321,7 +325,7 @@ mod tests {
             traffic[1].value,
             catalog.render("details-traffic-waiting", None)
         );
-        assert_eq!(details.sections[0].rows[2].value, "192.168.1.254");
+        assert_eq!(details.sections[0].rows[2].value, gateway.to_string());
     }
 
     #[test]

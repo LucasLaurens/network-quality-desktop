@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use application::test_support::InMemoryMeasurementRepository;
+use application::test_support::{InMemoryMeasurementRepository, generate_network_name};
 use application::{
     EventKind, HistoryEvent, LiveHistory, MeasurementRepository, NetworkKey, NetworkStay,
     OutageEnd, Period, list_network_summaries, read_day_overview, read_evolution,
@@ -15,11 +15,12 @@ const MINUTE: i64 = 60;
 const HOUR: i64 = 3600;
 const DAY: i64 = 86_400;
 
-fn create_network(last_octet: u8, name: &str) -> NetworkKey {
+/// A network told apart by its gateway's last octet; its name is generated.
+fn create_network(last_octet: u8) -> NetworkKey {
     NetworkKey {
         gateway: MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, last_octet]),
         kind: ConnectionKind::WiFi,
-        name: Some(name.to_owned()),
+        name: Some(generate_network_name()),
     }
 }
 
@@ -75,7 +76,7 @@ fn record_event(repository: &mut InMemoryMeasurementRepository, event: &HistoryE
 fn charts_a_day_from_minutes_and_leaves_the_unmeasured_buckets_empty() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(1, "Box");
+    let home = create_network(1);
     let now = MIDNIGHT + DAY;
     let minute = now - HOUR;
     add_minute(
@@ -137,7 +138,7 @@ fn charts_the_last_hour_from_the_seconds_in_memory() {
 fn charts_the_start_of_the_hour_from_stored_minutes_after_a_restart() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(15, "Box");
+    let home = create_network(15);
     let now = MIDNIGHT + 10 * HOUR;
     let restart = now - 2 * MINUTE + 30;
     for start in [now - 10 * MINUTE, now - 3 * MINUTE] {
@@ -187,7 +188,7 @@ fn charts_the_start_of_the_hour_from_stored_minutes_after_a_restart() {
 fn charts_a_week_from_hours_and_the_current_hour_from_minutes() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(2, "Box");
+    let home = create_network(2);
     let now = MIDNIGHT + 10 * HOUR + 30 * MINUTE;
     repository
         .save_hour(
@@ -225,8 +226,8 @@ fn charts_a_week_from_hours_and_the_current_hour_from_minutes() {
 fn marks_a_change_of_network_but_not_a_restart_on_the_same_one() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(3, "Box");
-    let phone = create_network(4, "iPhone");
+    let home = create_network(3);
+    let phone = create_network(4);
     let now = MIDNIGHT + 12 * HOUR;
     let unresolved_home = NetworkKey {
         gateway: None,
@@ -263,10 +264,10 @@ fn marks_a_change_of_network_but_not_a_restart_on_the_same_one() {
 fn marks_a_move_between_two_named_networks_even_before_the_gateway_is_read() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(16, "Box");
+    let home = create_network(16);
     let office_unresolved = NetworkKey {
         gateway: None,
-        ..create_network(17, "Bureau")
+        ..create_network(17)
     };
     let now = MIDNIGHT + 12 * HOUR;
     for event in [
@@ -293,7 +294,7 @@ fn marks_a_move_between_two_named_networks_even_before_the_gateway_is_read() {
 fn counts_an_outage_that_began_before_midnight_and_ended_after() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(18, "Box");
+    let home = create_network(18);
     for (utc, kind) in [
         (MIDNIGHT - 30, EventKind::OfflineStarted),
         (MIDNIGHT + 90, EventKind::OfflineEnded),
@@ -336,7 +337,7 @@ fn says_when_no_network_is_in_use() {
 fn sums_the_day_since_local_midnight_only() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(5, "Box");
+    let home = create_network(5);
     add_minute(
         &mut repository,
         &home,
@@ -368,7 +369,7 @@ fn sums_the_day_since_local_midnight_only() {
 fn lists_the_outages_of_the_day_with_how_they_ended() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(6, "Box");
+    let home = create_network(6);
     let now = MIDNIGHT + 12 * HOUR;
     for (utc, kind) in [
         (MIDNIGHT - HOUR, EventKind::OfflineStarted),
@@ -414,7 +415,7 @@ fn lists_the_outages_of_the_day_with_how_they_ended() {
 fn finds_the_minute_of_the_day_hardest_on_calls() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(7, "Box");
+    let home = create_network(7);
     let mut mixed = create_aggregate(50, CountedState::Solid);
     mixed.merge(&create_aggregate(10, CountedState::Unstable));
     add_minute(&mut repository, &home, MIDNIGHT + HOUR, &mixed);
@@ -451,7 +452,7 @@ fn finds_the_minute_of_the_day_hardest_on_calls() {
 fn names_no_worst_minute_on_a_day_without_trouble() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(8, "Box");
+    let home = create_network(8);
     add_minute(
         &mut repository,
         &home,
@@ -476,8 +477,8 @@ fn names_no_worst_minute_on_a_day_without_trouble() {
 fn says_since_when_the_computer_is_on_the_current_network() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(9, "Box");
-    let phone = create_network(10, "iPhone");
+    let home = create_network(9);
+    let phone = create_network(10);
     let now = MIDNIGHT + 12 * HOUR;
     for event in [
         create_event(now - 6 * HOUR, &phone, EventKind::NetworkChanged),
@@ -500,8 +501,9 @@ fn says_since_when_the_computer_is_on_the_current_network() {
 fn sums_each_network_over_30_days_and_names_the_most_reliable() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(11, "Box");
-    let phone = create_network(12, "iPhone");
+    let home = create_network(11);
+    let phone = create_network(12);
+    let (home_name, phone_name) = (home.name.clone(), phone.name.clone());
     let now = MIDNIGHT + 12 * HOUR + 10 * MINUTE;
     let mut home_hour = create_aggregate(3000, CountedState::Solid);
     home_hour.merge(&create_aggregate(600, CountedState::Unstable));
@@ -544,8 +546,8 @@ fn sums_each_network_over_30_days_and_names_the_most_reliable() {
     assert_eq!(
         listed,
         vec![
-            (Some("iPhone"), 3660, true, true),
-            (Some("Box"), 3600, false, false),
+            (phone_name.as_deref(), 3660, true, true),
+            (home_name.as_deref(), 3600, false, false),
         ]
     );
 }
@@ -554,8 +556,8 @@ fn sums_each_network_over_30_days_and_names_the_most_reliable() {
 fn names_no_most_reliable_network_without_another_to_compare() {
     // Arrange
     let mut repository = InMemoryMeasurementRepository::default();
-    let home = create_network(13, "Box");
-    let phone = create_network(14, "iPhone");
+    let home = create_network(13);
+    let phone = create_network(14);
     repository
         .save_hour(
             &home,

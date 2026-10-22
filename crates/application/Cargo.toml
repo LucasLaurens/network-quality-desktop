@@ -7,12 +7,13 @@ publish.workspace = true
 
 [dependencies]
 domain.workspace = true
+fake = { workspace = true, optional = true }
 futures-util.workspace = true
 tokio.workspace = true
 
 [features]
 # Exposes the in-memory port implementations to other crates' tests, never to production builds.
-test-support = []
+test-support = ["dep:fake"]
 
 [dev-dependencies]
 application = { path = ".", features = ["test-support"] }

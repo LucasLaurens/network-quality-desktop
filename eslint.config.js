@@ -14,7 +14,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         parser: tseslint.parser,
-        projectService: { allowDefaultProject: ['vite.config.ts'] },
+        projectService: { allowDefaultProject: ['vite.config.ts', 'playwright.config.ts'] },
         extraFileExtensions: ['.vue'],
         tsconfigRootDir: import.meta.dirname,
       },
