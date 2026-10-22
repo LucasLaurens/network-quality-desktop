@@ -13,7 +13,7 @@ La sonde ICMP sans privilège exige que `net.ipv4.ping_group_range` inclue le gr
 ## Contexte de connexion
 
 - `netdev` donne sur les trois systèmes le type d'interface, l'interface par défaut, sa passerelle et l'adresse MAC de celle-ci (zéros quand elle n'est pas résolue).
-- macOS : la table ARP est filtrée par la protection « Réseau local ». Un binaire lancé depuis un terminal ou un test peut ne voir aucune adresse MAC alors que `arp` en voit une dans le terminal : le réseau garde son nom générique, mais il n'est plus reconnaissable et l'indice « adresse aléatoire » du partage de connexion manque. L'app déclare `NSLocalNetworkUsageDescription` (`src-tauri/Info.plist`, fusionné dans le bundle) pour que macOS demande l'autorisation. À vérifier sur l'app empaquetée.
+- macOS : la table ARP est filtrée par la protection « Réseau local ». Un binaire lancé depuis un terminal ou un test peut ne voir aucune adresse MAC alors que `arp` en voit une dans le terminal : le réseau garde son nom générique, mais il n'est plus reconnaissable et l'indice « adresse aléatoire » du partage de connexion manque. L'app déclare `NSLocalNetworkUsageDescription` (`src-tauri/Info.plist`, fusionné dans le bundle) pour que macOS demande l'autorisation ; le texte mentionne aussi les questions UPnP à la box. À vérifier sur l'app empaquetée.
 - Windows : le nom système d'une interface est un GUID ; les VPN sont reconnus par leur type ou par leur description (WireGuard, Wintun, TAP-Windows, OpenVPN, Tailscale). Un VPN au nom inconnu, présenté comme une carte Ethernet, passe pour une connexion Ethernet.
 
 ## Connexion limitée et changements de réseau
@@ -61,6 +61,21 @@ Points laissés ouverts par la recherche (#19), tranchés :
 - Points d'entrée : `GET https://speed.cloudflare.com/__down?bytes=N` et `POST https://speed.cloudflare.com/__up`, non documentés comme API stable par Cloudflare (recherche #4). Un test réel lancé à la demande : `cargo test -p infrastructure -- --ignored` (environ 5 Mo).
 - Mesuré sur ce Mac (test rapide, Wi-Fi) : 12,5 Mbit/s en réception, 1,9 Mbit/s en envoi, latence en charge 335 ms, 2,7 Mo en 4,8 s.
 - Limite : une requête attend au plus 30 s. Sur une ligne très lente (moins de 0,15 Mbit/s en envoi), un transfert de 0,5 Mo la dépasse et le test se conclut « serveur ne répond pas ». Observé une fois sur ce Mac pendant une baisse du lien (curl : 17 s pour 1 Mo).
+
+## Trafic observé
+
+- Compteurs d'octets par `netdev` (`Interface::stats`), interface choisie comme pour le contexte. Windows ne les donne pas dans la liste des interfaces : `update_stats` les lit (appelé sur les trois systèmes).
+- macOS : compteurs 32 bits, qui repartent de zéro tous les 4 Gio ; `TrafficMeter` ignore l'intervalle du retour à zéro.
+- Test réel lancé à la demande (`cargo test -p infrastructure -- --ignored`) : deux lectures de l'interface mesurée autour d'un envoi UDP, compteurs qui ne reculent pas.
+
+## UPnP
+
+- Crate `rupnp` 3.0.0, sans ses features par défaut. Recherche SSDP du service `urn:schemas-upnp-org:service:WANCommonInterfaceConfig:1` (2 s de découverte), puis, sur l'appareil qui l'offre à l'adresse de la passerelle (n'importe lequel quand elle est inconnue : un nœud de maillage ou un second routeur peut aussi répondre) : `GetCommonLinkProperties` (`NewWANAccessType`, `NewLayer1DownstreamMaxBitRate`, `NewLayer1UpstreamMaxBitRate`), `GetTotalBytesReceived`, `GetTotalBytesSent`. 4 s au plus en tout, découverte comprise ; au-delà, la box est tenue pour muette.
+- Lecture seule : aucune action qui modifie la box, aucune redirection de port (`AddPortMapping` et le service `WANIPConnection` ne sont jamais appelés).
+- Un débit à 0 veut dire « inconnu ». Les compteurs de la box repartent souvent de zéro tous les 4 Go (32 bits).
+- Demandé seulement à l'ouverture des détails techniques (commande `read_line_details`), jamais en tâche de fond.
+- Beaucoup de box ont l'UPnP désactivé ou n'exposent pas ce service : « la box ne répond pas » est le cas attendu. Aucune réponse réelle de Freebox, Livebox, Bbox ou SFR Box n'a été relevée (note de recherche `research/adsl-fibre.md`).
+- Test réel lancé à la demande : `asks_the_box_about_its_line_within_the_time_allowed` interroge la box du réseau courant et vérifie que la réponse, ou l'abandon, arrive dans les 4 s (`cargo test -p infrastructure -- --ignored`).
 
 ## Notifications
 

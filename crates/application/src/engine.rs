@@ -56,6 +56,8 @@ pub enum EngineMessage {
     NetworkChanged,
     /// Closing: write the minute in progress, then answer.
     Flush(SyncSender<()>),
+    /// The user erases the history: forget the last hour too, then answer once it is done.
+    EraseHistory(SyncSender<()>),
     /// The last hour and the current network, for the dashboard.
     ReadLiveHistory(oneshot::Sender<LiveHistory>),
     /// The system is about to sleep: write the minute in progress, answer, then measure nothing.
@@ -230,6 +232,9 @@ where
             EngineMessage::Tick => self.measure_one_second().await,
             EngineMessage::NetworkChanged => self.seconds_since_context = CONTEXT_REFRESH_SECONDS,
             EngineMessage::Flush(answer) => self.history.flush(answer, &self.history_recorder),
+            EngineMessage::EraseHistory(answer) => {
+                self.history.erase(answer, &self.history_recorder);
+            }
             EngineMessage::ReadLiveHistory(answer) => {
                 // The asker may have given up waiting: nothing to do then.
                 let _ = answer.send(self.history.read_live());

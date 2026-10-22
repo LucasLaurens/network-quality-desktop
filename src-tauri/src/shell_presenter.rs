@@ -3,7 +3,9 @@
 use std::sync::{Arc, Mutex, PoisonError};
 
 use application::{VerdictPresenter, VerdictView};
-use domain::{ConnectionContext, Verdict};
+use std::time::Duration;
+
+use domain::{ConnectionContext, Verdict, WifiLink};
 use serde::Serialize;
 use specta::Type;
 use tauri::AppHandle;
@@ -47,19 +49,44 @@ impl DisplayStore {
     }
 }
 
+/// What the last verdict said of the connection, beside the verdict itself.
+#[derive(Debug, Clone, Default)]
+pub struct ConnectionReading {
+    /// `None` without a default route.
+    pub context: Option<ConnectionContext>,
+    pub wifi: Option<WifiLink>,
+    /// The latency at rest, as shown.
+    pub latency: Option<Duration>,
+}
+
 /// The connection last measured, for the commands that depend on it (a throughput test's
-/// warning on a limited connection).
+/// warning on a limited connection, the technical details).
 #[derive(Clone, Default)]
-pub struct ConnectionStore(Arc<Mutex<Option<ConnectionContext>>>);
+pub struct ConnectionStore(Arc<Mutex<ConnectionReading>>);
 
 impl ConnectionStore {
     #[must_use]
     pub fn read(&self) -> Option<ConnectionContext> {
-        *self.0.lock().unwrap_or_else(PoisonError::into_inner)
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .context
     }
 
-    fn replace(&self, context: Option<ConnectionContext>) {
-        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = context;
+    #[must_use]
+    pub fn read_all(&self) -> ConnectionReading {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn replace(&self, view: &VerdictView) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = ConnectionReading {
+            context: view.context,
+            wifi: view.wifi.clone(),
+            latency: view.latency.map(|reading| reading.value),
+        };
     }
 }
 
@@ -114,7 +141,7 @@ impl ShellPresenter {
 
 impl VerdictPresenter for ShellPresenter {
     fn present(&self, view: &VerdictView) {
-        self.connection.replace(view.context);
+        self.connection.replace(view);
         let display = ConnectionDisplay::from_view(view, &self.catalog);
         self.update_tray(view.verdict, &display.state_label);
         if !self.store.replace(display.clone()) {

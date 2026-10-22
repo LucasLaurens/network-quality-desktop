@@ -14,6 +14,7 @@ mod power;
 mod system_clock;
 mod system_tray_host;
 mod tcp_connection_opener;
+mod upnp_access_detector;
 mod wifi;
 
 pub use background::keep_measuring_in_background;
@@ -28,4 +29,5 @@ pub use power::SystemPowerEventSource;
 pub use system_clock::SystemClock;
 pub use system_tray_host::SystemTrayHost;
 pub use tcp_connection_opener::TcpConnectionOpener;
+pub use upnp_access_detector::UpnpAccessDetector;
 pub use wifi::{LocationRequest, SystemWifiReader, request_location_permission};

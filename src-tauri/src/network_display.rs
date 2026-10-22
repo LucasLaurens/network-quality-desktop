@@ -103,7 +103,7 @@ fn describe_wifi(link: &WifiLink, catalog: &TextCatalog) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join(", "))
 }
 
-const fn select_band_key(band: WifiBand) -> Option<&'static str> {
+pub const fn select_band_key(band: WifiBand) -> Option<&'static str> {
     match band {
         WifiBand::TwoPointFourGhz => Some("band-2-4-ghz"),
         WifiBand::FiveGhz => Some("band-5-ghz"),

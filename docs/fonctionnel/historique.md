@@ -22,9 +22,10 @@ Chaque résumé est rangé sous son réseau : la box ou le téléphone (reconnu 
 | Résumés par minute                       | 30 jours                                    |
 | Résumés par heure                        | sans limite                                 |
 | Changements de réseau, coupures, veilles | sans limite                                 |
+| Tests de débit                           | sans limite                                 |
 | Dernière heure seconde par seconde       | en mémoire seulement, perdue à la fermeture |
 
-Après un redémarrage, la dernière heure repart des résumés par minute.
+Après un redémarrage, la dernière heure repart des résumés par minute. Les durées s'arrêtent plus tôt si l'historique est effacé (voir [Effacer l'historique](#effacer-lhistorique)).
 
 ## Fiabilité
 
@@ -45,4 +46,8 @@ Le fichier se trouve dans le dossier de données de l'app :
 | Windows | `%APPDATA%\com.lucaslaurens.network-quality\`                     |
 | Linux   | `~/.local/share/com.lucaslaurens.network-quality/`                |
 
-L'effacement de l'historique depuis les Réglages viendra avec la page Réglages.
+## Effacer l'historique
+
+Dans [Réglages](reglages.md#données), « Effacer l'historique » supprime, après confirmation, toutes les mesures (minutes et heures), les événements (coupures, changements de réseau, veilles et réveils), les tests de débit et les réseaux connus, avec leur adresse MAC et leur nom de Wi-Fi. Les réglages restent. L'effacement est définitif : les données supprimées sont écrasées et le fichier est réécrit, pour qu'elles ne restent pas sur le disque.
+
+La dernière heure en mémoire part aussi, et la minute en cours n'est pas écrite : l'historique repart comme au premier lancement. À la seconde suivante, le réseau actuel est noté de nouveau, et une coupure en cours aussi. Pour garder une copie avant d'effacer, [exporter](export.md) d'abord.

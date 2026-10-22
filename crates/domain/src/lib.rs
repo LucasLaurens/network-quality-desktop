@@ -2,6 +2,8 @@
 //! access.
 #![forbid(unsafe_code)]
 
+mod access;
+mod calendar;
 mod connection;
 mod degradation;
 mod diagnosis;
@@ -17,9 +19,12 @@ mod settings;
 mod target;
 mod throughput;
 mod timestamp;
+mod traffic;
 mod verdict;
 mod wifi;
 
+pub use access::{ACCESS_MIN_TESTS, ACCESS_TESTS, AccessEstimate, BoxLine, WanAccessType};
+pub use calendar::{CivilDate, CivilDateTime};
 pub use connection::{
     ConnectionContext, ConnectionKind, Gateway, InterfaceSnapshot, MacAddress, Medium, Metering,
     NetworkIdentity,
@@ -48,6 +53,7 @@ pub use throughput::{
     ThroughputResult, Transfer,
 };
 pub use timestamp::Timestamp;
+pub use traffic::{ByteCounters, TRAFFIC_WINDOW, TrafficMeter, TrafficRate, TrafficReading};
 pub use verdict::Verdict;
 pub use wifi::{
     WEAK_SIGNAL_DBM, WifiBand, WifiLink, compute_channel, convert_kilobits_to_megabits,
