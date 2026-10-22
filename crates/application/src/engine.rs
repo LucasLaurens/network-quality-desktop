@@ -655,9 +655,11 @@ where
         });
     }
 
-    /// Another network, or back from sleep: nothing measured before applies, the box included.
+    /// Another network, back from sleep or other servers: nothing measured before applies, the
+    /// box included, and ICMP is worth trying again where it fell back to TCP.
     fn restart_for(&mut self, cause: MeasuringCause) {
         self.restart();
+        self.probe.forget_fallbacks();
         self.gateway = GatewayWindow::default();
         self.measuring_cause = cause;
     }

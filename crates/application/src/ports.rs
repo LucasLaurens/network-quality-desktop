@@ -15,6 +15,10 @@ use crate::{
 /// Sends one probe to a target and says whether it answered, was lost, or is unreachable.
 pub trait LatencyProbe {
     fn send_probe(&self, target: Target) -> impl Future<Output = ProbeOutcome> + Send;
+
+    /// Forgets which targets fell back to TCP: on another network, after a wake or against new
+    /// servers, ICMP may get through again.
+    fn forget_fallbacks(&self);
 }
 
 /// Moves `bytes` one way to the test server and times it, measuring round trips meanwhile: the

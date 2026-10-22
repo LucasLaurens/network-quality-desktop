@@ -49,6 +49,7 @@ find
 finish
 flush
 follow
+forget
 format
 grade
 handle
