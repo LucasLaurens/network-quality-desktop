@@ -63,3 +63,75 @@ impl Hysteresis {
         self.displayed
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_second(seconds: u64) -> Timestamp {
+        Timestamp::from_elapsed(Duration::from_secs(seconds))
+    }
+
+    #[test]
+    fn shows_the_first_grade_at_once() {
+        // Arrange
+        let mut hysteresis = Hysteresis::default();
+
+        // Act
+        let verdict = hysteresis.observe(Grade::Unstable, create_second(0));
+
+        // Assert
+        assert_eq!(verdict, Verdict::Graded(Grade::Unstable));
+    }
+
+    #[test]
+    fn shows_a_worse_grade_after_ten_sustained_seconds() {
+        // Arrange
+        let mut hysteresis = Hysteresis::default();
+        hysteresis.observe(Grade::Solid, create_second(0));
+        hysteresis.observe(Grade::Unstable, create_second(1));
+
+        // Act
+        let early = hysteresis.observe(Grade::Degraded, create_second(10));
+        let late = hysteresis.observe(Grade::Degraded, create_second(11));
+
+        // Assert
+        assert_eq!(early, Verdict::Graded(Grade::Solid));
+        assert_eq!(
+            late,
+            Verdict::Graded(Grade::Degraded),
+            "counted from the first worse second"
+        );
+    }
+
+    #[test]
+    fn shows_a_better_grade_after_thirty_seconds() {
+        // Arrange
+        let mut hysteresis = Hysteresis::default();
+        hysteresis.observe(Grade::Degraded, create_second(0));
+        hysteresis.observe(Grade::Solid, create_second(1));
+
+        // Act
+        let early = hysteresis.observe(Grade::Solid, create_second(30));
+        let late = hysteresis.observe(Grade::Solid, create_second(31));
+
+        // Assert
+        assert_eq!(early, Verdict::Graded(Grade::Degraded));
+        assert_eq!(late, Verdict::Graded(Grade::Solid));
+    }
+
+    #[test]
+    fn starts_counting_again_when_the_grade_comes_back() {
+        // Arrange
+        let mut hysteresis = Hysteresis::default();
+        hysteresis.observe(Grade::Solid, create_second(0));
+        hysteresis.observe(Grade::Degraded, create_second(1));
+        hysteresis.observe(Grade::Solid, create_second(5));
+
+        // Act
+        let verdict = hysteresis.observe(Grade::Degraded, create_second(12));
+
+        // Assert
+        assert_eq!(verdict, Verdict::Graded(Grade::Solid));
+    }
+}

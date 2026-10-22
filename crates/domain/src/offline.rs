@@ -18,3 +18,39 @@ impl OfflineDetector {
         self.unreachable_seconds >= OFFLINE_AFTER_SECONDS
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn says_offline_after_five_seconds_without_any_server() {
+        // Arrange
+        let mut detector = OfflineDetector::default();
+        for _ in 1..OFFLINE_AFTER_SECONDS {
+            detector.record_second(false);
+        }
+
+        // Act
+        let offline = detector.record_second(false);
+
+        // Assert
+        assert!(offline);
+    }
+
+    #[test]
+    fn starts_over_once_a_server_answers() {
+        // Arrange
+        let mut detector = OfflineDetector::default();
+        for _ in 1..OFFLINE_AFTER_SECONDS {
+            detector.record_second(false);
+        }
+        detector.record_second(true);
+
+        // Act
+        let offline = detector.record_second(false);
+
+        // Assert
+        assert!(!offline);
+    }
+}
