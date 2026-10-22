@@ -29,6 +29,7 @@
 - explain how to allow the ping, inside the app ([#71](https://github.com/LucasLaurens/network-quality-desktop/pull/71))
 - try ICMP again after a network change, a wake or new servers ([#72](https://github.com/LucasLaurens/network-quality-desktop/pull/72))
 - take every word of the windows from the Fluent catalogue ([#73](https://github.com/LucasLaurens/network-quality-desktop/pull/73))
+- quit the whole app with Cmd+Q on macOS ([#79](https://github.com/LucasLaurens/network-quality-desktop/pull/79))
 
 ### Bug Fixes
 
