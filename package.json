@@ -22,6 +22,7 @@
     "test": "pnpm test:front && pnpm test:back",
     "test:front": "vitest run",
     "test:back": "cargo nextest run --workspace && cargo test --workspace --doc",
+    "test:smoke": "cargo test -p infrastructure --test smoke -- --ignored",
     "coverage:back": "node scripts/coverage-back.mjs",
     "deps:audit": "cargo deny check advisories licenses && pnpm audit",
     "mutants:domain": "cargo mutants -p domain",

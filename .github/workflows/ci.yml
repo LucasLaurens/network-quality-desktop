@@ -40,6 +40,9 @@ jobs:
       # Same gate as `make ci`, defined once in package.json.
       - run: pnpm verify
         shell: bash
+      # The real adapters on this system: probe, connection, Wi-Fi, clock, tray.
+      - run: pnpm test:smoke
+        shell: bash
 
   coverage:
     name: Couverture
