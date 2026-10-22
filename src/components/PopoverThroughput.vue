@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, ref } from 'vue'
 import type { ThroughputPanel } from '../bindings'
-import { useLoadOnFocus } from '../composables/use-throughput-test'
+import { useLoadOnFocus } from '../composables/use-load-on-focus'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
 import ThroughputControls from './ThroughputControls.vue'

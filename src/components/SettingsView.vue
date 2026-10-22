@@ -3,6 +3,7 @@ import { inject, onMounted, ref } from 'vue'
 import type { AppearanceChoice, ExportPeriodChoice, SettingsForm } from '../bindings'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
+import { useLoadOnFocus } from '../composables/use-load-on-focus'
 
 const PUBLIC_SERVERS = 'public'
 const OWN_SERVER = 'own'
@@ -57,10 +58,15 @@ const saveChange = (): Promise<void> => queue(savedServer)
 
 const saveTypedServer = (): Promise<void> => queue(typedServer.value)
 
-// The public servers need nothing more; an own server waits for its address.
 const exportPeriod = ref<ExportPeriodChoice>('lastMonth')
 const isConfirmingErase = ref(false)
 const isBusy = ref(false)
+const isExporting = ref(false)
+/** Empty while the export can be used; otherwise why not. Disabled until read. */
+const exportUnavailable = ref<string | null>(null)
+const isExportReady = ref(false)
+/** The button that shows the export folder, once an export is done. */
+const revealLabel = ref('')
 const dataStatus = ref('')
 const dataRefusal = ref('')
 
@@ -77,18 +83,54 @@ const runDataAction = async (action: () => Promise<string>): Promise<void> => {
   }
 }
 
-const exportHistory = (): Promise<void> =>
-  runDataAction(() => client.exportHistory(exportPeriod.value, readUtcOffsetSeconds()))
-
-const eraseHistory = (): Promise<void> => {
-  isConfirmingErase.value = false
-  return runDataAction(() => client.eraseHistory())
+const loadExportAvailability = async (): Promise<void> => {
+  try {
+    const availability = await client.readExportAvailability()
+    isExportReady.value = availability.kind === 'ready'
+    exportUnavailable.value = availability.kind === 'unavailable' ? availability.reason : null
+  } catch (error) {
+    console.error('Reading whether there is anything to export failed', error)
+  }
 }
 
+// The folder first: a dialog closed without a choice exports nothing and says nothing.
+const exportHistory = async (): Promise<void> => {
+  revealLabel.value = ''
+  await runDataAction(async () => {
+    if (!(await client.chooseExportFolder())) return ''
+    isExporting.value = true
+    try {
+      const done = await client.exportHistory(exportPeriod.value)
+      revealLabel.value = done.revealLabel
+      return done.message
+    } finally {
+      isExporting.value = false
+    }
+  })
+}
+
+const revealExport = async (): Promise<void> => {
+  try {
+    await client.revealExportFolder()
+  } catch (error) {
+    console.error('Showing the export folder failed', error)
+  }
+}
+
+const eraseHistory = async (): Promise<void> => {
+  isConfirmingErase.value = false
+  revealLabel.value = ''
+  await runDataAction(() => client.eraseHistory())
+  await loadExportAvailability()
+}
+
+// The public servers need nothing more; an own server waits for its address.
 const chooseServers = async (): Promise<void> => {
   refusal.value = ''
   if (servers.value === PUBLIC_SERVERS) await queue(null)
 }
+
+useLoadOnFocus(loadExportAvailability)
 
 onMounted(async () => {
   try {
@@ -223,14 +265,22 @@ onMounted(async () => {
                 {{ period.label }}
               </option>
             </select>
-            <button type="button" class="secondary" :disabled="isBusy" data-export @click="exportHistory">
-              Exporter
+            <button
+              type="button"
+              class="secondary"
+              :disabled="isBusy || !isExportReady"
+              :aria-busy="isExporting"
+              data-export
+              @click="exportHistory"
+            >
+              {{ isExporting ? 'Export en cours…' : 'Exporter…' }}
             </button>
           </div>
-          <span class="hint">
-            Trois fichiers CSV dans Téléchargements&nbsp;: mesures, événements, tests de débit. Sans adresse matérielle
-            de la box.
+          <span v-if="exportUnavailable === null" class="hint">
+            Trois fichiers CSV dans le dossier de votre choix&nbsp;: mesures, événements, tests de débit. Sans adresse
+            matérielle de la box.
           </span>
+          <span v-else class="hint" data-export-unavailable>{{ exportUnavailable }}</span>
         </div>
         <div class="setting">
           <span class="label">Effacer l'historique</span>
@@ -259,6 +309,9 @@ onMounted(async () => {
       </div>
       <p v-if="dataRefusal" class="refused" role="alert" data-data-refused>{{ dataRefusal }}</p>
       <p class="saved" role="status" data-data-status>{{ dataStatus }}</p>
+      <button v-if="revealLabel" type="button" class="link" data-reveal-export @click="revealExport">
+        {{ revealLabel }}
+      </button>
     </div>
 
     <p v-if="refusal" class="refused" role="alert" data-refused>{{ refusal }}</p>

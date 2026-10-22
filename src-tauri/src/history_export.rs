@@ -1,22 +1,25 @@
-//! The history written as three CSV files into a new folder of Downloads, read through a
+//! The history written as three CSV files into the folder the user chose, read through a
 //! connection of its own so the dashboard and the writer go on meanwhile.
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 use application::{
     ExportError, ExportPeriod, HistoryStream, export_events, export_measures,
     export_throughput_tests,
 };
-use domain::CivilDateTime;
 use infrastructure::SqliteMeasurementRepository;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use specta::Type;
 
 const MEASURES_FILE: &str = "mesures.csv";
 const EVENTS_FILE: &str = "evenements.csv";
-const TESTS_FILE: &str = "tests-de-debit.csv";
+const TESTS_FILE: &str = "tests-debit.csv";
+const FILES: [&str; 3] = [MEASURES_FILE, EVENTS_FILE, TESTS_FILE];
+/// Added while a file is written; renamed away once all three are complete.
+const PARTIAL_SUFFIX: &str = ".partial";
 
 /// Where the history is kept: a history in memory has nothing to export.
 pub enum HistoryLocation {
@@ -44,61 +47,90 @@ impl From<ExportPeriodChoice> for ExportPeriod {
     }
 }
 
-/// Writes the three files into a new folder of `downloads` named after the local time, and
-/// returns it; a failed export leaves no folder behind. Blocking: run it off the async runtime.
-/// O(r) time for r rows, O(1) space.
+/// A finished export: what to say, and how to name the button that shows its folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportDone {
+    pub message: String,
+    /// « Afficher dans le Finder » on macOS, the file manager's name elsewhere.
+    pub reveal_label: String,
+}
+
+/// Whether « Exporter l'historique… » can be used, and why not.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum ExportAvailability {
+    Ready,
+    Unavailable { reason: String },
+}
+
+/// The folder chosen for the exports, kept in the shell: the front never sends a path.
+#[derive(Default)]
+pub struct ExportFolder(Mutex<Option<PathBuf>>);
+
+impl ExportFolder {
+    pub fn remember(&self, folder: PathBuf) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(folder);
+    }
+
+    /// `None` until a folder was chosen.
+    #[must_use]
+    pub fn read(&self) -> Option<PathBuf> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}
+
+/// Writes the three files into `folder` under temporary names, then renames them over any files
+/// of the same name: a failed export removes only its own temporary files and leaves an earlier
+/// export whole. Blocking: run it off the async runtime. O(r) time for r rows, O(1) space.
 ///
 /// # Errors
 ///
-/// The history could not be read, or the folder written.
+/// The history could not be read, or a file written.
 pub fn write_export(
     history: &Path,
-    downloads: &Path,
+    folder: &Path,
     period: ExportPeriod,
     now_utc: i64,
-    offset: i64,
-) -> Result<PathBuf, ExportError> {
+) -> Result<(), ExportError> {
     let stream = SqliteMeasurementRepository::open_read_only(history)?;
-    let folder = downloads.join(format_folder_name(now_utc + offset));
-    std::fs::create_dir(&folder)?;
-    let written = write_files(&stream, &folder, period, now_utc);
+    let partials = FILES.map(|file| folder.join(format!("{file}{PARTIAL_SUFFIX}")));
+    let written = write_files(&stream, &partials, period, now_utc).and_then(|()| {
+        for (partial, file) in partials.iter().zip(FILES) {
+            std::fs::rename(partial, folder.join(file))?;
+        }
+        Ok(())
+    });
     if written.is_err() {
-        let _ = std::fs::remove_dir_all(&folder);
+        for partial in &partials {
+            if partial.is_file() {
+                let _ = std::fs::remove_file(partial);
+            }
+        }
     }
-    written.map(|()| folder)
+    written
 }
 
 /// O(r) time, O(1) space.
 fn write_files(
     stream: &impl HistoryStream,
-    folder: &Path,
+    [measures, events, tests]: &[PathBuf; 3],
     period: ExportPeriod,
     now_utc: i64,
 ) -> Result<(), ExportError> {
-    let mut measures = BufWriter::new(File::create(folder.join(MEASURES_FILE))?);
-    export_measures(stream, period, now_utc, &mut measures)?;
-    measures.flush()?;
-    let mut events = BufWriter::new(File::create(folder.join(EVENTS_FILE))?);
-    export_events(stream, period, now_utc, &mut events)?;
-    events.flush()?;
-    let mut tests = BufWriter::new(File::create(folder.join(TESTS_FILE))?);
-    export_throughput_tests(stream, period, now_utc, &mut tests)?;
-    tests.flush()?;
+    let mut writer = BufWriter::new(File::create(measures)?);
+    export_measures(stream, period, now_utc, &mut writer)?;
+    writer.flush()?;
+    let mut writer = BufWriter::new(File::create(events)?);
+    export_events(stream, period, now_utc, &mut writer)?;
+    writer.flush()?;
+    let mut writer = BufWriter::new(File::create(tests)?);
+    export_throughput_tests(stream, period, now_utc, &mut writer)?;
+    writer.flush()?;
     Ok(())
-}
-
-/// "qualite-reseau-2026-10-21-140512", to the second: two exports never share a folder. O(1).
-fn format_folder_name(local: i64) -> String {
-    let moment = CivilDateTime::from_seconds(local);
-    format!(
-        "qualite-reseau-{:04}-{:02}-{:02}-{:02}{:02}{:02}",
-        moment.date.year,
-        moment.date.month,
-        moment.date.day,
-        moment.hour,
-        moment.minute,
-        moment.second
-    )
 }
 
 #[cfg(test)]
@@ -109,7 +141,6 @@ mod tests {
 
     /// 2023-11-14 22:13:20 UTC.
     const SOME_UTC: i64 = 1_700_000_000;
-    const PARIS: i64 = 3600;
 
     fn create_temporary_directory(test: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -122,47 +153,55 @@ mod tests {
     }
 
     #[test]
-    fn writes_three_files_into_a_folder_named_after_the_local_time() {
+    fn writes_three_files_into_the_chosen_folder() {
         // Arrange
         let directory = create_temporary_directory("files");
         let history = directory.join("history.sqlite3");
         SqliteMeasurementRepository::open(&history, SOME_UTC).expect("a history");
 
         // Act
-        let folder = write_export(&history, &directory, ExportPeriod::All, SOME_UTC, PARIS)
-            .expect("an export");
+        write_export(&history, &directory, ExportPeriod::All, SOME_UTC).expect("an export");
 
         // Assert
-        assert!(folder.ends_with("qualite-reseau-2023-11-14-231320"));
         for (file, header) in [
-            (MEASURES_FILE, "debut_utc,"),
-            (EVENTS_FILE, "horodatage_utc,"),
-            (TESTS_FILE, "horodatage_utc,"),
+            ("mesures.csv", "start_utc,"),
+            ("evenements.csv", "time_utc,"),
+            ("tests-debit.csv", "time_utc,"),
         ] {
-            let text = std::fs::read_to_string(folder.join(file)).expect("a file");
+            let text = std::fs::read_to_string(directory.join(file)).expect("a file");
             assert!(text.starts_with(header), "{file}");
         }
         let _ = std::fs::remove_dir_all(directory);
     }
 
     #[test]
-    fn leaves_no_folder_when_the_history_cannot_be_read() {
+    fn keeps_an_earlier_export_when_this_one_fails_halfway() {
         // Arrange
-        let directory = create_temporary_directory("unreadable");
+        let directory = create_temporary_directory("halfway");
+        let history = directory.join("history.sqlite3");
+        SqliteMeasurementRepository::open(&history, SOME_UTC).expect("a history");
+        let earlier = "earlier export";
+        for file in FILES {
+            std::fs::write(directory.join(file), earlier).expect("an earlier file");
+        }
+        // The last file cannot be written: a folder stands where it goes.
+        std::fs::create_dir(directory.join(format!("{TESTS_FILE}{PARTIAL_SUFFIX}")))
+            .expect("a blocking folder");
 
         // Act
-        let exported = write_export(
-            &directory.join("missing.sqlite3"),
-            &directory,
-            ExportPeriod::All,
-            SOME_UTC,
-            PARIS,
-        );
+        let exported = write_export(&history, &directory, ExportPeriod::All, SOME_UTC);
 
         // Assert
         assert!(exported.is_err());
-        let entries = std::fs::read_dir(&directory).expect("a folder").count();
-        assert_eq!(entries, 0);
+        for file in FILES {
+            let text = std::fs::read_to_string(directory.join(file)).expect("a file");
+            assert_eq!(text, earlier, "{file}");
+        }
+        assert!(
+            !directory
+                .join(format!("{MEASURES_FILE}{PARTIAL_SUFFIX}"))
+                .exists()
+        );
         let _ = std::fs::remove_dir_all(directory);
     }
 }

@@ -64,6 +64,7 @@ pub fn check_contract<R: MeasurementRepository + HistoryReader + HistoryStream>(
     check_keeps_every_kind_of_event(&mut create());
     check_keeps_throughput_tests_newest_first(&mut create());
     check_erases_the_whole_history(&mut create());
+    check_tells_an_empty_history(&mut create());
 }
 
 /// Rates in whole kbit/s and round trips in whole milliseconds: the precision the storage keeps.
@@ -589,4 +590,23 @@ fn check_erases_the_whole_history(repository: &mut (impl MeasurementRepository +
     repository
         .add_minute(&network, SOME_HOUR, &create_aggregate(60, 20))
         .expect("a minute after the erase");
+}
+
+fn check_tells_an_empty_history(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+    // Arrange
+    let is_empty_at_first = repository.is_history_empty().expect("an answer");
+    repository
+        .record_event(&HistoryEvent {
+            utc: SOME_HOUR,
+            network: create_network(25, None),
+            kind: EventKind::Wake,
+        })
+        .expect("an event");
+
+    // Act
+    let is_empty_after = repository.is_history_empty().expect("an answer");
+
+    // Assert
+    assert!(is_empty_at_first);
+    assert!(!is_empty_after);
 }

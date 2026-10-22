@@ -7,6 +7,8 @@ import type {
   DisplayState,
   EvolutionDisplay,
   DetailSection,
+  ExportAvailability,
+  ExportDone,
   ExportPeriodChoice,
   LineDetails,
   MetricDisplay,
@@ -209,6 +211,14 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   readonly lineDetails: LineDetails = { section: createDetailSection(), note: faker.lorem.sentence() }
   /** Empty while the line is read. */
   private lineRefusal = ''
+  exportRevealings = 0
+  readonly revealLabel = faker.lorem.words(3)
+  readonly nothingToExport = faker.lorem.sentence()
+  private unavailableReason = ''
+  private hasHistory = true
+  private isFolderDialogClosed = false
+  private isHoldingExports = false
+  private releaseExport = (): void => undefined
   /** Empty while exports and erases succeed. */
   private dataRefusal = ''
   private throughputPanel = createThroughputPanel()
@@ -444,16 +454,67 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     this.releaseThroughputTest()
   }
 
-  exportHistory(period: ExportPeriodChoice): Promise<string> {
+  chooseExportFolder(): Promise<boolean> {
     if (this.dataRefusal !== '') return Promise.reject(new Error(this.dataRefusal))
+    return Promise.resolve(!this.isFolderDialogClosed)
+  }
+
+  exportHistory(period: ExportPeriodChoice): Promise<ExportDone> {
     this.exports.push(period)
-    return Promise.resolve(this.exportConfirmation)
+    const done: ExportDone = { message: this.exportConfirmation, revealLabel: this.revealLabel }
+    if (!this.isHoldingExports) return Promise.resolve(done)
+    return new Promise((resolve) => {
+      this.releaseExport = () => {
+        resolve(done)
+      }
+    })
+  }
+
+  readExportAvailability(): Promise<ExportAvailability> {
+    if (this.unavailableReason !== '') return Promise.resolve({ kind: 'unavailable', reason: this.unavailableReason })
+    if (!this.hasHistory) return Promise.resolve({ kind: 'unavailable', reason: this.nothingToExport })
+    return Promise.resolve({ kind: 'ready' })
+  }
+
+  revealExportFolder(): Promise<void> {
+    this.exportRevealings += 1
+    return Promise.resolve()
   }
 
   eraseHistory(): Promise<string> {
     if (this.dataRefusal !== '') return Promise.reject(new Error(this.dataRefusal))
     this.erases += 1
+    this.hasHistory = false
     return Promise.resolve(this.eraseConfirmation)
+  }
+
+  /** Nothing measured yet: there is nothing to export. */
+  startWithEmptyHistory(): void {
+    this.hasHistory = false
+  }
+
+  /** The first minute is kept: there is something to export from now on. */
+  measureFirstMinute(): void {
+    this.hasHistory = true
+  }
+
+  /** The history lives in memory for the session: it cannot be exported. */
+  keepHistoryInMemory(reason: string): void {
+    this.unavailableReason = reason
+  }
+
+  /** The user closes the folder dialog without choosing. */
+  closeFolderDialog(): void {
+    this.isFolderDialogClosed = true
+  }
+
+  /** The running export waits until `finishExport`. */
+  holdExports(): void {
+    this.isHoldingExports = true
+  }
+
+  finishExport(): void {
+    this.releaseExport()
   }
 
   /** Every export and erase is refused with `refusal`. */

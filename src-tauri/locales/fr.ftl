@@ -212,7 +212,11 @@ unit-gigabytes = { $value } Go
 unit-megabits = { $value } Mbit/s
 
 ## Données : export et effacement de l'historique.
-export-done = Export enregistré dans Téléchargements : { $folder }.
+export-done = 3 fichiers enregistrés.
+export-nothing = Rien à exporter pour l'instant.
+export-reveal-finder = Afficher dans le Finder
+export-reveal-explorer = Afficher dans l'Explorateur
+export-reveal-folder = Afficher le dossier
 export-failed = L'export n'a pas pu être écrit.
 export-unavailable = L'historique n'est pas enregistré sur le disque pendant cette session : il n'y a rien à exporter.
 history-erased = Historique effacé.

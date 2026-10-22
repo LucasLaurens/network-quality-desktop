@@ -157,6 +157,13 @@ pub trait HistoryReader {
         to: i64,
     ) -> Result<Vec<(NetworkKey, i64, Aggregate)>, RepositoryError>;
 
+    /// Nothing measured, no event and no test kept: there is nothing to export.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn is_history_empty(&self) -> Result<bool, RepositoryError>;
+
     /// The events in `[from, to)`, oldest first.
     ///
     /// # Errors

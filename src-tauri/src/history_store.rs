@@ -65,6 +65,10 @@ impl HistoryReader for EmptyHistory {
         Ok(Vec::new())
     }
 
+    fn is_history_empty(&self) -> Result<bool, RepositoryError> {
+        Ok(true)
+    }
+
     fn list_throughput_tests(
         &self,
         _from: i64,
