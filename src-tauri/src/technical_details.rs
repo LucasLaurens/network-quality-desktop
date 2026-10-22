@@ -400,7 +400,7 @@ mod tests {
         let catalog = TextCatalog::load();
         let reading = LineReading {
             line: Some(BoxLine {
-                access_type: WanAccessType::Ethernet,
+                access_type: WanAccessType::Other,
                 downstream_max: Some(Bitrate::from_bits_per_second(17_400_000)),
                 upstream_max: None,
                 total_received: None,
