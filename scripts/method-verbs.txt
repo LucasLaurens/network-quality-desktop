@@ -43,6 +43,7 @@ drop
 encode
 erase
 estimate
+expire
 export
 fail
 find
@@ -69,6 +70,7 @@ mark
 mask
 measure
 merge
+mount
 move
 notify
 observe

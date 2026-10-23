@@ -94,8 +94,7 @@ impl GatewayWindow {
         }
         LocalSegment::Measured {
             latency: self.latency.compute_p90(),
-            loss: (sent >= LOSS_MIN_PINGS)
-                .then(|| LossRate::from_percent(f64::from(self.lost) * 100.0 / f64::from(sent))),
+            loss: (sent >= LOSS_MIN_PINGS).then(|| LossRate::from_counts(self.lost, sent)),
             lost: self.lost,
         }
     }

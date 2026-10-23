@@ -146,12 +146,12 @@ const firstRun: DashboardSummaryDisplay = {
   networks: [],
 }
 
-const client = new InMemoryNetworkQualityClient(
+const client = new InMemoryNetworkQualityClient({
   // The real version: the README screenshots come from this page.
-  { name: packageJson.name, version: packageJson.version },
-  connectionScenarios[scenario ?? ''] ?? connectionScenarios.degraded,
-  windowModeTexts,
-)
+  appInfo: { name: packageJson.name, version: packageJson.version },
+  display: connectionScenarios[scenario ?? ''] ?? connectionScenarios.degraded,
+  windowModeTexts: windowModeTexts,
+})
 client.setThroughputPanel({
   isAllowed: scenario !== 'first',
   note: `Les tests ne partent que sur un clic, vers Cloudflare. Rapide${NBSP}: jusqu'à 4,2${NBSP}Mo. Complet${NBSP}: jusqu'à 155,8${NBSP}Mo. La latence en charge s'affiche sans compter dans l'état.`,

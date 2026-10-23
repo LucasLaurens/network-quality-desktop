@@ -1,6 +1,7 @@
 import { faker } from '@faker-js/faker'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import type { ConnectionDisplay } from '../src/bindings'
 import ConnectionPopover from '../src/components/ConnectionPopover.vue'
 import {
   InMemoryNetworkQualityClient,
@@ -11,18 +12,35 @@ import {
   createSegmentDisplay,
   createThroughputPanel,
   createThroughputRow,
-  createWindowProvisions,
+  mountWindow,
 } from './fakes/in-memory-network-quality-client'
 
-async function mountPopover(client: InMemoryNetworkQualityClient) {
-  const wrapper = mount(ConnectionPopover, {
-    global: { provide: createWindowProvisions(client) },
-  })
-  await flushPromises()
-  return wrapper
+function mountPopover(client: InMemoryNetworkQualityClient) {
+  return mountWindow(ConnectionPopover, client)
+}
+
+/** A core whose first read fails: the popover must still show what it is sent next. */
+class FailingFirstReadClient extends InMemoryNetworkQualityClient {
+  override readConnectionDisplay(): Promise<ConnectionDisplay> {
+    return Promise.reject(new Error(faker.lorem.sentence()))
+  }
 }
 
 describe('ConnectionPopover', () => {
+  it('still shows the next display when the first read fails', async () => {
+    // Arrange
+    const client = new FailingFirstReadClient()
+    const wrapper = await mountPopover(client)
+    const display = createConnectionDisplay()
+
+    // Act
+    client.pushDisplay(display)
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.get('h1').text()).toBe(display.stateLabel)
+  })
+
   it('shows the state, the cause, the action and the detail it is given', async () => {
     // Arrange
     const display = createConnectionDisplay({
@@ -30,7 +48,7 @@ describe('ConnectionPopover', () => {
       action: faker.lorem.sentence(),
       detail: faker.lorem.words(3),
     })
-    const client = new InMemoryNetworkQualityClient(undefined, display)
+    const client = new InMemoryNetworkQualityClient({ display: display })
 
     // Act
     const wrapper = await mountPopover(client)
@@ -51,7 +69,7 @@ describe('ConnectionPopover', () => {
       wifiDetails: null,
       revealLabel: null,
     }
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ network }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ network }) })
 
     // Act
     const wrapper = await mountPopover(client)
@@ -66,7 +84,7 @@ describe('ConnectionPopover', () => {
     // Arrange
     const wifiDetails = faker.lorem.words(4)
     const network = { label: faker.lorem.words(2), connection: faker.lorem.word(), wifiDetails, revealLabel: null }
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ network }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ network }) })
 
     // Act
     const wrapper = await mountPopover(client)
@@ -79,7 +97,7 @@ describe('ConnectionPopover', () => {
     // Arrange
     const revealLabel = faker.lorem.words(3)
     const network = { label: faker.lorem.words(2), connection: faker.lorem.word(), wifiDetails: null, revealLabel }
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ network }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ network }) })
     const wrapper = await mountPopover(client)
     const button = wrapper.get('[data-reveal-name]')
 
@@ -93,7 +111,7 @@ describe('ConnectionPopover', () => {
 
   it('names no network without a default route', async () => {
     // Arrange
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ network: null }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ network: null }) })
 
     // Act
     const wrapper = await mountPopover(client)
@@ -106,7 +124,7 @@ describe('ConnectionPopover', () => {
     // Arrange
     const fault = faker.lorem.word()
     const path = createPathDisplay({ internetSegment: createSegmentDisplay({ fault, state: 'degraded' }) })
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ path }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ path }) })
 
     // Act
     const wrapper = await mountPopover(client)
@@ -124,7 +142,7 @@ describe('ConnectionPopover', () => {
     // Arrange
     const label = faker.lorem.sentence()
     const metric = createMetricDisplay({ gauge: { position: 0.45, unstableFrom: 0.25, degradedAbove: 0.75, label } })
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ metrics: [metric] }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ metrics: [metric] }) })
 
     // Act
     const wrapper = await mountPopover(client)
@@ -143,7 +161,7 @@ describe('ConnectionPopover', () => {
     // Arrange
     const pending = faker.lorem.words(2)
     const metric = createMetricDisplay({ value: pending, gauge: null })
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ metrics: [metric] }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ metrics: [metric] }) })
 
     // Act
     const wrapper = await mountPopover(client)
@@ -156,7 +174,7 @@ describe('ConnectionPopover', () => {
 
   it('keeps a display pushed while the first read was in flight', async () => {
     // Arrange
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay())
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay() })
     client.holdReads()
     const wrapper = await mountPopover(client)
     const fresh = createConnectionDisplay()
@@ -173,10 +191,9 @@ describe('ConnectionPopover', () => {
   it('shows the hint of a metric close to its threshold', async () => {
     // Arrange
     const hint = faker.lorem.words(3)
-    const client = new InMemoryNetworkQualityClient(
-      undefined,
-      createConnectionDisplay({ metrics: [createMetricDisplay({ hint })] }),
-    )
+    const client = new InMemoryNetworkQualityClient({
+      display: createConnectionDisplay({ metrics: [createMetricDisplay({ hint })] }),
+    })
 
     // Act
     const wrapper = await mountPopover(client)
@@ -203,7 +220,7 @@ describe('ConnectionPopover', () => {
   it('opens the dashboard from its main button', async () => {
     // Arrange
     const display = createConnectionDisplay()
-    const client = new InMemoryNetworkQualityClient(undefined, display)
+    const client = new InMemoryNetworkQualityClient({ display: display })
     const wrapper = await mountPopover(client)
     const button = wrapper.get('button[data-primary]')
 
@@ -330,7 +347,7 @@ describe('ConnectionPopover', () => {
   it('offers folded help when the system refuses the ping', async () => {
     // Arrange
     const help = createHelpDisplay()
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ help }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ help }) })
 
     // Act
     const wrapper = await mountPopover(client)

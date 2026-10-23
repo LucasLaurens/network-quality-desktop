@@ -23,6 +23,12 @@ const TOP = 8
 /** Space above the Dégradée threshold, so it never touches the top. */
 const HEADROOM = 1.15
 const TICK_ANCHORS = ['start', 'middle', 'end'] as const
+/** Past this share of the width, a network change label flips to the left of its line. */
+const CHANGE_LABEL_FLIP = 0.6
+/** Gap between a network change line and its label. */
+const CHANGE_LABEL_GAP = 6
+/** Past this share of the width, the tooltip opens to the left of the crosshair. */
+const TOOLTIP_FLIP = 0.7
 
 interface Point {
   index: number
@@ -75,6 +81,23 @@ const stateLabel = (index: number): string | null => {
   return evolution.stateLabels.find((entry) => entry.state === state)?.label ?? null
 }
 
+/** Each network change: where its line goes, and where its label sits. O(c). */
+const changeMarks = computed(() =>
+  evolution.networkChanges.map((change) => {
+    const x = toPosition(change.position)
+    const flips = (change.position ?? 0) > CHANGE_LABEL_FLIP
+    return {
+      key: change.label + String(change.position),
+      label: change.label,
+      x,
+      labelX: flips ? x - CHANGE_LABEL_GAP : x + CHANGE_LABEL_GAP,
+      anchor: flips ? 'end' : 'start',
+    }
+  }),
+)
+
+const clampIndex = (index: number): number => Math.min(count.value - 1, Math.max(0, index))
+
 const hovered = ref<number | null>(null)
 const hoveredValue = computed(() => (hovered.value === null ? null : series.values[hovered.value]))
 
@@ -82,15 +105,14 @@ const followPointer = (event: PointerEvent): void => {
   const box = (event.currentTarget as SVGSVGElement).getBoundingClientRect()
   if (box.width === 0) return
   const x = ((event.clientX - box.left) / box.width) * WIDTH
-  hovered.value =
-    x < LEFT ? null : Math.min(count.value - 1, Math.max(0, Math.floor(((x - LEFT) / (WIDTH - LEFT)) * count.value)))
+  hovered.value = x < LEFT ? null : clampIndex(Math.floor(((x - LEFT) / (WIDTH - LEFT)) * count.value))
 }
 
 const stepWithKeys = (event: KeyboardEvent): void => {
   const step = { ArrowLeft: -1, ArrowRight: 1 }[event.key]
   if (step === undefined) return
   event.preventDefault()
-  hovered.value = Math.min(count.value - 1, Math.max(0, (hovered.value ?? count.value - 1) + step))
+  hovered.value = clampIndex((hovered.value ?? count.value - 1) + step)
 }
 
 const measuredIndexes = computed(() => series.values.flatMap((value, index) => (value === null ? [] : [index])))
@@ -118,22 +140,9 @@ const measuredIndexes = computed(() => series.values.flatMap((value, index) => (
           <text class="axis" :x="LEFT - 8" :y="threshold.y + 4" text-anchor="end">{{ threshold.label }}</text>
         </g>
         <line :x1="LEFT" :x2="WIDTH" :y1="HEIGHT - BOTTOM" :y2="HEIGHT - BOTTOM" class="baseline" />
-        <g v-for="change in evolution.networkChanges" :key="change.label + String(change.position)" data-network-change>
-          <line
-            :x1="toPosition(change.position)"
-            :x2="toPosition(change.position)"
-            :y1="TOP"
-            :y2="HEIGHT - BOTTOM"
-            class="change"
-          />
-          <text
-            class="axis"
-            :x="toPosition(change.position) + ((change.position ?? 0) > 0.6 ? -6 : 6)"
-            :y="TOP + 12"
-            :text-anchor="(change.position ?? 0) > 0.6 ? 'end' : 'start'"
-          >
-            {{ change.label }}
-          </text>
+        <g v-for="mark in changeMarks" :key="mark.key" data-network-change>
+          <line :x1="mark.x" :x2="mark.x" :y1="TOP" :y2="HEIGHT - BOTTOM" class="change" />
+          <text class="axis" :x="mark.labelX" :y="TOP + 12" :text-anchor="mark.anchor">{{ mark.label }}</text>
         </g>
         <polyline v-for="(points, index) in lines" :key="index" :points="points" class="line" data-line />
         <circle v-for="point in lonePoints" :key="point.index" :cx="point.x" :cy="point.y" r="2.5" class="dot" />
@@ -165,7 +174,7 @@ const measuredIndexes = computed(() => series.values.flatMap((value, index) => (
         data-tooltip
         :style="{
           left: `${String((toX(hovered) / WIDTH) * 100)}%`,
-          transform: `translateX(${toX(hovered) > WIDTH * 0.7 ? '-100%' : '0'})`,
+          transform: `translateX(${toX(hovered) > WIDTH * TOOLTIP_FLIP ? '-100%' : '0'})`,
         }"
       >
         <span class="time num">{{ evolution.times[hovered] }}</span>

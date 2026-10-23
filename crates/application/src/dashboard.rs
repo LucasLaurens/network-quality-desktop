@@ -238,20 +238,18 @@ pub fn list_network_summaries(
     let mut indexes: HashMap<(Option<MacAddress>, ConnectionKind), usize> = HashMap::new();
     let mut summaries: Vec<NetworkSummary> = Vec::new();
     for (network, _, aggregate) in list_rows_until_now(reader, now - SUMMARY_SECONDS, now)? {
-        let index = *indexes
-            .entry((network.gateway, network.kind))
-            .or_insert_with(|| {
-                summaries.push(NetworkSummary {
-                    is_current: live
-                        .network
-                        .as_ref()
-                        .is_some_and(|current| current.is_same_identity(&network)),
-                    network,
-                    aggregate: Aggregate::default(),
-                    is_most_reliable: false,
-                });
-                summaries.len() - 1
+        let index = *indexes.entry(network.identify()).or_insert_with(|| {
+            summaries.push(NetworkSummary {
+                is_current: live
+                    .network
+                    .as_ref()
+                    .is_some_and(|current| current.is_same_identity(&network)),
+                network,
+                aggregate: Aggregate::default(),
+                is_most_reliable: false,
             });
+            summaries.len() - 1
+        });
         summaries[index].aggregate.merge(&aggregate);
     }
     summaries.retain(|summary| summary.aggregate.count_measured_seconds() > 0);

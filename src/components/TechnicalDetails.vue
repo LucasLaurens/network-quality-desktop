@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { useInterfaceTexts } from '../composables/interface-texts'
-import { computed, inject, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import type { LineDetails, TechnicalDetails } from '../bindings'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
+import { readErrorMessage, useNetworkQualityClient } from '../services/network-quality-client'
 
-const client = inject(NETWORK_QUALITY_CLIENT_KEY)
-if (!client) throw new Error('NetworkQualityClient is not provided')
+const client = useNetworkQualityClient()
 const say = useInterfaceTexts()
 
 const details = ref<TechnicalDetails | null>(null)
@@ -28,7 +27,7 @@ const loadLine = async (): Promise<void> => {
   try {
     line.value = await client.readLineDetails()
   } catch (error) {
-    lineRefusal.value = error instanceof Error ? error.message : String(error)
+    lineRefusal.value = readErrorMessage(error)
   }
 }
 

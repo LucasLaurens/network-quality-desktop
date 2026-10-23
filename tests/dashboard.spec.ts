@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import DashboardView from '../src/components/DashboardView.vue'
 import {
@@ -10,15 +10,11 @@ import {
   createMetricDisplay,
   createNetworkRowDisplay,
   createOverviewDisplay,
-  createWindowProvisions,
+  mountWindow,
 } from './fakes/in-memory-network-quality-client'
 
-async function mountDashboard(client: InMemoryNetworkQualityClient) {
-  const wrapper = mount(DashboardView, {
-    global: { provide: createWindowProvisions(client) },
-  })
-  await flushPromises()
-  return wrapper
+function mountDashboard(client: InMemoryNetworkQualityClient) {
+  return mountWindow(DashboardView, client)
 }
 
 describe('DashboardView', () => {
@@ -26,7 +22,7 @@ describe('DashboardView', () => {
     // Arrange
     const display = createConnectionDisplay({ state: 'unstable', action: faker.lorem.sentence() })
     const overview = createOverviewDisplay()
-    const client = new InMemoryNetworkQualityClient(undefined, display)
+    const client = new InMemoryNetworkQualityClient({ display: display })
     client.setDashboardSummary(createDashboardSummary({ overview }))
 
     // Act
@@ -46,7 +42,7 @@ describe('DashboardView', () => {
   it('explains each current metric with its thresholds and its method', async () => {
     // Arrange
     const metric = createMetricDisplay({ hint: faker.lorem.words(3) })
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ metrics: [metric] }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ metrics: [metric] }) })
 
     // Act
     const wrapper = await mountDashboard(client)

@@ -5,6 +5,7 @@ use crate::grade::Scalable;
 const WINDOW_SECONDS: usize = 60;
 /// Below 60 probes (30 s with two targets) a single loss would weigh several percent.
 const MIN_PROBES: u32 = 60;
+const PERCENT: f64 = 100.0;
 
 /// Share of probes that got no answer, in percent.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -19,6 +20,12 @@ impl LossRate {
     #[must_use]
     pub const fn to_percent(self) -> f64 {
         self.0
+    }
+
+    /// `sent` must be positive: callers wait for enough probes to judge. O(1).
+    #[must_use]
+    pub fn from_counts(lost: u32, sent: u32) -> Self {
+        Self(f64::from(lost) * PERCENT / f64::from(sent))
     }
 }
 
@@ -53,8 +60,7 @@ impl LossWindow {
     /// `None` until 60 probes were sent. O(1).
     #[must_use]
     pub fn compute_rate(&self) -> Option<LossRate> {
-        (self.sent >= MIN_PROBES)
-            .then(|| LossRate(f64::from(self.lost) * 100.0 / f64::from(self.sent)))
+        (self.sent >= MIN_PROBES).then(|| LossRate::from_counts(self.lost, self.sent))
     }
 }
 
@@ -94,6 +100,12 @@ mod tests {
 
         // Assert
         assert_eq!(window.compute_rate(), Some(LossRate::from_percent(0.0)));
+    }
+
+    #[test]
+    fn rates_lost_probes_out_of_those_sent() {
+        // Act & Assert
+        assert_eq!(LossRate::from_counts(3, 60), LossRate::from_percent(5.0));
     }
 
     #[test]

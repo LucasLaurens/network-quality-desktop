@@ -3,12 +3,11 @@ import { useInterfaceTexts } from '../composables/interface-texts'
 import { inject, ref, watch } from 'vue'
 import { REQUESTED_TEST_KEY } from '../composables/dashboard-requests'
 import { THROUGHPUT_PROFILES, useThroughputTest } from '../composables/use-throughput-test'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
+import { useNetworkQualityClient } from '../services/network-quality-client'
 
 const emit = defineEmits<{ done: [] }>()
 
-const client = inject(NETWORK_QUALITY_CLIENT_KEY)
-if (!client) throw new Error('NetworkQualityClient is not provided')
+const client = useNetworkQualityClient()
 const say = useInterfaceTexts()
 // Only the dashboard provides it: the tray menu runs its tests there.
 const requested = inject(REQUESTED_TEST_KEY, ref(null))
@@ -86,16 +85,6 @@ watch(
 .secondary:disabled {
   color: var(--muted);
   cursor: default;
-}
-
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
 }
 
 .warning {

@@ -1,29 +1,14 @@
 <script setup lang="ts">
 import { useInterfaceTexts } from '../composables/interface-texts'
-import { inject, ref } from 'vue'
-import type { ThroughputPanel } from '../bindings'
-import { useLoadOnFocus } from '../composables/use-load-on-focus'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
-import { readUtcOffsetSeconds } from '../services/time-zone'
+import { useThroughputPanel } from '../composables/use-throughput-panel'
+import { useNetworkQualityClient } from '../services/network-quality-client'
 import ThroughputControls from './ThroughputControls.vue'
 
 const emit = defineEmits<{ openSettings: [] }>()
 
-const client = inject(NETWORK_QUALITY_CLIENT_KEY)
-if (!client) throw new Error('NetworkQualityClient is not provided')
+const client = useNetworkQualityClient()
 const say = useInterfaceTexts()
-
-const panel = ref<ThroughputPanel | null>(null)
-
-const loadPanel = async (): Promise<void> => {
-  try {
-    panel.value = await client.readThroughputPanel(readUtcOffsetSeconds())
-  } catch (error) {
-    console.error('Reading the throughput tests failed', error)
-  }
-}
-
-useLoadOnFocus(loadPanel)
+const { panel, loadPanel } = useThroughputPanel(client)
 </script>
 
 <template>
@@ -80,37 +65,13 @@ useLoadOnFocus(loadPanel)
   color: var(--muted);
 }
 
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 .scroll {
   overflow-x: auto;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
 th,
 td {
-  padding: var(--s2) var(--s3) var(--s2) 0;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
   white-space: nowrap;
-}
-
-th {
-  color: var(--muted);
-  font-size: var(--t-xs);
-  font-weight: 500;
 }
 
 .right {

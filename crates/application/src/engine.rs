@@ -6,7 +6,8 @@ use domain::{
     ConnectionContext, ConnectionKind, DegradationWatch, Diagnosis, Fault, GatewayWindow, Grade,
     GradeBounds, Hysteresis, LatencyWindow, LocalSegment, LossRate, LossWindow, MeasuringCause,
     Metric, OfflineDetector, ProbeOutcome, Scalable, Settings, THROUGHPUT_CAP_DURATION, Target,
-    Thresholds, ThroughputResult, Unmeasurable, Verdict, WifiLink, compute_median,
+    Thresholds, ThroughputResult, Unmeasurable, Verdict, WifiLink, compute_mean_duration,
+    compute_median,
 };
 use futures_util::future::{join, join_all, join3};
 use tokio::sync::{mpsc, oneshot};
@@ -92,6 +93,52 @@ impl<T: Scalable> MetricReading<T> {
             is_near_next_threshold: bounds.is_near_next_threshold(value),
             bounds: *bounds,
         }
+    }
+}
+
+impl<T> MetricReading<T> {
+    const fn to_grade_and_nearness(&self) -> (Grade, bool) {
+        (self.grade, self.is_near_next_threshold)
+    }
+}
+
+/// The three graded metrics of one second; each `None` while it cannot be computed yet.
+#[derive(Debug, Clone, Copy)]
+struct MetricReadings {
+    latency: Option<MetricReading<Duration>>,
+    jitter: Option<MetricReading<Duration>>,
+    loss: Option<MetricReading<LossRate>>,
+}
+
+impl MetricReadings {
+    /// O(1): three metrics.
+    fn list_grades(&self) -> [(Metric, Option<(Grade, bool)>); 3] {
+        [
+            (
+                Metric::Latency,
+                self.latency
+                    .as_ref()
+                    .map(MetricReading::to_grade_and_nearness),
+            ),
+            (
+                Metric::Jitter,
+                self.jitter
+                    .as_ref()
+                    .map(MetricReading::to_grade_and_nearness),
+            ),
+            (
+                Metric::Loss,
+                self.loss.as_ref().map(MetricReading::to_grade_and_nearness),
+            ),
+        ]
+    }
+
+    /// O(1): three metrics.
+    fn find_worst_grade(&self) -> Option<Grade> {
+        self.list_grades()
+            .into_iter()
+            .filter_map(|(_, reading)| reading.map(|(grade, _)| grade))
+            .max()
     }
 }
 
@@ -225,8 +272,7 @@ where
         }
     }
 
-    /// Probes the targets concurrently, so one tick costs one probe timeout at most.
-    /// O(k log k + n log n) time and O(k + n) space, k targets and n ≤ 15 window samples.
+    /// Reacts to one message: O(1), except a tick, which costs what `measure_one_second` does.
     pub async fn handle(&mut self, message: EngineMessage) {
         match message {
             EngineMessage::Tick => self.measure_one_second().await,
@@ -283,6 +329,8 @@ where
         }
     }
 
+    /// Probes the targets concurrently, so one tick costs one probe timeout at most.
+    /// O(k log k + n log n) time and O(k + n) space, k targets and n ≤ 15 window samples.
     async fn measure_one_second(&mut self) {
         // Read before the probes: they may take a second, and two ticks must not share one.
         let utc = self.clock.read_utc_seconds();
@@ -352,7 +400,8 @@ where
         }
         self.seconds_since_context += 1;
         let (latency, probes_lost) = self.record_outcomes(&outcomes);
-        let view = self.compute_view(&outcomes);
+        self.update_verdict(&outcomes);
+        let view = self.compose_view();
         self.record_history(utc, latency, probes_lost, &view);
         self.present(&view);
     }
@@ -456,14 +505,7 @@ where
         probes_lost: u32,
         view: &VerdictView,
     ) {
-        let name = self
-            .wifi
-            .as_ref()
-            .filter(|_| {
-                self.context
-                    .is_some_and(|context| context.is_carried_by_wifi())
-            })
-            .and_then(|link| link.name.clone());
+        let name = self.find_wifi_in_use().and_then(|link| link.name.clone());
         let second = MeasuredSecond {
             utc,
             latency,
@@ -475,93 +517,101 @@ where
             .record_second(&second, self.context, name, &self.history_recorder);
     }
 
-    /// O(k·n log n) time, O(k·n) space, k targets and n ≤ 15 window samples.
-    fn compute_view(&mut self, outcomes: &[ProbeOutcome]) -> VerdictView {
+    /// The Wi-Fi radio, only while it carries the traffic. O(1).
+    fn find_wifi_in_use(&self) -> Option<&WifiLink> {
+        self.wifi.as_ref().filter(|_| {
+            self.context
+                .is_some_and(|context| context.is_carried_by_wifi())
+        })
+    }
+
+    /// Feeds the second to the offline detector, then to the hysteresis once warmed up: what is
+    /// measured, before any throughput cap. Every target unreachable for long enough means
+    /// offline, and measuring again from scratch. O(k·n log n) time, O(k·n) space, k targets and
+    /// n ≤ 15 window samples.
+    fn update_verdict(&mut self, outcomes: &[ProbeOutcome]) {
         let any_reachable = outcomes
             .iter()
             .any(|outcome| *outcome != ProbeOutcome::Unreachable);
         if self.offline.record_second(any_reachable) {
             self.restart();
             self.measured_verdict = Verdict::Offline;
-            return VerdictView {
-                verdict: Verdict::Offline,
-                diagnosis: self.diagnose_offline(),
-                latency: None,
-                jitter: None,
-                loss: None,
-                context: self.context,
-                local: self.compute_local_segment(),
-                wifi: self.wifi.clone(),
-            };
+            return;
         }
-        let thresholds = self.thresholds;
-        let latency = self
-            .latency
-            .compute_p90()
-            .map(|value| MetricReading::compute(value, &thresholds.latency));
-        let jitter = self
-            .compute_jitter()
-            .map(|value| MetricReading::compute(value, &thresholds.jitter));
-        let loss = self
-            .loss
-            .compute_rate()
-            .map(|value| MetricReading::compute(value, &thresholds.loss));
-        let worst = [
-            latency.map(|reading| reading.grade),
-            jitter.map(|reading| reading.grade),
-            loss.map(|reading| reading.grade),
-        ]
-        .into_iter()
-        .flatten()
-        .max();
-        let verdict = match worst {
+        self.measured_verdict = match self.compute_readings().find_worst_grade() {
             Some(grade) if self.samples_since_restart >= WARM_UP_SAMPLES => {
                 self.hysteresis.observe(grade, self.clock.read_now())
             }
             _ => Verdict::Measuring,
         };
-        let grades = [
-            (
-                Metric::Latency,
-                latency.map(|reading| (reading.grade, reading.is_near_next_threshold)),
-            ),
-            (
-                Metric::Jitter,
-                jitter.map(|reading| (reading.grade, reading.is_near_next_threshold)),
-            ),
-            (
-                Metric::Loss,
-                loss.map(|reading| (reading.grade, reading.is_near_next_threshold)),
-            ),
-        ];
+        self.expire_throughput_cap();
+    }
+
+    /// What the presenters show for the measured verdict, held down by a recent slow test.
+    /// O(k·n log n) time, O(k·n) space, k targets and n ≤ 15 window samples.
+    fn compose_view(&self) -> VerdictView {
+        if self.measured_verdict == Verdict::Offline {
+            return self.compose_unmeasured_view(Verdict::Offline, self.diagnose_offline());
+        }
+        let readings = self.compute_readings();
         let local = self.compute_local_segment();
-        let wifi_in_use = self.wifi.as_ref().filter(|_| {
-            self.context
-                .is_some_and(|context| context.is_carried_by_wifi())
-        });
-        let fault = Fault::attribute(
-            ConnectionKind::from_context(self.context),
-            local,
-            wifi_in_use,
-        );
-        self.measured_verdict = verdict;
-        let capped = self.find_throughput_cap(verdict);
-        let verdict = capped.map_or(verdict, Verdict::Graded);
+        let capped = self.find_throughput_cap();
+        let verdict = capped.map_or(self.measured_verdict, Verdict::Graded);
         let diagnosis = match verdict {
             _ if capped.is_some() => Diagnosis::LowThroughput,
             Verdict::Offline => self.diagnose_offline(),
             Verdict::Measuring => self.compose_measuring_diagnosis(),
-            Verdict::Graded(displayed) => diagnose_graded(displayed, &grades, fault),
+            Verdict::Graded(displayed) => {
+                let fault = Fault::attribute(
+                    ConnectionKind::from_context(self.context),
+                    local,
+                    self.find_wifi_in_use(),
+                );
+                diagnose_graded(displayed, &readings.list_grades(), fault)
+            }
         };
         VerdictView {
             verdict,
             diagnosis,
-            latency,
-            jitter,
-            loss,
+            latency: readings.latency,
+            jitter: readings.jitter,
+            loss: readings.loss,
             context: self.context,
             local,
             wifi: self.wifi.clone(),
+        }
+    }
+
+    /// A view with no metric: offline, or measuring again after a wake. O(n log n) for the
+    /// n ≤ 15 gateway samples behind the local segment.
+    fn compose_unmeasured_view(&self, verdict: Verdict, diagnosis: Diagnosis) -> VerdictView {
+        VerdictView {
+            verdict,
+            diagnosis,
+            latency: None,
+            jitter: None,
+            loss: None,
+            context: self.context,
+            local: self.compute_local_segment(),
+            wifi: self.wifi.clone(),
+        }
+    }
+
+    /// O(k·n log n) time, O(k·n) space, k targets and n ≤ 15 window samples.
+    fn compute_readings(&self) -> MetricReadings {
+        let thresholds = &self.thresholds;
+        MetricReadings {
+            latency: self
+                .latency
+                .compute_p90()
+                .map(|value| MetricReading::compute(value, &thresholds.latency)),
+            jitter: self
+                .compute_jitter()
+                .map(|value| MetricReading::compute(value, &thresholds.jitter)),
+            loss: self
+                .loss
+                .compute_rate()
+                .map(|value| MetricReading::compute(value, &thresholds.loss)),
         }
     }
 
@@ -580,16 +630,22 @@ where
             .map(|grade| (grade, utc));
     }
 
-    /// The grade a recent slow test holds a measured verdict at, when it is worse; an expired cap
-    /// is dropped. O(1).
-    fn find_throughput_cap(&mut self, verdict: Verdict) -> Option<Grade> {
-        let (grade, since) = self.throughput_cap?;
+    /// Drops a cap held for `THROUGHPUT_CAP_DURATION`. O(1).
+    fn expire_throughput_cap(&mut self) {
+        let Some((_, since)) = self.throughput_cap else {
+            return;
+        };
         let elapsed = Duration::from_secs((self.clock.read_utc_seconds() - since).unsigned_abs());
         if elapsed >= THROUGHPUT_CAP_DURATION {
             self.throughput_cap = None;
-            return None;
         }
-        match verdict {
+    }
+
+    /// The grade a recent slow test holds the measured verdict at, when it is worse. Read after
+    /// `expire_throughput_cap`. O(1).
+    fn find_throughput_cap(&self) -> Option<Grade> {
+        let (grade, _) = self.throughput_cap?;
+        match self.measured_verdict {
             Verdict::Graded(shown) if grade > shown => Some(grade),
             Verdict::Graded(_) | Verdict::Measuring | Verdict::Offline => None,
         }
@@ -602,10 +658,7 @@ where
             .iter()
             .filter_map(LatencyWindow::compute_jitter)
             .collect();
-        let count = u32::try_from(jitters.len())
-            .ok()
-            .filter(|count| *count > 0)?;
-        Some(jitters.iter().sum::<Duration>() / count)
+        compute_mean_duration(&jitters)
     }
 
     /// The servers change the measurement; the notifications only what is announced. Called with
@@ -643,16 +696,9 @@ where
         self.offline = OfflineDetector::default();
         self.measured_verdict = Verdict::Measuring;
         self.history.record_wake(utc, &self.history_recorder);
-        self.present(&VerdictView {
-            verdict: Verdict::Measuring,
-            diagnosis: self.compose_measuring_diagnosis(),
-            latency: None,
-            jitter: None,
-            loss: None,
-            context: self.context,
-            local: self.compute_local_segment(),
-            wifi: self.wifi.clone(),
-        });
+        let view =
+            self.compose_unmeasured_view(Verdict::Measuring, self.compose_measuring_diagnosis());
+        self.present(&view);
     }
 
     /// Another network, back from sleep or other servers: nothing measured before applies, the

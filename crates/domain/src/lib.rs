@@ -27,7 +27,7 @@ pub use access::{ACCESS_MIN_TESTS, ACCESS_TESTS, AccessEstimate, BoxLine, WanAcc
 pub use calendar::{CivilDate, CivilDateTime};
 pub use connection::{
     ConnectionContext, ConnectionKind, Gateway, InterfaceSnapshot, MacAddress, Medium, Metering,
-    NetworkIdentity,
+    NetworkIdentity, agree,
 };
 pub use degradation::DegradationWatch;
 pub use diagnosis::{Diagnosis, MeasuringCause, Metric};
@@ -38,7 +38,9 @@ pub use history::{
     SecondSample, StateSeconds,
 };
 pub use hysteresis::{DEGRADE_AFTER, Hysteresis};
-pub use latency_window::{LatencyWindow, compute_median};
+pub use latency_window::{
+    LatencyWindow, compute_mean_duration, compute_median, compute_nearest_rank,
+};
 pub use loss::{LossRate, LossWindow};
 pub use offline::{OFFLINE_AFTER_SECONDS, OfflineDetector};
 pub use probe_outcome::ProbeOutcome;

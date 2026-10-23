@@ -7,8 +7,9 @@ use fluent_bundle::FluentArgs;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::dashboard_display::{format_date_time, format_or_unknown};
+use crate::dashboard_display::format_or_unknown;
 use crate::text_catalog::TextCatalog;
+use crate::time_display::format_date_time;
 
 const BITS_PER_MEGABIT: f64 = 1_000_000.0;
 const BYTES_PER_MEGABYTE: f64 = 1_000_000.0;
@@ -105,12 +106,11 @@ pub fn compose_warning(
         Some(context) if context.is_limited() => "throughput-warning-limited",
         Some(_) | None => return None,
     };
-    let mut args = FluentArgs::new();
-    args.set(
+    Some(catalog.render_value(
+        key,
         "data",
         format_megabytes(profile.compute_max_bytes(), catalog),
-    );
-    Some(catalog.render(key, Some(&args)))
+    ))
 }
 
 impl ThroughputRow {
@@ -124,13 +124,13 @@ impl ThroughputRow {
     ) -> Self {
         let rate = |rate: Option<Bitrate>| {
             rate.map_or_else(
-                || catalog.render("value-unknown", None),
+                || catalog.render_text("value-unknown"),
                 |rate| format_bitrate(rate, catalog),
             )
         };
         Self {
             when: format_date_time(utc, offset, catalog),
-            profile: catalog.render(to_profile_key(result.profile), None),
+            profile: catalog.render_text(to_profile_key(result.profile)),
             download: rate(result.download),
             upload: rate(result.upload),
             loaded_latency: format_or_unknown(result.loaded_latency, catalog),
@@ -158,9 +158,7 @@ pub fn format_bitrate(rate: Bitrate, catalog: &TextCatalog) -> String {
     } else {
         format!("{megabits:.0}")
     };
-    let mut args = FluentArgs::new();
-    args.set("value", value);
-    catalog.render("unit-megabits", Some(&args))
+    catalog.render_value("unit-megabits", "value", value)
 }
 
 /// « 4,2 Mo », one decimal. O(1).
@@ -169,12 +167,11 @@ pub fn format_bitrate(rate: Bitrate, catalog: &TextCatalog) -> String {
     reason = "a test moves a few hundred megabytes at most"
 )]
 pub fn format_megabytes(bytes: u64, catalog: &TextCatalog) -> String {
-    let mut args = FluentArgs::new();
-    args.set(
+    catalog.render_value(
+        "unit-megabytes",
         "value",
         format_one_decimal(bytes as f64 / BYTES_PER_MEGABYTE),
-    );
-    catalog.render("unit-megabytes", Some(&args))
+    )
 }
 
 /// « 4,2 »: one decimal, after a comma. O(1).

@@ -11,9 +11,8 @@ use crate::text_catalog::TextCatalog;
 /// # Errors
 ///
 /// The system refused to build a menu item.
-pub fn build_app_menu(app: &AppHandle<Wry>) -> tauri::Result<Menu<Wry>> {
-    let catalog = TextCatalog::load();
-    let text = |key: &str| catalog.render(key, None);
+pub fn build_app_menu(app: &AppHandle<Wry>, catalog: &TextCatalog) -> tauri::Result<Menu<Wry>> {
+    let text = |key: &str| catalog.render_text(key);
     // The first submenu is the application menu: macOS titles it with the app's name.
     let application = Submenu::with_items(
         app,

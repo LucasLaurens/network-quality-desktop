@@ -15,10 +15,9 @@ import { NBSP, connectionScenarios } from './connection-scenarios'
 // `?tests=on` shows the throughput tests allowed, with a last result.
 const parameters = new URLSearchParams(window.location.search)
 const scenario = parameters.get('scenario') ?? 'degraded'
-const client = new InMemoryNetworkQualityClient(
-  undefined,
-  connectionScenarios[scenario] ?? connectionScenarios.degraded,
-)
+const client = new InMemoryNetworkQualityClient({
+  display: connectionScenarios[scenario] ?? connectionScenarios.degraded,
+})
 client.setThroughputPanel(
   parameters.get('tests') === 'on'
     ? createThroughputPanel({
