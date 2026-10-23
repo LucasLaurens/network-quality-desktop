@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/LucasLaurens/network-quality-desktop/compare/v0.9.1...v0.9.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **ci:** pass the first real CI run on every system ([#88](https://github.com/LucasLaurens/network-quality-desktop/issues/88)) ([feea82d](https://github.com/LucasLaurens/network-quality-desktop/commit/feea82d12672cd5e478e437d9f640c590899398d))
+
 ## 0.9.1 (2026-10-23)
 
 ### Bug Fixes
