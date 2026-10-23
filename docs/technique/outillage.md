@@ -48,7 +48,7 @@ Un poste peut ajouter ses propres contrôles dans `lefthook-local.yml`, non vers
 
 ## Intégration continue
 
-- `.github/workflows/ci.yml` lance `pnpm verify` puis les tests de fumée (`pnpm test:smoke`) sur Ubuntu 22.04, macOS et Windows, à chaque PR et à chaque push sur `main`, la couverture sur Ubuntu, et la mesure de la mise en page en clair et sombre (`pnpm test:visual`, Playwright et Chromium) sur Ubuntu.
+- `.github/workflows/ci.yml` lance `pnpm verify` puis les tests de fumée (`pnpm test:smoke`) sur Ubuntu 22.04, macOS et Windows, à chaque PR et à chaque push sur `main`, la couverture sur Ubuntu, et la mesure de la mise en page en clair et sombre (`pnpm test:visual`, Playwright et Chromium) sur les trois systèmes, chacun avec ses polices.
 - `.github/workflows/docs.yml` vérifie qu'une PR qui change le code change aussi la documentation.
 - `.github/workflows/dependencies.yml` vérifie licences et failles chaque lundi à 6 h UTC, à la demande, et sur toute PR qui change `Cargo.lock`, `pnpm-lock.yaml` ou `deny.toml`.
 - `.github/workflows/mutants.yml` lance les mutants du domaine à la demande (onglet Actions).
