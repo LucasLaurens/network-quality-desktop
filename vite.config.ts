@@ -12,5 +12,8 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['tests/**/*.spec.ts'],
+    // The module cache keys a file on its own content: a spec listing files by `import.meta.glob`
+    // would keep the list it had, and the guards that read the sources would test stale code.
+    fsModuleCache: false,
   },
 })
