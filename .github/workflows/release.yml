@@ -105,7 +105,8 @@ jobs:
           pattern: installers-*
           merge-multiple: true
           path: installers
-      - run: gh release upload "$TAG" installers/* --clobber --repo "$REPOSITORY"
+      # Each artifact keeps its bundle folder (dmg/, msi/, deb/…): the files are one level down.
+      - run: gh release upload "$TAG" installers/*/* --clobber --repo "$REPOSITORY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
