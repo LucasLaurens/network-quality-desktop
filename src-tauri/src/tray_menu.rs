@@ -10,7 +10,7 @@ use domain::Settings;
 use crate::display::ConnectionDisplay;
 use crate::text_catalog::TextCatalog;
 use crate::throughput_display::ProfileChoice;
-use crate::windows::{DashboardRequested, request_from_dashboard, show_dashboard};
+use crate::windows::{DashboardRequested, report_failure, request_from_dashboard, show_dashboard};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
@@ -225,9 +225,7 @@ impl TrayMenu {
             return;
         }
         for (item, text) in built.infos.iter().zip(&texts) {
-            if let Err(error) = item.set_text(text) {
-                eprintln!("Updating the tray menu failed: {error}");
-            }
+            report_failure("Updating the tray menu", item.set_text(text));
         }
         built.texts = texts;
     }

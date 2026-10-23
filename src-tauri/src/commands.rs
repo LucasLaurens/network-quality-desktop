@@ -1,6 +1,11 @@
 //! Typed commands exposed to the front end. Tauri cannot export `pub` commands from the crate root.
+#![expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri injects command arguments by value"
+)]
 
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -65,10 +70,6 @@ pub fn read_app_info() -> AppInfo {
 #[tauri::command]
 #[specta::specta]
 #[must_use]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn read_interface_texts(catalog: State<'_, Arc<TextCatalog>>) -> BTreeMap<String, String> {
     catalog.list_interface_texts()
 }
@@ -77,10 +78,6 @@ pub fn read_interface_texts(catalog: State<'_, Arc<TextCatalog>>) -> BTreeMap<St
 #[tauri::command]
 #[specta::specta]
 #[must_use]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn read_connection_display(store: State<'_, DisplayStore>) -> ConnectionDisplay {
     store.read()
 }
@@ -88,10 +85,6 @@ pub fn read_connection_display(store: State<'_, DisplayStore>) -> ConnectionDisp
 /// Brings the dashboard window forward and closes the popover.
 #[tauri::command]
 #[specta::specta]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn open_dashboard(app: AppHandle) {
     close_popover(app.clone());
     show_dashboard(&app);
@@ -100,10 +93,6 @@ pub fn open_dashboard(app: AppHandle) {
 /// Opens the settings page of the dashboard and closes the popover.
 #[tauri::command]
 #[specta::specta]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn open_settings(app: AppHandle) {
     close_popover(app.clone());
     request_from_dashboard(&app, DashboardRequested::Settings);
@@ -112,10 +101,6 @@ pub fn open_settings(app: AppHandle) {
 /// Closes the popover from the keyboard (Escape).
 #[tauri::command]
 #[specta::specta]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn close_popover(app: AppHandle) {
     if let Some(popover) = app.get_webview_window(POPOVER_WINDOW) {
         report_failure("Hiding the popover", popover.hide());
@@ -135,10 +120,6 @@ const LOCATION_SETTINGS_URL: Option<&str> = if cfg!(target_os = "macos") {
 #[tauri::command]
 #[specta::specta]
 #[must_use]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn read_window_mode_texts(hint: State<'_, Option<WindowModeTexts>>) -> Option<WindowModeTexts> {
     hint.inner().clone()
 }
@@ -147,18 +128,15 @@ pub fn read_window_mode_texts(hint: State<'_, Option<WindowModeTexts>>) -> Optio
 #[tauri::command]
 #[specta::specta]
 pub fn open_tray_extension_page() {
-    if let Err(error) = tauri_plugin_opener::open_url(APPINDICATOR_EXTENSION_URL, None::<&str>) {
-        eprintln!("Opening the extension page failed: {error}");
-    }
+    report_failure(
+        "Opening the extension page",
+        tauri_plugin_opener::open_url(APPINDICATOR_EXTENSION_URL, None::<&str>),
+    );
 }
 
 /// Quits from the dashboard, the only way out in window mode.
 #[tauri::command]
 #[specta::specta]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn quit_app(app: AppHandle) {
     app.exit(0);
 }
@@ -167,18 +145,16 @@ pub fn quit_app(app: AppHandle) {
 /// where it can be given once the question was answered.
 #[tauri::command]
 #[specta::specta]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn reveal_network_name(app: AppHandle) {
     // CoreLocation answers through the main run loop.
     let asked = app.run_on_main_thread(|| {
         if request_location_permission() == LocationRequest::NeedsSettings
             && let Some(url) = LOCATION_SETTINGS_URL
-            && let Err(error) = tauri_plugin_opener::open_url(url, None::<&str>)
         {
-            eprintln!("Opening the location settings failed: {error}");
+            report_failure(
+                "Opening the location settings",
+                tauri_plugin_opener::open_url(url, None::<&str>),
+            );
         }
     });
     report_failure("Asking for the location permission", asked);
@@ -188,10 +164,6 @@ pub fn reveal_network_name(app: AppHandle) {
 #[tauri::command]
 #[specta::specta]
 #[must_use]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn read_history_notice(notice: State<'_, HistoryNotice>) -> Option<String> {
     notice.0.clone()
 }
@@ -221,7 +193,9 @@ pub async fn read_dashboard_summary(
                 &overview, &summaries, now, offset, &catalog,
             ))
         })
-        .map_err(|error: application::RepositoryError| error.0)
+        .map_err(|error: application::RepositoryError| {
+            report_and_render(&catalog, "history-not-read", "Reading the day", error.0)
+        })
 }
 
 /// The chart of `period`, with every metric: switching metric needs no new reading.
@@ -246,17 +220,20 @@ pub async fn read_evolution(
         .map(|evolution| {
             EvolutionDisplay::compose(&evolution, period, i64::from(utc_offset_seconds), &catalog)
         })
-        .map_err(|error| error.0)
+        .map_err(|error| {
+            report_and_render(
+                &catalog,
+                "history-not-read",
+                "Reading the evolution",
+                error.0,
+            )
+        })
 }
 
 /// The settings as last saved, for the Réglages page.
 #[tauri::command]
 #[specta::specta]
 #[must_use]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn read_settings(store: State<'_, SettingsStore>) -> SettingsForm {
     SettingsForm::from_settings(&store.read())
 }
@@ -284,8 +261,12 @@ pub async fn save_settings(
         return Err(catalog.render_text("server-unreachable"));
     }
     store.save(&settings).map_err(|error| {
-        eprintln!("Saving the settings failed: {}", error.0);
-        catalog.render_text("settings-not-saved")
+        report_and_render(
+            &catalog,
+            "settings-not-saved",
+            "Saving the settings",
+            error.0,
+        )
     })?;
     apply_settings(&app, &settings);
     inbox.send_settings(settings).await;
@@ -317,7 +298,14 @@ pub async fn read_throughput_panel(
     let now = SystemClock::start().read_utc_seconds();
     let mut records = history
         .read(|reader| reader.list_throughput_tests(0, now + 1))
-        .map_err(|error| error.0)?;
+        .map_err(|error| {
+            report_and_render(
+                &catalog,
+                "history-not-read",
+                "Reading the throughput tests",
+                error.0,
+            )
+        })?;
     records.truncate(THROUGHPUT_ROWS);
     Ok(ThroughputPanel::compose(
         settings.read().allows_throughput_tests,
@@ -414,16 +402,24 @@ pub async fn choose_export_folder(
         let _ = chosen.send(folder);
     });
     // A dropped sender means the dialog never opened: an error, not a choice.
-    let picked = picked.await.map_err(|_| {
-        eprintln!("The folder dialog could not open");
-        catalog.render_text("export-failed")
+    let picked = picked.await.map_err(|error| {
+        report_and_render(
+            &catalog,
+            "export-failed",
+            "Opening the folder dialog",
+            error,
+        )
     })?;
     let Some(folder) = picked else {
         return Ok(false);
     };
     let folder = folder.into_path().map_err(|error| {
-        eprintln!("The chosen folder is not a path: {error}");
-        catalog.render_text("export-failed")
+        report_and_render(
+            &catalog,
+            "export-failed",
+            "Reading the chosen folder as a path",
+            error,
+        )
     })?;
     export_folder.remember(folder);
     Ok(true)
@@ -447,8 +443,12 @@ pub async fn export_history(
     let HistoryLocation::OnDisk(history) = location.inner() else {
         return Err(catalog.render_text("export-unavailable"));
     };
-    let failed = || catalog.render_text("export-failed");
-    let folder = export_folder.read().ok_or_else(failed)?;
+    let failed = |action: &str, error: &dyn Display| {
+        report_and_render(&catalog, "export-failed", action, error)
+    };
+    let folder = export_folder
+        .read()
+        .ok_or_else(|| catalog.render_text("export-failed"))?;
     let history = history.clone();
     let now = SystemClock::start().read_utc_seconds();
     let (answer, answered) = tokio::sync::oneshot::channel();
@@ -457,20 +457,11 @@ pub async fn export_history(
         .spawn(move || {
             let _ = answer.send(write_export(&history, &folder, period.into(), now));
         })
-        .map_err(|error| {
-            eprintln!("Starting the export failed: {error}");
-            failed()
-        })?;
+        .map_err(|error| failed("Starting the export", &error))?;
     answered
         .await
-        .map_err(|error| {
-            eprintln!("The export thread stopped: {error}");
-            failed()
-        })?
-        .map_err(|error| {
-            eprintln!("The export failed: {error:?}");
-            failed()
-        })?;
+        .map_err(|error| failed("Waiting for the export thread", &error))?
+        .map_err(|error| failed("Exporting", &format_args!("{error:?}")))?;
     Ok(ExportDone {
         message: catalog.render_text("export-done"),
         reveal_label: catalog.render_text(REVEAL_EXPORT_KEY),
@@ -480,17 +471,14 @@ pub async fn export_history(
 /// Shows the export folder in the system's file manager.
 #[tauri::command]
 #[specta::specta]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn reveal_export_folder(export_folder: State<'_, ExportFolder>) {
     let Some(folder) = export_folder.read() else {
         return;
     };
-    if let Err(error) = tauri_plugin_opener::reveal_item_in_dir(&folder) {
-        eprintln!("Showing the export failed: {error}");
-    }
+    report_failure(
+        "Showing the export",
+        tauri_plugin_opener::reveal_item_in_dir(&folder),
+    );
 }
 
 /// Whether there is anything to export, and why not: a history kept in memory, or nothing kept
@@ -498,10 +486,6 @@ pub fn reveal_export_folder(export_folder: State<'_, ExportFolder>) {
 #[tauri::command]
 #[specta::specta]
 #[must_use]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn read_export_availability(
     location: State<'_, HistoryLocation>,
     history: State<'_, DashboardHistory>,
@@ -553,10 +537,6 @@ pub async fn erase_history(
 #[tauri::command]
 #[specta::specta]
 #[must_use]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri injects command arguments by value"
-)]
 pub fn read_technical_details(
     connection: State<'_, ConnectionStore>,
     traffic: State<'_, TrafficStore>,
@@ -584,14 +564,30 @@ pub async fn read_line_details(
     let tests = history
         .read(|reader| reader.list_throughput_tests(0, now + 1))
         .map_err(|error| {
-            eprintln!("Reading the throughput tests failed: {}", error.0);
-            catalog.render_text("details-line-failed")
+            report_and_render(
+                &catalog,
+                "details-line-failed",
+                "Reading the throughput tests",
+                error.0,
+            )
         })?;
     let reading = connection.read_all();
     let detector =
         UpnpAccessDetector::new(reading.context.and_then(|context| context.gateway_address));
     let line = detect_access(&detector, &tests, network.as_ref(), reading.latency).await;
     Ok(LineDetails::compose(&line, &catalog))
+}
+
+/// Logs what failed, with its cause, and returns the catalogue sentence the window shows: the
+/// cause is for the log, never for the user. O(length of the message).
+fn report_and_render(
+    catalog: &TextCatalog,
+    key: &str,
+    action: &str,
+    error: impl Display,
+) -> String {
+    eprintln!("{action} failed: {error}");
+    catalog.render_text(key)
 }
 
 #[cfg(test)]

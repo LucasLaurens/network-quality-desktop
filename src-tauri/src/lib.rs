@@ -57,7 +57,7 @@ use tokio::time::MissedTickBehavior;
 use tray_menu::{MenuAction, TrayMenu, apply_menu_action};
 use windows::{
     DashboardRequested, HAS_POPOVER, PopoverDismissal, apply_window_event, create_popover,
-    show_dashboard, toggle_popover,
+    report_failure, show_dashboard, toggle_popover,
 };
 
 const TRAY_ID: &str = "connection-state";
@@ -292,9 +292,7 @@ fn follow_color_scheme(painter: Arc<ShellTrayPainter>) {
                 painter.follow_scheme();
             }
         });
-    if let Err(error) = spawned {
-        eprintln!("Following the system's colour scheme failed: {error}");
-    }
+    report_failure("Following the system's colour scheme", spawned);
 }
 
 #[cfg(test)]

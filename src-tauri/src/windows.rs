@@ -1,5 +1,6 @@
 //! The two windows: the dashboard and the popover anchored to the menu-bar dot.
 
+use std::fmt::Display;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -135,13 +136,12 @@ pub fn show_dashboard(app: &AppHandle) {
 /// Shows the dashboard, then hands it the request. O(1).
 pub fn request_from_dashboard(app: &AppHandle, request: DashboardRequested) {
     show_dashboard(app);
-    if let Err(error) = request.emit_to(app, MAIN_WINDOW) {
-        eprintln!("Asking the dashboard failed: {error}");
-    }
+    report_failure("Asking the dashboard", request.emit_to(app, MAIN_WINDOW));
 }
 
-/// A window that fails to move is not worth crashing the app: the failure is only logged.
-pub fn report_failure(action: &str, result: tauri::Result<()>) {
+/// A failure not worth crashing the app for, a window that fails to move or a page that fails
+/// to open: it is only logged.
+pub fn report_failure<T, E: Display>(action: &str, result: Result<T, E>) {
     if let Err(error) = result {
         eprintln!("{action} failed: {error}");
     }

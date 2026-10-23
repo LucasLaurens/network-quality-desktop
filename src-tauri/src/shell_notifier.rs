@@ -9,6 +9,7 @@ use tauri_plugin_notification::NotificationExt;
 
 use crate::display::ConnectionDisplay;
 use crate::text_catalog::TextCatalog;
+use crate::windows::report_failure;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Notice {
@@ -50,9 +51,7 @@ impl Notifier for ShellNotifier {
             .title(notice.title)
             .body(notice.body)
             .show();
-        if let Err(error) = shown {
-            eprintln!("Showing the degradation notice failed: {error}");
-        }
+        report_failure("Showing the degradation notice", shown);
     }
 }
 

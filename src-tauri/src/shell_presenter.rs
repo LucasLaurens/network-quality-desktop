@@ -19,6 +19,7 @@ use crate::text_catalog::TextCatalog;
 use crate::tray_icon::{ICON_SIZE, render_verdict_icon};
 use crate::tray_menu::TrayMenu;
 use crate::tray_painter::{TrayCanvas, TrayPainter};
+use crate::windows::report_failure;
 
 /// Sent to every window whenever what the popover shows changes.
 #[derive(Debug, Clone, Serialize, Type, Event)]
@@ -133,9 +134,10 @@ impl VerdictPresenter for ShellPresenter {
             return;
         }
         self.menu.show_display(&display, &self.catalog);
-        if let Err(error) = ConnectionDisplayChanged(display).emit(&self.app) {
-            eprintln!("Publishing the connection display failed: {error}");
-        }
+        report_failure(
+            "Publishing the connection display",
+            ConnectionDisplayChanged(display).emit(&self.app),
+        );
     }
 }
 
@@ -149,9 +151,10 @@ impl TrayCanvas for TrayIcon {
             return false;
         }
         // Linux ignores tooltips without failing; an error elsewhere is worth knowing about.
-        if let Err(error) = self.set_tooltip(Some(label)) {
-            eprintln!("Updating the menu-bar tooltip failed: {error}");
-        }
+        report_failure(
+            "Updating the menu-bar tooltip",
+            self.set_tooltip(Some(label)),
+        );
         true
     }
 }

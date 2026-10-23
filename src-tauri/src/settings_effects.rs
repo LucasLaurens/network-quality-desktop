@@ -8,6 +8,7 @@ use tauri_plugin_autostart::ManagerExt;
 
 use crate::text_catalog::TextCatalog;
 use crate::tray_menu::TrayMenu;
+use crate::windows::report_failure;
 
 /// A development build never registers itself to start at login.
 const CAN_REGISTER_AT_LOGIN: bool = !cfg!(debug_assertions);
@@ -33,7 +34,5 @@ pub fn apply_settings(app: &AppHandle, settings: &Settings) {
     } else {
         login_item.disable()
     };
-    if let Err(error) = lined_up {
-        eprintln!("Updating the login item failed: {error}");
-    }
+    report_failure("Updating the login item", lined_up);
 }
