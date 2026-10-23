@@ -109,13 +109,11 @@ mod platform {
         let key = ("org.freedesktop.appearance", "color-scheme");
         let read_one: Result<(Variant<u32>,), dbus::Error> =
             proxy.method_call(SETTINGS, "ReadOne", key);
-        let value = match read_one {
-            Ok((value,)) => value.0,
-            Err(_) => {
-                let (value,): (Variant<Variant<u32>>,) =
-                    proxy.method_call(SETTINGS, "Read", key)?;
-                value.0.0
-            }
+        let value = if let Ok((value,)) = read_one {
+            value.0
+        } else {
+            let (value,): (Variant<Variant<u32>>,) = proxy.method_call(SETTINGS, "Read", key)?;
+            value.0.0
         };
         Ok(if value == PREFER_DARK {
             ColorScheme::Dark
