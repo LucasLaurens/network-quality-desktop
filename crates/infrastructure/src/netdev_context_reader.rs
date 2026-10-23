@@ -1,6 +1,7 @@
 //! Reads the connection that carries the measurements with `netdev`, off the async threads: one
 //! read costs milliseconds of system calls.
 
+use std::borrow::Borrow;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 
 use application::{ConnectionContextReader, TrafficCounterReader};
@@ -64,9 +65,7 @@ impl ConnectionContextReader for NetdevContextReader {
 impl TrafficCounterReader for NetdevContextReader {
     fn read_counters(&self) -> Option<ByteCounters> {
         let source = find_source_address(self.route_reference)?;
-        let mut interface = netdev::get_interfaces()
-            .into_iter()
-            .find(|interface| !interface.is_loopback() && has_address(interface, source))?;
+        let mut interface = find_measured_interface(netdev::get_interfaces(), source)?;
         // Windows leaves the counters out of the listing. A failure leaves `stats` empty: read
         // every second, it would flood the log.
         let _ = interface.update_stats();
@@ -83,9 +82,7 @@ impl TrafficCounterReader for NetdevContextReader {
 fn read_context_now(route_reference: IpAddr) -> Option<ConnectionContext> {
     let source = find_source_address(route_reference)?;
     let interfaces = netdev::get_interfaces();
-    let measured = interfaces
-        .iter()
-        .find(|interface| !interface.is_loopback() && has_address(interface, source))?;
+    let measured = find_measured_interface(&interfaces, source)?;
     let others: Vec<InterfaceSnapshot> = interfaces
         .iter()
         .filter(|interface| {
@@ -111,6 +108,18 @@ fn find_source_address(target: IpAddr) -> Option<IpAddr> {
         .connect(SocketAddr::new(target, ROUTE_QUERY_PORT))
         .ok()?;
     Some(socket.local_addr().ok()?.ip())
+}
+
+/// The interface that holds `source`, the one the measurements leave by; owned or borrowed, as
+/// the caller holds the listing. O(i·a) for i interfaces of a addresses.
+fn find_measured_interface<I: Borrow<Interface>>(
+    interfaces: impl IntoIterator<Item = I>,
+    source: IpAddr,
+) -> Option<I> {
+    interfaces.into_iter().find(|interface| {
+        let interface = interface.borrow();
+        !interface.is_loopback() && has_address(interface, source)
+    })
 }
 
 /// O(a) for a addresses.

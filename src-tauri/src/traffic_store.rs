@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 use application::TrafficCounterReader;
 use domain::{TrafficMeter, TrafficReading};
 
+use crate::windows::report_failure;
+
 const SAMPLE_EVERY: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Default)]
@@ -32,9 +34,7 @@ impl TrafficStore {
                     std::thread::sleep(SAMPLE_EVERY);
                 }
             });
-        if let Err(error) = spawned {
-            eprintln!("Starting the traffic sampling failed: {error}");
-        }
+        report_failure("Starting the traffic sampling", spawned);
         store
     }
 

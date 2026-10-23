@@ -36,7 +36,7 @@ Après un redémarrage, la dernière heure repart des résumés par minute. Les 
 
 ## Si le fichier est abîmé
 
-Au lancement, l'app vérifie le fichier `history.sqlite3`. S'il est abîmé (ce n'est plus une base, ou son contrôle d'intégrité échoue), elle le renomme `history.corrupt-<secondes UTC>.sqlite3` avec ses fichiers de journal (rien n'est effacé), commence un nouvel historique et le dit dans le tableau de bord. Pour toute autre raison (fichier occupé, dossier inutilisable, historique créé par une version plus récente de l'app), le fichier n'est pas touché : l'historique est gardé en mémoire pour la session et le tableau de bord le signale. Une erreur d'écriture plus tard est seulement notée dans le journal de l'app.
+Au lancement, l'app vérifie le fichier `history.sqlite3`. S'il est abîmé (ce n'est plus une base, ou son contrôle d'intégrité échoue), elle le renomme `history.corrupt-<secondes UTC>.sqlite3` avec ses fichiers de journal (rien n'est effacé), commence un nouvel historique et le dit dans le tableau de bord. Pour toute autre raison (fichier occupé, dossier inutilisable, historique créé par une version plus récente de l'app), le fichier n'est pas touché : l'historique est gardé en mémoire pour la session et le tableau de bord le signale. Si le tableau de bord ne peut pas ouvrir un fichier que l'app enregistre bien, il paraît vide et le dit : les mesures continuent d'être gardées. Une erreur d'écriture plus tard est seulement notée dans le journal de l'app.
 
 Le fichier se trouve dans le dossier de données de l'app :
 

@@ -51,7 +51,7 @@ pub struct LineDetails {
 impl DetailRow {
     fn compose(key: &str, value: String, catalog: &TextCatalog) -> Self {
         Self {
-            label: catalog.render(key, None),
+            label: catalog.render_text(key),
             value,
         }
     }
@@ -96,11 +96,11 @@ fn compose_connection_section(
 ) -> DetailSection {
     let network = NetworkDisplay::from_context(context, wifi, catalog);
     let gateway = context.gateway_address.map_or_else(
-        || catalog.render("value-unknown", None),
+        || catalog.render_text("value-unknown"),
         |address| address.to_string(),
     );
     DetailSection {
-        title: catalog.render("details-connection", None),
+        title: catalog.render_text("details-connection"),
         rows: vec![
             DetailRow::compose("details-network", network.label, catalog),
             DetailRow::compose("details-connection-kind", network.connection, catalog),
@@ -111,24 +111,19 @@ fn compose_connection_section(
 
 /// O(1).
 fn compose_wifi_section(wifi: &WifiLink, catalog: &TextCatalog) -> DetailSection {
-    let unknown = || catalog.render("value-unknown", None);
-    let render = |key: &str, value: String| {
-        let mut args = FluentArgs::new();
-        args.set("value", value);
-        catalog.render(key, Some(&args))
-    };
+    let unknown = || catalog.render_text("value-unknown");
     let signal = wifi.signal_dbm.map_or_else(unknown, |signal| {
-        render("unit-dbm", signal.unsigned_abs().to_string())
+        catalog.render_value("unit-dbm", "value", signal.unsigned_abs().to_string())
     });
-    let band = select_band_key(wifi.band).map_or_else(unknown, |key| catalog.render(key, None));
+    let band = select_band_key(wifi.band).map_or_else(unknown, |key| catalog.render_text(key));
     let channel = wifi
         .channel
         .map_or_else(unknown, |channel| channel.to_string());
-    let rate = wifi
-        .rate_mbps
-        .map_or_else(unknown, |rate| render("unit-megabits", rate.to_string()));
+    let rate = wifi.rate_mbps.map_or_else(unknown, |rate| {
+        catalog.render_value("unit-megabits", "value", rate.to_string())
+    });
     DetailSection {
-        title: catalog.render("details-wifi", None),
+        title: catalog.render_text("details-wifi"),
         rows: vec![
             DetailRow::compose("details-wifi-signal", signal, catalog),
             DetailRow::compose("details-wifi-band", band, catalog),
@@ -142,17 +137,19 @@ fn compose_wifi_section(wifi: &WifiLink, catalog: &TextCatalog) -> DetailSection
 fn compose_traffic_section(traffic: TrafficReading, catalog: &TextCatalog) -> DetailSection {
     let format = |rate: Option<TrafficRate>| {
         rate.map_or_else(
-            || catalog.render("details-traffic-waiting", None),
+            || catalog.render_text("details-traffic-waiting"),
             |rate| format_pair(rate.received, rate.sent, catalog),
         )
     };
-    let mut window_args = FluentArgs::new();
-    window_args.set("seconds", TRAFFIC_WINDOW.as_secs().to_string());
     DetailSection {
-        title: catalog.render("details-traffic", None),
+        title: catalog.render_text("details-traffic"),
         rows: vec![
             DetailRow {
-                label: catalog.render("details-traffic-now", Some(&window_args)),
+                label: catalog.render_value(
+                    "details-traffic-now",
+                    "seconds",
+                    TRAFFIC_WINDOW.as_secs().to_string(),
+                ),
                 value: format(traffic.current),
             },
             DetailRow::compose("details-traffic-peak", format(traffic.peak), catalog),
@@ -167,7 +164,7 @@ impl LineDetails {
         let row = |key: &str, value: String| DetailRow::compose(key, value, catalog);
         let mut rows = vec![row(
             "details-access",
-            catalog.render(to_access_key(reading.access), None),
+            catalog.render_text(to_access_key(reading.access)),
         )];
         if let Some(line) = &reading.line {
             // Each way on its own: many boxes give one and not the other.
@@ -189,10 +186,10 @@ impl LineDetails {
         };
         Self {
             section: DetailSection {
-                title: catalog.render("details-line", None),
+                title: catalog.render_text("details-line"),
                 rows,
             },
-            note: catalog.render(note_key, None),
+            note: catalog.render_text(note_key),
         }
     }
 }
@@ -214,7 +211,7 @@ fn format_known_pair(
     if received.is_none() && sent.is_none() {
         return None;
     }
-    let unknown = || catalog.render("value-unknown", None);
+    let unknown = || catalog.render_text("value-unknown");
     let mut args = FluentArgs::new();
     args.set("received", received.unwrap_or_else(unknown));
     args.set("sent", sent.unwrap_or_else(unknown));
@@ -238,12 +235,11 @@ fn format_bytes(bytes: u64, catalog: &TextCatalog) -> String {
     if bytes < BYTES_PER_GIGABYTE {
         return format_megabytes(bytes, catalog);
     }
-    let mut args = FluentArgs::new();
-    args.set(
+    catalog.render_value(
+        "unit-gigabytes",
         "value",
         format_one_decimal(bytes as f64 / BYTES_PER_GIGABYTE as f64),
-    );
-    catalog.render("unit-gigabytes", Some(&args))
+    )
 }
 
 #[cfg(test)]
@@ -323,7 +319,7 @@ mod tests {
         );
         assert_eq!(
             traffic[1].value,
-            catalog.render("details-traffic-waiting", None)
+            catalog.render_text("details-traffic-waiting")
         );
         assert_eq!(details.sections[0].rows[2].value, gateway.to_string());
     }
@@ -377,7 +373,7 @@ mod tests {
                 insert_no_break_spaces("↓ 9,0~Go, ↑ 700,0~Mo"),
             ]
         );
-        assert_eq!(details.note, catalog.render("details-line-note", None));
+        assert_eq!(details.note, catalog.render_text("details-line-note"));
     }
 
     #[test]
@@ -395,7 +391,7 @@ mod tests {
         // Assert
         assert_eq!(details.section.rows.len(), 1);
         assert_eq!(details.section.rows[0].value, "Fibre (estimé)");
-        assert_eq!(details.note, catalog.render("details-line-silent", None));
+        assert_eq!(details.note, catalog.render_text("details-line-silent"));
     }
 
     #[test]
@@ -440,7 +436,7 @@ mod tests {
         // Assert
         assert_eq!(
             details.note,
-            catalog.render("details-line-silent-unknown", None)
+            catalog.render_text("details-line-silent-unknown")
         );
     }
 }

@@ -56,8 +56,8 @@ impl PathDisplay {
         let at_fault = locate_fault(view.diagnosis);
         let is_measuring = view.verdict == Verdict::Measuring;
         let is_cut = view.diagnosis == Diagnosis::GatewayWithoutInternet;
-        let local_link = catalog.render(select_link_key(context.kind), None);
-        let internet_link = catalog.render(select_internet_key(context.kind), None);
+        let local_link = catalog.render_text(select_link_key(context.kind));
+        let internet_link = catalog.render_text(select_internet_key(context.kind));
         let local = SegmentDisplay {
             label: compose_label(
                 &local_link,
@@ -67,14 +67,13 @@ impl PathDisplay {
                         ..
                     } => latency.format(catalog),
                     LocalSegment::Measured { latency: None, .. } => {
-                        catalog.render("path-no-value", None)
+                        catalog.render_text("path-no-value")
                     }
-                    LocalSegment::Unmeasurable(_) => catalog.render("path-unmeasurable", None),
+                    LocalSegment::Unmeasurable(_) => catalog.render_text("path-unmeasurable"),
                 },
                 catalog,
             ),
-            fault: (at_fault == Some(Segment::Local))
-                .then(|| catalog.render("path-at-fault", None)),
+            fault: (at_fault == Some(Segment::Local)).then(|| catalog.render_text("path-at-fault")),
             state: match view.local {
                 _ if is_measuring => None,
                 LocalSegment::Unmeasurable(_) => None,
@@ -93,23 +92,23 @@ impl PathDisplay {
                         } else {
                             "path-no-value"
                         };
-                        catalog.render(key, None)
+                        catalog.render_text(key)
                     },
                     |reading| reading.value.format(catalog),
                 ),
                 catalog,
             ),
             fault: match at_fault {
-                Some(Segment::Internet) if is_cut => Some(catalog.render("path-cut", None)),
-                Some(Segment::Internet) => Some(catalog.render("path-at-fault", None)),
+                Some(Segment::Internet) if is_cut => Some(catalog.render_text("path-cut")),
+                Some(Segment::Internet) => Some(catalog.render_text("path-at-fault")),
                 _ => None,
             },
             state: (!is_measuring).then_some(state),
             is_cut,
         };
-        let gateway = catalog.render(select_gateway_key(context.kind), None);
-        let computer = catalog.render(COMPUTER_KEY, None);
-        let internet = catalog.render("path-internet", None);
+        let gateway = catalog.render_text(select_gateway_key(context.kind));
+        let computer = catalog.render_text(COMPUTER_KEY);
+        let internet = catalog.render_text("path-internet");
         let description = describe(
             [&computer, &gateway, &internet],
             [&local.label, &internet_segment.label],
@@ -247,7 +246,7 @@ mod tests {
     };
 
     fn render_computer_label() -> String {
-        TextCatalog::load().render(COMPUTER_KEY, None)
+        TextCatalog::load().render_text(COMPUTER_KEY)
     }
 
     #[test]

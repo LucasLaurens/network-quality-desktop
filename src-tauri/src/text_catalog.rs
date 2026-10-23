@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use fluent_bundle::concurrent::FluentBundle;
-use fluent_bundle::{FluentArgs, FluentResource};
+use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
 use fluent_syntax::ast::{Entry, Expression, InlineExpression, Message, PatternElement};
 use unic_langid::langid;
 
@@ -52,6 +52,33 @@ impl TextCatalog {
         text
     }
 
+    /// A message without variables. O(length of the message).
+    ///
+    /// # Panics
+    ///
+    /// Panics on a key missing from the catalogue, as `render` does.
+    #[must_use]
+    pub fn render_text(&self, key: &str) -> String {
+        self.render(key, None)
+    }
+
+    /// A message with one variable, `name`, set to `value`. O(length of the message).
+    ///
+    /// # Panics
+    ///
+    /// Panics on a key missing from the catalogue, as `render` does.
+    #[must_use]
+    pub fn render_value<'a>(
+        &self,
+        key: &str,
+        name: &'a str,
+        value: impl Into<FluentValue<'a>>,
+    ) -> String {
+        let mut args = FluentArgs::new();
+        args.set(name, value);
+        self.render(key, Some(&args))
+    }
+
     /// Every interface text, rendered, each variable left as `{name}` for the window to fill.
     /// O(c) for a catalogue of c characters: it is read again, once per window.
     ///
@@ -98,6 +125,92 @@ fn create_open_slots(message: &Message<&str>) -> FluentArgs<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Literals shaped like catalogue keys that name something else: the tray menu's item ids, the
+    /// tray icon's id and a thread's name. No key is built at runtime.
+    const NON_CATALOGUE_LITERALS: [&str; 7] = [
+        "open-dashboard",
+        "open-help",
+        "open-settings",
+        "run-quick-test",
+        "run-full-test",
+        "connection-state",
+        "color-scheme",
+    ];
+    /// A literal right after one of these is a key, whatever its shape.
+    const CATALOGUE_CALLS: [&str; 3] = ["render(", "render_text(", "render_value("];
+
+    /// Every `.rs` file of the shell, with its name.
+    fn list_shell_sources() -> Vec<(String, String)> {
+        let directory = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+        std::fs::read_dir(directory)
+            .expect("the shell sources")
+            .map(|entry| entry.expect("a source entry").path())
+            .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
+            .map(|path| {
+                let source = std::fs::read_to_string(&path).expect("a readable source");
+                (path.display().to_string(), source)
+            })
+            .collect()
+    }
+
+    /// The string literals of `source` that are catalogue keys: those passed to a render call,
+    /// and every literal shaped like one (`word-word`). A literal spans one line, as every key
+    /// does. O(c) for c characters.
+    fn list_literal_keys(source: &str) -> Vec<&str> {
+        let mut keys = Vec::new();
+        for line in source.lines() {
+            let mut rest = line;
+            while let Some(start) = rest.find('"') {
+                let after = &rest[start + 1..];
+                let Some(end) = after.find('"') else {
+                    break;
+                };
+                let literal = &after[..end];
+                let before = rest[..start].trim_end();
+                if CATALOGUE_CALLS.iter().any(|call| before.ends_with(call))
+                    || is_key_shaped(literal)
+                {
+                    keys.push(literal);
+                }
+                rest = &after[end + 1..];
+            }
+        }
+        keys
+    }
+
+    fn is_key_shaped(literal: &str) -> bool {
+        literal.starts_with(|c: char| c.is_ascii_lowercase())
+            && literal.contains('-')
+            && !literal.ends_with('-')
+            && !literal.contains("--")
+            && literal
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    }
+
+    #[test]
+    fn finds_every_key_the_shell_names_in_the_catalogue() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let sources = list_shell_sources();
+
+        // Act
+        let missing: Vec<String> = sources
+            .iter()
+            .flat_map(|(path, source)| {
+                list_literal_keys(source)
+                    .into_iter()
+                    .filter(|key| !NON_CATALOGUE_LITERALS.contains(key))
+                    .filter(|key| catalog.bundle.get_message(key).is_none())
+                    .map(move |key| format!("{path}: {key}"))
+            })
+            .collect();
+
+        // Assert
+        assert!(sources.len() > 1, "the shell sources were not found");
+        assert!(missing.is_empty(), "missing from fr.ftl: {missing:#?}");
+    }
 
     fn list_messages() -> Vec<(&'static str, &'static str)> {
         FRENCH

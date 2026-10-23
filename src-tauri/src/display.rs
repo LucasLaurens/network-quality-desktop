@@ -143,17 +143,17 @@ impl HelpDisplay {
     #[must_use]
     pub fn compose_ping_help(catalog: &TextCatalog) -> Self {
         let step = |label: &str, command: &str| HelpStep {
-            label: catalog.render(label, None),
-            command: catalog.render(command, None),
+            label: catalog.render_text(label),
+            command: catalog.render_text(command),
         };
         Self {
-            title: catalog.render("help-ping-title", None),
-            why: catalog.render("help-ping-why", None),
+            title: catalog.render_text("help-ping-title"),
+            why: catalog.render_text("help-ping-why"),
             steps: vec![
                 step("help-ping-now", "help-ping-now-command"),
                 step("help-ping-keep", "help-ping-keep-command"),
             ],
-            without_permission: catalog.render("help-ping-without", None),
+            without_permission: catalog.render_text("help-ping-without"),
         }
     }
 }
@@ -197,19 +197,16 @@ impl ConnectionDisplay {
             wifi_band,
         );
         // Measuring: the values arrive within seconds. Otherwise they cannot be computed now.
-        let missing = catalog.render(
-            if view.verdict == Verdict::Measuring {
-                "value-pending"
-            } else {
-                "value-unknown"
-            },
-            None,
-        );
+        let missing = catalog.render_text(if view.verdict == Verdict::Measuring {
+            "value-pending"
+        } else {
+            "value-unknown"
+        });
         Self {
             state,
-            state_label: catalog.render(state.to_catalogue_key(), None),
-            cause: catalog.render(cause_key, None),
-            action: action_key.map(|key| catalog.render(key, None)),
+            state_label: catalog.render_text(state.to_catalogue_key()),
+            cause: catalog.render_text(cause_key),
+            action: action_key.map(|key| catalog.render_text(key)),
             detail: compose_detail(view, catalog),
             metrics: vec![
                 compose_metric(
@@ -234,7 +231,7 @@ impl ConnectionDisplay {
                     catalog,
                 ),
             ],
-            open_dashboard_label: catalog.render("action-open-dashboard", None),
+            open_dashboard_label: catalog.render_text("action-open-dashboard"),
             path: PathDisplay::from_view(view, catalog),
             // The segment, not the diagnosis: the box stays unmeasurable while the connection is good.
             help: matches!(
@@ -258,9 +255,7 @@ pub trait Displayable: domain::Scalable {
 
 impl Displayable for Duration {
     fn format(self, catalog: &TextCatalog) -> String {
-        let mut args = FluentArgs::new();
-        args.set("value", self.as_millis().to_string());
-        catalog.render("unit-milliseconds", Some(&args))
+        catalog.render_value("unit-milliseconds", "value", self.as_millis().to_string())
     }
 
     fn compute_fraction(self, max: Self) -> f64 {
@@ -275,9 +270,7 @@ impl Displayable for LossRate {
             .strip_suffix(".0")
             .unwrap_or(&rounded)
             .replace('.', ",");
-        let mut args = FluentArgs::new();
-        args.set("value", trimmed);
-        catalog.render("unit-percent", Some(&args))
+        catalog.render_value("unit-percent", "value", trimmed)
     }
 
     fn compute_fraction(self, max: Self) -> f64 {
@@ -326,9 +319,9 @@ fn compose_metric<T: Displayable>(
     catalog: &TextCatalog,
 ) -> MetricDisplay {
     MetricDisplay {
-        name: catalog.render(to_name_key(metric), None),
-        definition: catalog.render(to_definition_key(metric), None),
-        method: catalog.render(to_method_key(metric), None),
+        name: catalog.render_text(to_name_key(metric)),
+        definition: catalog.render_text(to_definition_key(metric)),
+        method: catalog.render_text(to_method_key(metric)),
         value: reading.map_or_else(
             || missing.to_owned(),
             |reading| reading.value.format(catalog),
@@ -336,7 +329,7 @@ fn compose_metric<T: Displayable>(
         gauge: reading.map(|reading| compose_gauge(reading, gauge_max, catalog)),
         hint: reading
             .filter(|reading| reading.is_near_next_threshold)
-            .map(|_| catalog.render("hint-near-threshold", None)),
+            .map(|_| catalog.render_text("hint-near-threshold")),
     }
 }
 
@@ -377,7 +370,7 @@ fn compose_detail(view: &VerdictView, catalog: &TextCatalog) -> Option<String> {
                 Metric::Jitter => describe_reading(view.jitter.as_ref(), catalog)?,
                 Metric::Loss => describe_reading(view.loss.as_ref(), catalog)?,
             };
-            args.set("metric", catalog.render(to_name_key(metric), None));
+            args.set("metric", catalog.render_text(to_name_key(metric)));
             args.set("value", value);
             args.set("threshold", threshold);
             Some(catalog.render("detail-metric", Some(&args)))

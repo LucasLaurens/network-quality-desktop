@@ -84,8 +84,10 @@ impl ExportFolder {
 }
 
 /// Writes the three files into `folder` under temporary names, then renames them over any files
-/// of the same name: a failed export removes only its own temporary files and leaves an earlier
-/// export whole. Blocking: run it off the async runtime. O(r) time for r rows, O(1) space.
+/// of the same name: a failed export removes only its own temporary files. A failure while
+/// writing leaves an earlier export whole; one between two renames leaves it mixed, the files
+/// already renamed replaced and the others kept. Blocking: run it off the async runtime. O(r)
+/// time for r rows, O(1) space.
 ///
 /// # Errors
 ///
