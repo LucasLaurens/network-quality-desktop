@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.4](https://github.com/LucasLaurens/network-quality-desktop/compare/v0.9.3...v0.9.4) (2026-10-23)
+
+
+### Bug Fixes
+
+* **release:** upload the installers from their bundle folders ([#91](https://github.com/LucasLaurens/network-quality-desktop/issues/91)) ([8a9dc53](https://github.com/LucasLaurens/network-quality-desktop/commit/8a9dc53883c910dfce73daba0db3677c3b6565aa))
+
 ## [0.9.3](https://github.com/LucasLaurens/network-quality-desktop/compare/v0.9.2...v0.9.3) (2026-10-23)
 
 
