@@ -6,7 +6,7 @@ Une pastille dans la barre des menus suit en continu la latence, la gigue et la 
 
 <!-- x-release-please-start-version -->
 
-> Version actuelle : 0.9.2.
+> Version actuelle : 0.9.3.
 
 <!-- x-release-please-end -->
 
