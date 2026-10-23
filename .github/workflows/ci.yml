@@ -72,6 +72,31 @@ jobs:
       # The preview pages measured in both themes: overflows and alignments.
       - run: pnpm test:visual
 
+  # The installers are otherwise built only once a release is cut: a packaging error (a name the
+  # Linux packages refuse, for one) would only show after the release is published.
+  bundle:
+    name: Installeurs (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: runner.os == 'Linux'
+        uses: ./.github/actions/linux-dependencies
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build
+
   coverage:
     name: Couverture
     runs-on: ubuntu-22.04
