@@ -19,7 +19,7 @@ Chaque évolution fusionnée sur `main` alimente une PR de release ; la fusionne
 ## Installeurs
 
 - Non signés, pour un usage personnel. macOS : au premier lancement, ouvrir l'app par un clic droit puis « Ouvrir » (ou l'autoriser dans Réglages Système, Confidentialité et sécurité). Windows : SmartScreen avertit ; « Informations complémentaires » puis « Exécuter quand même ».
-- Formats : ceux de `"targets": "all"` dans `tauri.conf.json` (`.dmg` sur macOS, `.msi` et `.exe` sur Windows, `.deb`, `.rpm` et `.AppImage` sur Linux), tels que `tauri build` les produit dans `target/release/bundle/`.
+- Formats : ceux de `"targets": "all"` dans `tauri.conf.json` (`.dmg` sur macOS, `.msi` et `.exe` sur Windows, `.deb`, `.rpm` et `.AppImage` sur Linux), tels que `tauri build` les produit dans `target/release/bundle/`. Sous Linux, le nom des paquets vient du nom de l'app, et les paquets n'acceptent pas les accents : `src-tauri/tauri.linux.conf.json` y nomme l'app « Qualite de connexion », que Tauri fusionne avec la configuration commune sous Linux seulement. La CI construit les installeurs des trois systèmes à chaque PR (job « Installeurs »), pour qu'une erreur de paquetage se voie avant la release et non après. `CHANGELOG.md` est écrit par `release-please` dans son propre style : Prettier ne le relit pas (`.prettierignore`).
 - macOS Intel n'est pas construit ; l'ajouter demande une ligne de matrice avec `--target x86_64-apple-darwin`.
 
 ## Prérequis côté GitHub
