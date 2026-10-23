@@ -43,6 +43,7 @@ drop
 encode
 erase
 estimate
+expire
 export
 fail
 find
