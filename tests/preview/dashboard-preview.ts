@@ -5,6 +5,7 @@ import '../../src/styles/tokens.css'
 import type { DashboardSummaryDisplay, DisplayState, EvolutionDisplay, SeriesDisplay } from '../../src/bindings'
 import { INTERFACE_TEXTS_KEY } from '../../src/composables/interface-texts'
 import { NETWORK_QUALITY_CLIENT_KEY } from '../../src/services/network-quality-client'
+import packageJson from '../../package.json'
 import interfaceTexts from '../fakes/interface-texts.json'
 import { InMemoryNetworkQualityClient } from '../fakes/in-memory-network-quality-client'
 import { NBSP, connectionScenarios } from './connection-scenarios'
@@ -146,7 +147,8 @@ const firstRun: DashboardSummaryDisplay = {
 }
 
 const client = new InMemoryNetworkQualityClient(
-  undefined,
+  // The real version: the README screenshots come from this page.
+  { name: packageJson.name, version: packageJson.version },
   connectionScenarios[scenario ?? ''] ?? connectionScenarios.degraded,
   windowModeTexts,
 )
