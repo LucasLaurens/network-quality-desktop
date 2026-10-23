@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.1 (2026-10-23)
+
+### Bug Fixes
+
+- **deps:** upgrade tokio past RUSTSEC-2026-0384 ([#82](https://github.com/LucasLaurens/network-quality-desktop/pull/82))
+- **security:** fetch only the UPnP description the gateway announces, and build releases without a write token ([#83](https://github.com/LucasLaurens/network-quality-desktop/pull/83))
+- **history:** tell the user when the dashboard cannot open the history ([#85](https://github.com/LucasLaurens/network-quality-desktop/pull/85))
+
+### Code Refactoring
+
+- apply the clean code audit across the codebase ([#85](https://github.com/LucasLaurens/network-quality-desktop/pull/85))
+
+### Documentation
+
+- show the app on the README and explain how to install and use it ([#81](https://github.com/LucasLaurens/network-quality-desktop/pull/81))
+
 ## 0.9.0 (2026-10-22)
 
 ### Features

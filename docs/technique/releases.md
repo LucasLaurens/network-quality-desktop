@@ -13,7 +13,7 @@ Chaque évolution fusionnée sur `main` alimente une PR de release ; la fusionne
 ## Versions
 
 - Règles semver de `release-please` : `fix` (et `perf`, `revert`) donne un correctif (`0.1.0` → `0.1.1`), `feat` une mineure (`0.2.0`), `!` ou `BREAKING CHANGE` une majeure (`1.0.0`, y compris avant 1.0). Les autres types (`chore`, `docs`, `refactor`, `test`, `ci`…) ne déclenchent pas de release seuls.
-- Départ : la première release, la `0.9.0`, a été publiée à la main le 22 octobre 2026, la CI étant alors bloquée par la facturation GitHub. Les fichiers de version et le manifeste ont été portés à `0.9.0`, le tag `v0.9.0` posé sur ce commit et `CHANGELOG.md` écrit à la main : `release-please` repart de là. Les installeurs de cette version n'ont pas été construits par la CI.
+- Départ : les releases `0.9.0` (22 octobre 2026) et `0.9.1` (23 octobre 2026) ont été publiées à la main, la CI étant alors bloquée par la facturation GitHub. Les fichiers de version et le manifeste ont été portés à la main, chaque tag posé sur son commit de release et `CHANGELOG.md` écrit à la main : `release-please` repart de là. Les installeurs de ces versions n'ont pas été construits par la CI.
 - Une seule version pour l'app, à trois endroits : `.release-please-manifest.json`, `package.json` et `[workspace.package]` de `Cargo.toml` (mis à jour par chemin TOML, `$.workspace.package.version`), dont héritent toutes les crates. La configuration Tauri ne porte pas de version : elle prend celle de la crate `app`. Le test `tests/versions.spec.ts` échoue si ces versions divergent ou si `tauri.conf.json` reçoit sa propre version. La version citée en tête du README est mise à jour par la même occasion (bloc `x-release-please-start-version`).
 
 ## Installeurs
