@@ -12,8 +12,6 @@ pub const TRAFFIC_WINDOW: Duration = Duration::from_secs(5);
 const PEAK_SPAN: Duration = Duration::from_hours(1);
 /// A longer gap between two readings (a sleep, a stalled thread) tells nothing about a rate.
 const MAX_READING_GAP: Duration = Duration::from_secs(3);
-const BITS_PER_BYTE: u128 = 8;
-const MICROS_PER_SECOND: u128 = 1_000_000;
 
 /// The cumulative counters of one interface, as the system reports them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,25 +108,18 @@ impl TrafficMeter {
         }
     }
 
+    /// A window lasts at least `TRAFFIC_WINDOW`: never too short to time. O(1).
     fn close_window(&mut self, at: Duration) {
-        self.windows.push_back((
-            at,
-            TrafficRate {
-                received: compute_rate(self.received, self.elapsed),
-                sent: compute_rate(self.sent, self.elapsed),
-            },
-        ));
+        if let (Some(received), Some(sent)) = (
+            Bitrate::from_transfer(self.received, self.elapsed),
+            Bitrate::from_transfer(self.sent, self.elapsed),
+        ) {
+            self.windows.push_back((at, TrafficRate { received, sent }));
+        }
         self.received = 0;
         self.sent = 0;
         self.elapsed = Duration::ZERO;
     }
-}
-
-/// O(1).
-fn compute_rate(bytes: u64, elapsed: Duration) -> Bitrate {
-    let bits_per_second =
-        u128::from(bytes) * BITS_PER_BYTE * MICROS_PER_SECOND / elapsed.as_micros().max(1);
-    Bitrate::from_bits_per_second(u64::try_from(bits_per_second).unwrap_or(u64::MAX))
 }
 
 #[cfg(test)]

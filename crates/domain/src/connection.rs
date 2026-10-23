@@ -271,8 +271,9 @@ fn count_hotspot_signals(snapshot: &InterfaceSnapshot, metering: Metering) -> us
     .count()
 }
 
-/// Two readings disagree only when both know the value.
-fn agree<T: PartialEq>(first: Option<T>, second: Option<T>) -> bool {
+/// Two readings disagree only when both know the value. O(1) beyond `T`'s comparison.
+#[must_use]
+pub fn agree<T: PartialEq>(first: Option<T>, second: Option<T>) -> bool {
     first
         .zip(second)
         .is_none_or(|(first, second)| first == second)
@@ -311,6 +312,15 @@ mod tests {
             ipv4: Some((Ipv4Addr::new(10, 8, 0, 2), 32)),
             gateway: None,
         }
+    }
+
+    #[test]
+    fn agrees_unless_both_readings_know_different_values() {
+        // Act & Assert
+        assert!(agree(Some(1), Some(1)));
+        assert!(agree(Some(1), None));
+        assert!(agree(None::<u8>, None));
+        assert!(!agree(Some(1), Some(2)));
     }
 
     #[test]

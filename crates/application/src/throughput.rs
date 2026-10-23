@@ -7,9 +7,6 @@ use domain::{Direction, ENOUGH_TRANSFER_TIME, TestProfile, ThroughputResult, Tra
 
 use crate::ThroughputProbe;
 
-const BITS_PER_BYTE: u64 = 8;
-const MICROS_PER_SECOND: u64 = 1_000_000;
-
 /// Why a test gave no result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThroughputFailure {
@@ -50,7 +47,8 @@ async fn measure_direction(
                 .iter()
                 .rev()
                 .find(|transfer| transfer.is_large_enough_to_rate())
-                .map_or(Duration::ZERO, |large| predict_elapsed(large, step.bytes));
+                .and_then(Transfer::compute_rate)
+                .map_or(Duration::ZERO, |rate| rate.predict_elapsed(step.bytes));
             if spent + expected > budget {
                 return Ok(transfers);
             }
@@ -64,15 +62,4 @@ async fn measure_direction(
         }
     }
     Ok(transfers)
-}
-
-/// How long `bytes` would take at `last`'s rate, in whole microseconds. O(1).
-fn predict_elapsed(last: &Transfer, bytes: u64) -> Duration {
-    last.compute_rate()
-        .filter(|rate| rate.to_bits_per_second() > 0)
-        .map_or(Duration::ZERO, |rate| {
-            Duration::from_micros(
-                bytes.saturating_mul(BITS_PER_BYTE * MICROS_PER_SECOND) / rate.to_bits_per_second(),
-            )
-        })
 }

@@ -3,11 +3,14 @@
 
 use std::time::Duration;
 
-use crate::{Grade, compute_median};
+use crate::{Grade, compute_median, compute_nearest_rank};
 
 const KILOBYTE: u64 = 1000;
 const MEGABYTE: u64 = 1000 * KILOBYTE;
 const BITS_PER_BYTE: u64 = 8;
+const MICROS_PER_SECOND: u64 = 1_000_000;
+/// The rate a test reports for a direction, as for latency.
+const RATE_PERCENTILE: usize = 90;
 /// How long a slow test holds the verdict down, unless another network takes over first.
 pub const THROUGHPUT_CAP_DURATION: Duration = Duration::from_mins(10);
 /// A size whose transfer lasts longer than this already measures the line well: no bigger one.
@@ -148,8 +151,7 @@ impl Transfer {
     /// `None` for a transfer too short to time. O(1).
     #[must_use]
     pub fn compute_rate(&self) -> Option<Bitrate> {
-        let micros = u64::try_from(self.elapsed.as_micros()).ok()?;
-        (micros > 0).then(|| Bitrate(self.bytes * BITS_PER_BYTE * 1_000_000 / micros))
+        Bitrate::from_transfer(self.bytes, self.elapsed)
     }
 }
 
@@ -165,6 +167,29 @@ impl Bitrate {
     #[must_use]
     pub const fn to_bits_per_second(self) -> u64 {
         self.0
+    }
+
+    /// The rate of `bytes` moved in `elapsed`; `None` under a microsecond, too short to time.
+    /// Saturates rather than overflows. O(1).
+    #[must_use]
+    pub fn from_transfer(bytes: u64, elapsed: Duration) -> Option<Self> {
+        let micros = elapsed.as_micros();
+        (micros > 0).then(|| {
+            let bits_per_second =
+                u128::from(bytes) * u128::from(BITS_PER_BYTE) * u128::from(MICROS_PER_SECOND)
+                    / micros;
+            Self(u64::try_from(bits_per_second).unwrap_or(u64::MAX))
+        })
+    }
+
+    /// How long `bytes` would take at this rate, in whole microseconds; zero at a zero rate,
+    /// which predicts nothing. O(1).
+    #[must_use]
+    pub fn predict_elapsed(self, bytes: u64) -> Duration {
+        if self.0 == 0 {
+            return Duration::ZERO;
+        }
+        Duration::from_micros(bytes.saturating_mul(BITS_PER_BYTE * MICROS_PER_SECOND) / self.0)
     }
 }
 
@@ -224,17 +249,12 @@ fn grade_rate(rate: Bitrate, solid_from: u64) -> Grade {
 /// Nearest rank, as for latency. O(n log n).
 fn compute_rate_p90(transfers: &[Transfer]) -> Option<Bitrate> {
     let has_large = transfers.iter().any(Transfer::is_large_enough_to_rate);
-    let mut rates: Vec<Bitrate> = transfers
+    let rates: Vec<Bitrate> = transfers
         .iter()
         .filter(|transfer| !has_large || transfer.is_large_enough_to_rate())
         .filter_map(Transfer::compute_rate)
         .collect();
-    if rates.is_empty() {
-        return None;
-    }
-    rates.sort_unstable();
-    let rank = (rates.len() * 9).div_ceil(10).max(1);
-    rates.get(rank - 1).copied()
+    compute_nearest_rank(rates, RATE_PERCENTILE)
 }
 
 #[cfg(test)]
@@ -267,6 +287,28 @@ mod tests {
 
         // Assert
         assert_eq!(rate, Some(Bitrate::from_bits_per_second(10_000_000)));
+    }
+
+    #[test]
+    fn has_no_rate_for_a_transfer_too_short_to_time() {
+        // Act & Assert
+        assert_eq!(
+            Bitrate::from_transfer(MEGABYTE, Duration::from_nanos(999)),
+            None
+        );
+    }
+
+    #[test]
+    fn predicts_how_long_a_size_takes_at_a_rate() {
+        // Arrange
+        let rate = Bitrate::from_bits_per_second(10_000_000);
+
+        // Act & Assert
+        assert_eq!(rate.predict_elapsed(MEGABYTE), Duration::from_millis(800));
+        assert_eq!(
+            Bitrate::from_bits_per_second(0).predict_elapsed(MEGABYTE),
+            Duration::ZERO
+        );
     }
 
     #[test]

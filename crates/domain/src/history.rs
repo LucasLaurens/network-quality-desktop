@@ -241,11 +241,7 @@ impl Aggregate {
     /// O(1).
     #[must_use]
     pub fn compute_loss(&self) -> Option<LossRate> {
-        (self.probes_sent > 0).then(|| {
-            LossRate::from_percent(
-                f64::from(self.probes_lost) * 100.0 / f64::from(self.probes_sent),
-            )
-        })
+        (self.probes_sent > 0).then(|| LossRate::from_counts(self.probes_lost, self.probes_sent))
     }
 
     /// The metric furthest beyond its Instable threshold, relative to it; `None` without any
