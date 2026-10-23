@@ -51,8 +51,14 @@ jobs:
         shell: bash
 
   visual:
-    name: Mise en page (clair et sombre)
-    runs-on: ubuntu-22.04
+    name: Mise en page (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each window measured where it exists, with that system's fonts: the popover only on
+        # macOS and Windows.
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
