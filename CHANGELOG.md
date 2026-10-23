@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/LucasLaurens/network-quality-desktop/compare/v0.9.2...v0.9.3) (2026-10-23)
+
+
+### Bug Fixes
+
+* **release:** build the Linux packages and keep CI green on release ([#89](https://github.com/LucasLaurens/network-quality-desktop/issues/89)) ([e1dfbec](https://github.com/LucasLaurens/network-quality-desktop/commit/e1dfbec5619d787581963618504069e4652494bd))
+
 ## [0.9.2](https://github.com/LucasLaurens/network-quality-desktop/compare/v0.9.1...v0.9.2) (2026-10-23)
 
 
