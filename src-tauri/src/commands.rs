@@ -354,7 +354,7 @@ pub async fn run_throughput_test(
     if !settings.read().allows_throughput_tests {
         return Err(catalog.render("throughput-disabled", None));
     }
-    if let Some(warning) = compose_warning(connection.read().as_ref(), profile, &catalog)
+    if let Some(warning) = compose_warning(connection.read_context().as_ref(), profile, &catalog)
         && !is_confirmed
     {
         return Ok(ThroughputOutcome::NeedsConfirmation { warning });

@@ -5,7 +5,9 @@ use std::time::Duration;
 use application::{
     DayOverview, Evolution, NetworkKey, NetworkStay, NetworkSummary, OutageEnd, Period,
 };
-use domain::{Aggregate, CountedState, LossRate, Metric, SECONDS_PER_DAY, Thresholds};
+use domain::{
+    Aggregate, CountedState, GradeBounds, LossRate, Metric, SECONDS_PER_DAY, Scalable, Thresholds,
+};
 use fluent_bundle::FluentArgs;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -275,30 +277,21 @@ impl EvolutionDisplay {
                 &aggregates,
                 Aggregate::compute_latency_p90,
                 to_milliseconds,
-                (
-                    thresholds.latency.read_unstable_from(),
-                    thresholds.latency.read_degraded_above(),
-                ),
+                thresholds.latency,
                 catalog,
             ),
             jitter: compose_series(
                 &aggregates,
                 Aggregate::compute_mean_jitter,
                 to_milliseconds,
-                (
-                    thresholds.jitter.read_unstable_from(),
-                    thresholds.jitter.read_degraded_above(),
-                ),
+                thresholds.jitter,
                 catalog,
             ),
             loss: compose_series(
                 &aggregates,
                 Aggregate::compute_loss,
                 LossRate::to_percent,
-                (
-                    thresholds.loss.read_unstable_from(),
-                    thresholds.loss.read_degraded_above(),
-                ),
+                thresholds.loss,
                 catalog,
             ),
             network_changes: evolution
@@ -336,13 +329,15 @@ impl EvolutionDisplay {
 }
 
 /// O(n·B).
-fn compose_series<T: Displayable>(
+fn compose_series<T: Displayable + Scalable>(
     aggregates: &[&Aggregate],
     read: fn(&Aggregate) -> Option<T>,
     to_number: fn(T) -> f64,
-    (unstable_from, degraded_above): (T, T),
+    bounds: GradeBounds<T>,
     catalog: &TextCatalog,
 ) -> SeriesDisplay {
+    let unstable_from = bounds.read_unstable_from();
+    let degraded_above = bounds.read_degraded_above();
     let readings: Vec<Option<T>> = aggregates.iter().map(|aggregate| read(aggregate)).collect();
     SeriesDisplay {
         values: readings.iter().map(|value| value.map(to_number)).collect(),

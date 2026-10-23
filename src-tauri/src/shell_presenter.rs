@@ -68,7 +68,7 @@ pub struct ConnectionStore(Arc<Mutex<ConnectionReading>>);
 
 impl ConnectionStore {
     #[must_use]
-    pub fn read(&self) -> Option<ConnectionContext> {
+    pub fn read_context(&self) -> Option<ConnectionContext> {
         self.0
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
