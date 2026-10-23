@@ -22,6 +22,7 @@ const TEXT_ATTRIBUTES = new Set([
 const LABEL_PROPERTIES = new Set(['hint', 'label', 'message', 'text', 'title', 'warning'])
 const VUE_NODE = { element: 1, text: 2, interpolation: 5, attribute: 6, directive: 7 }
 const LETTER = /\p{L}/u
+const BEYOND_ASCII = /[^\p{ASCII}]/u
 const WORDS = /\s|[^\p{ASCII}]/u
 const CATALOGUE_KEY = /^ui-[a-z0-9-]+$/
 /** Where a string is read: how sure the check can be that it reaches the window. */
@@ -152,7 +153,7 @@ function readLiteralText(node) {
 function isText(text, node, reading) {
   if (!LETTER.test(text) || CATALOGUE_KEY.test(text)) return false
   if (reading === READING.shown) return true
-  if (reading === READING.bound) return /[^\p{ASCII}]/u.test(text)
+  if (reading === READING.bound) return BEYOND_ASCII.test(text)
   if (WORDS.test(text.trim())) return true
   const parent = node.parent
   return ts.isPropertyAssignment(parent) && ts.isIdentifier(parent.name) && LABEL_PROPERTIES.has(parent.name.text)
