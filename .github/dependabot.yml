@@ -1,0 +1,7 @@
+# Keeps the actions pinned by commit SHA up to date: one weekly pull request per update.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
