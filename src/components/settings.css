@@ -118,16 +118,6 @@ input[type='checkbox'][role='switch']:checked::after {
   cursor: default;
 }
 
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 .warning {
   display: grid;
   grid-column: 1 / -1;

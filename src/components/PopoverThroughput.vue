@@ -43,15 +43,8 @@ const openSettings = async (): Promise<void> => {
 }
 
 .link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
   font-size: var(--t-sm);
   text-align: left;
-  text-decoration: underline;
-  cursor: pointer;
 }
 
 .small {

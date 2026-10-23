@@ -71,3 +71,32 @@ body {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
+
+/* A button that reads as a link: the one shape every window uses for a secondary action. */
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: var(--s2) var(--s3) var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+th {
+  color: var(--muted);
+  font-size: var(--t-xs);
+  font-weight: 500;
+}

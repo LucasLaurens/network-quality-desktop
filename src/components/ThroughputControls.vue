@@ -87,16 +87,6 @@ watch(
   cursor: default;
 }
 
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 .warning {
   display: grid;
   gap: var(--s2);

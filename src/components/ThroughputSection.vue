@@ -65,37 +65,13 @@ const { panel, loadPanel } = useThroughputPanel(client)
   color: var(--muted);
 }
 
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 .scroll {
   overflow-x: auto;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
 th,
 td {
-  padding: var(--s2) var(--s3) var(--s2) 0;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
   white-space: nowrap;
-}
-
-th {
-  color: var(--muted);
-  font-size: var(--t-xs);
-  font-weight: 500;
 }
 
 .right {

@@ -218,16 +218,6 @@ h1 {
   margin-top: var(--s2);
 }
 
-.link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 .foot {
   display: flex;
   gap: var(--s4);
