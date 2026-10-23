@@ -1,6 +1,7 @@
 import { faker } from '@faker-js/faker'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import type { ConnectionDisplay } from '../src/bindings'
 import ConnectionPopover from '../src/components/ConnectionPopover.vue'
 import {
   InMemoryNetworkQualityClient,
@@ -22,7 +23,28 @@ async function mountPopover(client: InMemoryNetworkQualityClient) {
   return wrapper
 }
 
+/** A core whose first read fails: the popover must still show what it is sent next. */
+class FailingFirstReadClient extends InMemoryNetworkQualityClient {
+  override readConnectionDisplay(): Promise<ConnectionDisplay> {
+    return Promise.reject(new Error(faker.lorem.sentence()))
+  }
+}
+
 describe('ConnectionPopover', () => {
+  it('still shows the next display when the first read fails', async () => {
+    // Arrange
+    const client = new FailingFirstReadClient()
+    const wrapper = await mountPopover(client)
+    const display = createConnectionDisplay()
+
+    // Act
+    client.pushDisplay(display)
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.get('h1').text()).toBe(display.stateLabel)
+  })
+
   it('shows the state, the cause, the action and the detail it is given', async () => {
     // Arrange
     const display = createConnectionDisplay({

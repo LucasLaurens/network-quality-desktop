@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import type { ProfileChoice } from '../bindings'
-import type { NetworkQualityClient } from '../services/network-quality-client'
+import { readErrorMessage, type NetworkQualityClient } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
 
 export const THROUGHPUT_PROFILES = [
@@ -33,7 +33,7 @@ export function useThroughputTest(client: NetworkQualityClient, onDone: () => Pr
       }
       await onDone()
     } catch (error) {
-      refusal.value = error instanceof Error ? error.message : String(error)
+      refusal.value = readErrorMessage(error)
     } finally {
       running.value = null
     }

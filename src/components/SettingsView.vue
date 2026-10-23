@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { inject, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import type { AppearanceChoice, ExportPeriodChoice, SettingsForm } from '../bindings'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
+import { readErrorMessage, useNetworkQualityClient } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
 import { useLoadOnFocus } from '../composables/use-load-on-focus'
 import { useInterfaceTexts } from '../composables/interface-texts'
@@ -25,8 +25,7 @@ const EXPORT_PERIODS = [
 /** Shown in the address field: a private address, as an own server usually has. */
 const SERVER_EXAMPLE = '192.168.1.10'
 
-const client = inject(NETWORK_QUALITY_CLIENT_KEY)
-if (!client) throw new Error('NetworkQualityClient is not provided')
+const client = useNetworkQualityClient()
 const say = useInterfaceTexts()
 
 // The form is filled once and then belongs to the user: answers never rewrite what is typed.
@@ -48,7 +47,7 @@ const send = async (ownServer: string | null): Promise<void> => {
     refusal.value = ''
     savedServer = ownServer
   } catch (error) {
-    refusal.value = error instanceof Error ? error.message : String(error)
+    refusal.value = readErrorMessage(error)
     saved.value = ''
   }
 }
@@ -81,7 +80,7 @@ const runDataAction = async (action: () => Promise<string>): Promise<void> => {
   try {
     dataStatus.value = await action()
   } catch (error) {
-    dataRefusal.value = error instanceof Error ? error.message : String(error)
+    dataRefusal.value = readErrorMessage(error)
   } finally {
     isBusy.value = false
   }

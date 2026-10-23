@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { inject, onMounted, onUnmounted, provide, ref } from 'vue'
+import { onMounted, onUnmounted, provide, ref } from 'vue'
 import type { DashboardRequested, ProfileChoice, WindowModeTexts } from './bindings'
 import DashboardView from './components/DashboardView.vue'
 import SettingsView from './components/SettingsView.vue'
 import { HELP_REQUESTED_KEY, REQUESTED_TEST_KEY } from './composables/dashboard-requests'
 import { useInterfaceTexts } from './composables/interface-texts'
-import { NETWORK_QUALITY_CLIENT_KEY } from './services/network-quality-client'
+import { useNetworkQualityClient } from './services/network-quality-client'
 
 // Remembered in the webview's own storage: a convenience, losing it only shows the note again.
 const TRAY_HINT_DISMISSED_KEY = 'tray-hint-dismissed'
 
-const client = inject(NETWORK_QUALITY_CLIENT_KEY)
-if (!client) throw new Error('NetworkQualityClient is not provided')
+const client = useNetworkQualityClient()
 const say = useInterfaceTexts()
 
 const version = ref('…')

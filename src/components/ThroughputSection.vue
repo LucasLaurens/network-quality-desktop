@@ -1,29 +1,14 @@
 <script setup lang="ts">
 import { useInterfaceTexts } from '../composables/interface-texts'
-import { inject, ref } from 'vue'
-import type { ThroughputPanel } from '../bindings'
-import { useLoadOnFocus } from '../composables/use-load-on-focus'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
-import { readUtcOffsetSeconds } from '../services/time-zone'
+import { useThroughputPanel } from '../composables/use-throughput-panel'
+import { useNetworkQualityClient } from '../services/network-quality-client'
 import ThroughputControls from './ThroughputControls.vue'
 
 const emit = defineEmits<{ openSettings: [] }>()
 
-const client = inject(NETWORK_QUALITY_CLIENT_KEY)
-if (!client) throw new Error('NetworkQualityClient is not provided')
+const client = useNetworkQualityClient()
 const say = useInterfaceTexts()
-
-const panel = ref<ThroughputPanel | null>(null)
-
-const loadPanel = async (): Promise<void> => {
-  try {
-    panel.value = await client.readThroughputPanel(readUtcOffsetSeconds())
-  } catch (error) {
-    console.error('Reading the throughput tests failed', error)
-  }
-}
-
-useLoadOnFocus(loadPanel)
+const { panel, loadPanel } = useThroughputPanel(client)
 </script>
 
 <template>

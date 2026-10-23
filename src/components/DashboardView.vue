@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { DashboardSummaryDisplay, EvolutionDisplay, PeriodChoice } from '../bindings'
 import { useInterfaceTexts } from '../composables/interface-texts'
 import { useConnectionDisplay } from '../composables/use-connection-display'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
+import { useNetworkQualityClient } from '../services/network-quality-client'
 import { readUtcOffsetSeconds } from '../services/time-zone'
 import CurrentMetrics from './CurrentMetrics.vue'
 import DashboardState from './DashboardState.vue'
@@ -34,8 +34,7 @@ const PERIODS = [
 
 const emit = defineEmits<{ openSettings: [] }>()
 
-const client = inject(NETWORK_QUALITY_CLIENT_KEY)
-if (!client) throw new Error('NetworkQualityClient is not provided')
+const client = useNetworkQualityClient()
 const say = useInterfaceTexts()
 
 const metricOptions = METRICS.map(({ value, labelKey }) => ({ value, label: say(labelKey) }))

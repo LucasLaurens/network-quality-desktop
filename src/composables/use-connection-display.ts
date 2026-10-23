@@ -10,18 +10,23 @@ export function useConnectionDisplay(client: NetworkQualityClient): Ref<Connecti
   let unmounted = false
 
   onMounted(async () => {
-    // Subscribe first, so no change emitted while the first read is in flight is lost.
-    const stop = await client.listenConnectionDisplay((next) => {
-      display.value = next
-    })
-    if (unmounted) {
-      stop()
-      return
+    try {
+      // Subscribe first, so no change emitted while the first read is in flight is lost.
+      const stop = await client.listenConnectionDisplay((next) => {
+        display.value = next
+      })
+      if (unmounted) {
+        stop()
+        return
+      }
+      stopListening = stop
+      // A display pushed while this read was in flight is newer: never overwrite it.
+      const initial = await client.readConnectionDisplay()
+      display.value ??= initial
+    } catch (error) {
+      // The next display the core pushes fills the window: the subscription comes first.
+      console.error('Reading the connection display failed', error)
     }
-    stopListening = stop
-    // A display pushed while this read was in flight is newer: never overwrite it.
-    const initial = await client.readConnectionDisplay()
-    display.value ??= initial
   })
 
   onUnmounted(() => {

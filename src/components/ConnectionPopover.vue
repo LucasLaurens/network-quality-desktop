@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { inject, onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useConnectionDisplay } from '../composables/use-connection-display'
-import { NETWORK_QUALITY_CLIENT_KEY } from '../services/network-quality-client'
+import { useNetworkQualityClient } from '../services/network-quality-client'
 import ConnectionPath from './ConnectionPath.vue'
 import MetricGauge from './MetricGauge.vue'
 import HelpDetails from './HelpDetails.vue'
 import PopoverThroughput from './PopoverThroughput.vue'
 import StateShape from './StateShape.vue'
 
-const client = inject(NETWORK_QUALITY_CLIENT_KEY)
-if (!client) throw new Error('NetworkQualityClient is not provided')
+const client = useNetworkQualityClient()
 
 const display = useConnectionDisplay(client)
 
