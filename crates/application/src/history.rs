@@ -6,13 +6,14 @@ use std::time::Duration;
 
 use domain::{
     Aggregate, ConnectionContext, ConnectionKind, CountedState, Granularity, MacAddress,
-    MinuteAccumulator, SecondPoint, SecondRing, SecondSample, ThroughputResult, Verdict,
+    MinuteAccumulator, SecondPoint, SecondRing, SecondSample, ThroughputResult, Verdict, agree,
 };
 
 use crate::{HistoryRecorder, MeasurementRepository};
 
 /// Minutes older than this are dropped once their hour is kept.
 pub const MINUTE_RETENTION: Duration = Duration::from_hours(30 * 24);
+pub(crate) const MINUTE_RETENTION_SECONDS: i64 = MINUTE_RETENTION.as_secs().cast_signed();
 
 /// The network a row belongs to: its gateway and kind identify it, the name only labels it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,21 +25,24 @@ pub struct NetworkKey {
 }
 
 impl NetworkKey {
-    /// Same gateway and kind: the identity rows are stored under. O(1).
+    /// Gateway and kind: the identity rows are stored under, the name aside. O(1).
+    #[must_use]
+    pub const fn identify(&self) -> (Option<MacAddress>, ConnectionKind) {
+        (self.gateway, self.kind)
+    }
+
+    /// O(1).
     #[must_use]
     pub fn is_same_identity(&self, other: &Self) -> bool {
-        self.gateway == other.gateway && self.kind == other.kind
+        self.identify() == other.identify()
     }
 
     /// Same kind, and neither a gateway nor a name that tells them apart: a MAC read late is not
     /// a new network, two Wi-Fi names are. O(length of the names).
     #[must_use]
     pub fn is_likely_same(&self, other: &Self) -> bool {
-        let agree = |first: Option<&str>, second: Option<&str>| {
-            first.is_none() || second.is_none() || first == second
-        };
         self.kind == other.kind
-            && (self.gateway == other.gateway || self.gateway.is_none() || other.gateway.is_none())
+            && agree(self.gateway, other.gateway)
             && agree(self.name.as_deref(), other.name.as_deref())
     }
 }
@@ -184,8 +188,8 @@ impl<R: MeasurementRepository> HistoryWriter<R> {
 
     /// Only minutes whose hour is kept go: the repository checks it.
     fn purge_old_minutes(&mut self, now_utc: i64) -> Result<(), RepositoryError> {
-        let retention = i64::try_from(MINUTE_RETENTION.as_secs()).unwrap_or(i64::MAX);
-        self.repository.purge_minutes_before(now_utc - retention)
+        self.repository
+            .purge_minutes_before(now_utc - MINUTE_RETENTION_SECONDS)
     }
 }
 
@@ -297,10 +301,7 @@ impl HistoryTracker {
         answer: SyncSender<()>,
         recorder: &impl HistoryRecorder,
     ) {
-        if self.was_offline {
-            self.record_event(utc, EventKind::OfflineEnded, recorder);
-            self.was_offline = false;
-        }
+        self.close_open_outage(utc, recorder);
         self.record_event(utc, EventKind::Sleep, recorder);
         self.flush(answer, recorder);
     }
@@ -323,12 +324,16 @@ impl HistoryTracker {
     /// ends at the last second measured before it. O(1).
     pub fn record_wake(&mut self, utc: i64, recorder: &impl HistoryRecorder) {
         self.previous = None;
+        self.close_open_outage(self.last_second_utc.unwrap_or(utc), recorder);
+        self.record_event(utc, EventKind::Wake, recorder);
+    }
+
+    /// O(1).
+    fn close_open_outage(&mut self, utc: i64, recorder: &impl HistoryRecorder) {
         if self.was_offline {
-            let end = self.last_second_utc.unwrap_or(utc);
-            self.record_event(end, EventKind::OfflineEnded, recorder);
+            self.record_event(utc, EventKind::OfflineEnded, recorder);
             self.was_offline = false;
         }
-        self.record_event(utc, EventKind::Wake, recorder);
     }
 
     fn record_event(&self, utc: i64, kind: EventKind, recorder: &impl HistoryRecorder) {
@@ -337,12 +342,6 @@ impl HistoryTracker {
             network: self.network.clone(),
             kind,
         }));
-    }
-
-    /// The last hour, second by second, oldest first. O(n) for n ≤ 3 600.
-    #[must_use]
-    pub fn list_last_hour(&self) -> Vec<SecondPoint> {
-        self.ring.list_points()
     }
 
     /// What only memory holds: the last hour and the network the minutes are saved under.
@@ -384,11 +383,7 @@ impl HistoryTracker {
         };
         self.context = Some(context);
         self.previous = None;
-        recorder.record(HistoryCommand::RecordEvent(HistoryEvent {
-            utc,
-            network: self.network.clone(),
-            kind: EventKind::NetworkChanged,
-        }));
+        self.record_event(utc, EventKind::NetworkChanged, recorder);
     }
 
     fn save_current_minute(&mut self, recorder: &impl HistoryRecorder) {

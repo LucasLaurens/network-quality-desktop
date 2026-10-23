@@ -270,7 +270,7 @@ fn keeps_the_last_hour_second_by_second() {
     }
 
     // Assert
-    let points = tracker.list_last_hour();
+    let points = tracker.read_live().last_hour;
     assert_eq!(points.len(), 3);
     assert_eq!(points[2].utc, SOME_HOUR + 2);
 }
@@ -322,7 +322,7 @@ fn counts_the_seconds_before_any_network_under_no_network() {
     assert_eq!(minutes.len(), 1);
     assert_eq!(minutes[0].0.kind, ConnectionKind::Other);
     assert_eq!(minutes[0].2.seconds.offline, 1);
-    assert_eq!(tracker.list_last_hour().len(), 2);
+    assert_eq!(tracker.read_live().last_hour.len(), 2);
 }
 
 #[test]
@@ -481,7 +481,7 @@ fn drops_the_last_hour_and_the_minute_in_progress_on_erase() {
 
     // Assert
     assert!(recorder.list_saved_minutes().is_empty());
-    assert!(tracker.list_last_hour().is_empty());
+    assert!(tracker.read_live().last_hour.is_empty());
     assert!(recorder.has_erase());
 }
 
