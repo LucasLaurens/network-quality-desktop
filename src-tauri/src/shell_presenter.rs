@@ -96,7 +96,7 @@ pub struct ShellPresenter {
     app: AppHandle,
     connection: ConnectionStore,
     menu: Arc<TrayMenu>,
-    catalog: TextCatalog,
+    catalog: Arc<TextCatalog>,
     store: DisplayStore,
     painter: Arc<ShellTrayPainter>,
 }
@@ -107,7 +107,7 @@ impl ShellPresenter {
     pub fn new(
         app: AppHandle,
         menu: Arc<TrayMenu>,
-        catalog: TextCatalog,
+        catalog: Arc<TextCatalog>,
         store: DisplayStore,
         connection: ConnectionStore,
         painter: Arc<ShellTrayPainter>,
@@ -168,5 +168,5 @@ pub fn create_icon_image(verdict: Verdict, scheme: ColorScheme) -> Image<'static
 /// The tray tooltip uses the same catalogue label as the popover.
 #[must_use]
 pub fn describe_verdict(verdict: Verdict, catalog: &TextCatalog) -> String {
-    catalog.render(DisplayState::from(verdict).to_catalogue_key(), None)
+    catalog.render_text(DisplayState::from(verdict).to_catalogue_key())
 }

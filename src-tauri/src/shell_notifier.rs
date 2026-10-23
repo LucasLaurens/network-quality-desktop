@@ -1,6 +1,8 @@
 //! The system notification of a durable degradation: the state as its title, the finding as its
 //! body, and neither an action nor a figure.
 
+use std::sync::Arc;
+
 use application::{Notifier, VerdictView};
 use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
@@ -28,12 +30,12 @@ impl Notice {
 
 pub struct ShellNotifier {
     app: AppHandle,
-    catalog: TextCatalog,
+    catalog: Arc<TextCatalog>,
 }
 
 impl ShellNotifier {
     #[must_use]
-    pub const fn new(app: AppHandle, catalog: TextCatalog) -> Self {
+    pub const fn new(app: AppHandle, catalog: Arc<TextCatalog>) -> Self {
         Self { app, catalog }
     }
 }

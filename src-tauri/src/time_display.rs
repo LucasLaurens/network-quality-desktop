@@ -45,15 +45,17 @@ pub fn format_date_hour(utc: i64, offset: i64, catalog: &TextCatalog) -> String 
 /// The two largest units: "42 s", "12 min", "3 h 12 min", "2 j 5 h". O(1).
 pub fn format_duration(seconds: i64, catalog: &TextCatalog) -> String {
     let seconds = seconds.max(0);
-    let mut args = FluentArgs::new();
     if seconds < SECONDS_PER_MINUTE {
-        args.set("value", seconds.to_string());
-        return catalog.render("duration-seconds", Some(&args));
+        return catalog.render_value("duration-seconds", "value", seconds.to_string());
     }
     if seconds < SECONDS_PER_HOUR {
-        args.set("value", (seconds / SECONDS_PER_MINUTE).to_string());
-        return catalog.render("duration-minutes", Some(&args));
+        return catalog.render_value(
+            "duration-minutes",
+            "value",
+            (seconds / SECONDS_PER_MINUTE).to_string(),
+        );
     }
+    let mut args = FluentArgs::new();
     if seconds < SECONDS_PER_DAY {
         let minutes = seconds % SECONDS_PER_HOUR / SECONDS_PER_MINUTE;
         args.set("hours", (seconds / SECONDS_PER_HOUR).to_string());

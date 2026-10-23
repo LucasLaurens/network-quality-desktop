@@ -1,7 +1,6 @@
 //! The network in words: what to call it, and how the computer reaches it.
 
 use domain::{ConnectionContext, ConnectionKind, WifiBand, WifiLink};
-use fluent_bundle::FluentArgs;
 use serde::Serialize;
 use specta::Type;
 
@@ -36,17 +35,19 @@ impl NetworkDisplay {
                 name: Some(name), ..
             }) => name.clone(),
             Some(_) if context.kind == ConnectionKind::WiFi => {
-                catalog.render("network-wifi-hidden", None)
+                catalog.render_text("network-wifi-hidden")
             }
-            _ => catalog.render(label_key, None),
+            _ => catalog.render_text(label_key),
         };
-        let mut connection = catalog.render(connection_key, None);
+        let mut connection = catalog.render_text(connection_key);
         if let Some(band_key) = wifi.and_then(|link| select_band_key(link.band))
             && context.kind == ConnectionKind::WiFi
         {
-            let mut args = FluentArgs::new();
-            args.set("band", catalog.render(band_key, None));
-            connection = catalog.render("connection-wifi-band", Some(&args));
+            connection = catalog.render_value(
+                "connection-wifi-band",
+                "band",
+                catalog.render_text(band_key),
+            );
         }
         if context.is_vpn && context.kind != ConnectionKind::Other {
             connection = append_to_connection(connection, "connection-through-vpn", catalog);
@@ -60,7 +61,7 @@ impl NetworkDisplay {
             connection,
             wifi_details: wifi.and_then(|link| describe_wifi(link, catalog)),
             reveal_label: (CAN_REVEAL_NAME && is_name_hidden)
-                .then(|| catalog.render("action-reveal-name", None)),
+                .then(|| catalog.render_text("action-reveal-name")),
         }
     }
 }
@@ -84,18 +85,14 @@ pub const fn select_stored_network_keys(kind: ConnectionKind) -> (&'static str, 
 
 /// `None` when the system gave none of the three values. O(1).
 fn describe_wifi(link: &WifiLink, catalog: &TextCatalog) -> Option<String> {
-    let render = |key: &str, value: String| {
-        let mut args = FluentArgs::new();
-        args.set("value", value);
-        catalog.render(key, Some(&args))
-    };
     let parts: Vec<String> = [
-        link.signal_dbm
-            .map(|signal| render("unit-dbm", signal.unsigned_abs().to_string())),
+        link.signal_dbm.map(|signal| {
+            catalog.render_value("unit-dbm", "value", signal.unsigned_abs().to_string())
+        }),
         link.channel
-            .map(|channel| render("wifi-channel", channel.to_string())),
+            .map(|channel| catalog.render_value("wifi-channel", "value", channel.to_string())),
         link.rate_mbps
-            .map(|rate| render("unit-megabits", rate.to_string())),
+            .map(|rate| catalog.render_value("unit-megabits", "value", rate.to_string())),
     ]
     .into_iter()
     .flatten()
@@ -113,9 +110,7 @@ pub const fn select_band_key(band: WifiBand) -> Option<&'static str> {
 }
 
 fn append_to_connection(connection: String, key: &str, catalog: &TextCatalog) -> String {
-    let mut args = FluentArgs::new();
-    args.set("connection", connection);
-    catalog.render(key, Some(&args))
+    catalog.render_value(key, "connection", connection)
 }
 
 #[cfg(test)]

@@ -123,7 +123,7 @@ pub fn open_stores(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> Open
         }
         Err(error) => {
             eprintln!("Opening the history failed, it is kept in memory: {error}");
-            let notice = HistoryNotice(Some(catalog.render("history-not-saved", None)));
+            let notice = HistoryNotice(Some(catalog.render_text("history-not-saved")));
             match SqliteMeasurementRepository::open_in_memory() {
                 Ok(repository) => OpenedStores {
                     recorder: SqliteHistoryRecorder::start(repository, SystemClock::start()),

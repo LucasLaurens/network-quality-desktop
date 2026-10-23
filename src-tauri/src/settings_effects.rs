@@ -22,7 +22,7 @@ pub fn apply_settings(app: &AppHandle, settings: &Settings) {
     });
     // Absent at launch: the menu is then built with these settings.
     if let Some(menu) = app.try_state::<Arc<TrayMenu>>() {
-        menu.show_settings(settings, &app.state::<TextCatalog>());
+        menu.show_settings(settings, &app.state::<Arc<TextCatalog>>());
     }
     if !CAN_REGISTER_AT_LOGIN {
         return;

@@ -108,7 +108,10 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
 /// Panics when the Tauri runtime cannot start, which leaves nothing to recover.
 pub fn run() {
     let builder = create_specta_builder();
+    // Parsed once: the menus, the commands, the presenter and the notifier share it.
+    let catalog = Arc::new(TextCatalog::load());
     let app = tauri::Builder::default()
+        .manage(Arc::clone(&catalog))
         // First: a second launch shows the running app's dashboard, and never opens the history
         // file a second time.
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -119,7 +122,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_positioner::init());
     #[cfg(target_os = "macos")]
-    let app = app.menu(app_menu::build_app_menu);
+    let app = {
+        let catalog = Arc::clone(&catalog);
+        app.menu(move |handle| app_menu::build_app_menu(handle, &catalog))
+    };
     app.invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
@@ -129,7 +135,7 @@ pub fn run() {
             if HAS_POPOVER {
                 create_popover(app.handle())?;
             }
-            start_measurement(app.handle())?;
+            start_measurement(app.handle(), &catalog)?;
             Ok(())
         })
         .on_window_event(apply_window_event)
@@ -146,13 +152,10 @@ pub fn run() {
 
 /// Picks the tray or window mode, builds the dot and its menu, and starts the measurement actor
 /// with its 1 Hz clock, all on the Rust side.
-fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
-    let catalog = TextCatalog::load();
-    // The dashboard commands word their figures with their own copy.
-    app.manage(TextCatalog::load());
-    let initial = ConnectionDisplay::create_initial(&catalog);
+fn start_measurement(app: &tauri::AppHandle, catalog: &Arc<TextCatalog>) -> tauri::Result<()> {
+    let initial = ConnectionDisplay::create_initial(catalog);
     // Before any window shows: the look is set, and the settings choose the servers.
-    let stores = history_store::open_stores(app, &catalog, SystemClock::start().read_utc_seconds());
+    let stores = history_store::open_stores(app, catalog, SystemClock::start().read_utc_seconds());
     let settings = stores.settings.read();
     settings_effects::apply_settings(app, &settings);
     app.manage(stores.notice);
@@ -162,21 +165,21 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
     app.manage(history_export::ExportFolder::default());
     let mode = ShellMode::detect(&SystemTrayHost);
     app.manage(mode);
-    app.manage(WindowModeTexts::compose(mode, &catalog));
+    app.manage(WindowModeTexts::compose(mode, catalog));
     app.manage(PopoverDismissal::default());
     let store = DisplayStore::new(initial.clone());
     app.manage(store.clone());
     let scheme = SystemColorSchemeReader.read_color_scheme();
-    let menu = Arc::new(TrayMenu::build(app, &initial, &settings, &catalog)?);
+    let menu = Arc::new(TrayMenu::build(app, &initial, &settings, catalog)?);
     app.manage(Arc::clone(&menu));
     // The icon is built in window mode too: a tray that appears later still gets its dot.
-    let tray = build_tray(app, &menu, scheme, &catalog)?;
+    let tray = build_tray(app, &menu, scheme, catalog)?;
     let painter = Arc::new(ShellTrayPainter::new(
         tray,
         SystemColorSchemeReader,
         Verdict::Measuring,
         scheme,
-        describe_verdict(Verdict::Measuring, &catalog),
+        describe_verdict(Verdict::Measuring, catalog),
     ));
     follow_color_scheme(Arc::clone(&painter));
     if mode == ShellMode::Window {
@@ -207,7 +210,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
             presenter: ShellPresenter::new(
                 app.clone(),
                 menu,
-                catalog,
+                Arc::clone(catalog),
                 store,
                 connection_store,
                 painter,
@@ -216,7 +219,7 @@ fn start_measurement(app: &tauri::AppHandle) -> tauri::Result<()> {
             gateway_probe: IcmpGatewayProbe::new(IcmpEchoSender),
             wifi_reader: SystemWifiReader,
             history_recorder: stores.recorder,
-            notifier: shell_notifier::ShellNotifier::new(app.clone(), TextCatalog::load()),
+            notifier: shell_notifier::ShellNotifier::new(app.clone(), Arc::clone(catalog)),
         },
         list_targets(settings.servers),
     );
