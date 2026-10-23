@@ -7,8 +7,9 @@ use fluent_bundle::FluentArgs;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::dashboard_display::{format_date_time, format_or_unknown};
+use crate::dashboard_display::format_or_unknown;
 use crate::text_catalog::TextCatalog;
+use crate::time_display::format_date_time;
 
 const BITS_PER_MEGABIT: f64 = 1_000_000.0;
 const BYTES_PER_MEGABYTE: f64 = 1_000_000.0;

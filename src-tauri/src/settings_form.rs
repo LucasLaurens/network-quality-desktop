@@ -5,8 +5,8 @@ use fluent_bundle::FluentArgs;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::dashboard_display::format_time_of_day;
 use crate::text_catalog::TextCatalog;
+use crate::time_display::format_time_of_day;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]

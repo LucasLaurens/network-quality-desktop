@@ -21,6 +21,7 @@ mod technical_details;
 mod text_catalog;
 mod throughput_display;
 mod throughput_lab;
+mod time_display;
 mod traffic_store;
 mod tray_icon;
 mod tray_menu;
