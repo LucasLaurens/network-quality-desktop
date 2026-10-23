@@ -126,6 +126,7 @@ menu-close-window = Fermer la fenêtre
 
 history-set-aside = L'historique était illisible : il a été mis de côté ({ $file }) et un nouvel historique commence.
 history-not-saved = L'historique ne peut pas être enregistré sur ce disque : il sera perdu à la fermeture.
+history-dashboard-unreadable = Le tableau de bord n'a pas pu ouvrir l'historique : il paraît vide, mais les mesures restent enregistrées.
 
 ## Dashboard
 

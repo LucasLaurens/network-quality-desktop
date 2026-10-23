@@ -6,7 +6,6 @@ use std::sync::{Mutex, PoisonError};
 
 use application::{HistoryEvent, HistoryReader, NetworkKey, RepositoryError, ThroughputRecord};
 use domain::{Aggregate, Granularity};
-use fluent_bundle::FluentArgs;
 use infrastructure::{SqliteHistoryRecorder, SqliteMeasurementRepository, SystemClock};
 use tauri::{AppHandle, Manager};
 
@@ -19,16 +18,29 @@ const HISTORY_FILE: &str = "history.sqlite3";
 /// Shown in the dashboard when the history was set aside or cannot be kept on disk.
 pub struct HistoryNotice(pub Option<String>);
 
+impl HistoryNotice {
+    /// Every sentence given, in order; none when there is nothing to say. O(s) for s sentences.
+    fn from_sentences<const N: usize>(sentences: [Option<String>; N]) -> Self {
+        let sentences: Vec<String> = sentences.into_iter().flatten().collect();
+        Self((!sentences.is_empty()).then(|| sentences.join(" ")))
+    }
+}
+
 /// The dashboard's own connection to the history file, beside the writer's.
 pub struct DashboardHistory(Mutex<Box<dyn HistoryReader + Send>>);
 
 impl DashboardHistory {
-    fn open(path: &Path) -> Self {
+    /// The dashboard's reader of `path`, and the sentence that tells the user when it cannot
+    /// open: the dashboard then looks empty while the writer keeps recording.
+    fn open(path: &Path, catalog: &TextCatalog) -> (Self, Option<String>) {
         match SqliteMeasurementRepository::open_read_only(path) {
-            Ok(reader) => Self(Mutex::new(Box::new(reader))),
+            Ok(reader) => (Self(Mutex::new(Box::new(reader))), None),
             Err(error) => {
                 eprintln!("Opening the history for the dashboard failed: {}", error.0);
-                Self::create_empty()
+                (
+                    Self::create_empty(),
+                    Some(catalog.render_text("history-dashboard-unreadable")),
+                )
             }
         }
     }
@@ -104,19 +116,18 @@ pub fn open_stores(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> Open
         });
     match opened {
         Ok((opened, path)) => {
-            let notice = opened.set_aside.map(|path| {
-                let mut args = FluentArgs::new();
+            let set_aside = opened.set_aside.map(|path| {
                 let file = path
                     .file_name()
                     .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-                args.set("file", file);
-                catalog.render("history-set-aside", Some(&args))
+                catalog.render_value("history-set-aside", "file", file)
             });
             // Opened after the writer: the file exists and is migrated by now.
+            let (dashboard, unreadable) = DashboardHistory::open(&path, catalog);
             OpenedStores {
                 recorder: SqliteHistoryRecorder::start(opened.repository, SystemClock::start()),
-                notice: HistoryNotice(notice),
-                dashboard: DashboardHistory::open(&path),
+                notice: HistoryNotice::from_sentences([set_aside, unreadable]),
+                dashboard,
                 settings: SettingsStore::open(&path),
                 location: HistoryLocation::OnDisk(path),
             }
@@ -135,5 +146,46 @@ pub fn open_stores(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> Open
                 Err(error) => panic!("an in-memory history cannot fail to open: {}", error.0),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn says_so_when_the_dashboard_cannot_open_the_history() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let missing = std::env::temp_dir()
+            .join(format!("no-history-{}", std::process::id()))
+            .join(HISTORY_FILE);
+
+        // Act
+        let (dashboard, notice) = DashboardHistory::open(&missing, &catalog);
+
+        // Assert
+        assert_eq!(
+            notice,
+            Some(catalog.render_text("history-dashboard-unreadable"))
+        );
+        assert_eq!(dashboard.read(|reader| reader.is_history_empty()), Ok(true));
+    }
+
+    #[test]
+    fn joins_every_history_problem_in_one_notice() {
+        // Arrange
+        let set_aside = Some("Mis de côté.".to_owned());
+        let unreadable = Some("Illisible.".to_owned());
+
+        // Act
+        let both = HistoryNotice::from_sentences([set_aside.clone(), unreadable]);
+        let one = HistoryNotice::from_sentences([set_aside, None]);
+        let none = HistoryNotice::from_sentences([None, None]);
+
+        // Assert
+        assert_eq!(both.0.as_deref(), Some("Mis de côté. Illisible."));
+        assert_eq!(one.0.as_deref(), Some("Mis de côté."));
+        assert_eq!(none.0, None);
     }
 }
