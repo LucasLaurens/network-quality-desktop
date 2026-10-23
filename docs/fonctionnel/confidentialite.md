@@ -14,7 +14,7 @@ L'app pinge aussi la box ou le téléphone qui sert de passerelle, une fois par 
 
 Elle lit aussi chaque seconde les compteurs d'octets de l'interface réseau, pour le trafic observé des détails techniques : des totaux, jamais le contenu ni les destinataires des échanges. Ils restent en mémoire.
 
-Seulement quand l'utilisateur ouvre les « Détails techniques » du tableau de bord, l'app cherche la box en UPnP (recherche SSDP en multicast sur le réseau local), puis lui demande le type de sa ligne, son débit synchronisé et ses compteurs de trafic. Ces questions sont en lecture seule : l'app n'ouvre ni ne modifie jamais de port sur la box. Elles restent sur le réseau local ; sous macOS, elles passent par la même autorisation « Réseau local ».
+Seulement quand l'utilisateur ouvre les « Détails techniques » du tableau de bord, l'app cherche la box en UPnP (recherche SSDP en multicast sur le réseau local), puis, si c'est bien la passerelle de l'ordinateur qui répond, lui demande le type de sa ligne, son débit synchronisé et ses compteurs de trafic. Ces questions sont en lecture seule : l'app n'ouvre ni ne modifie jamais de port sur la box. Elles restent sur le réseau local ; sous macOS, elles passent par la même autorisation « Réseau local ».
 
 L'historique (résumés par minute et par heure, changements de réseau, coupures) est enregistré dans un fichier sur l'ordinateur ; voir [Historique](historique.md). Pour reconnaître les réseaux, ce fichier garde sans limite de durée l'adresse MAC de la box ou du téléphone et le nom du Wi-Fi. Rien n'est envoyé ailleurs. « Effacer l'historique », dans Réglages, supprime tout cela, réseaux compris ; seuls les réglages restent.
 
