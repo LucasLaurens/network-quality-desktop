@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '../src/App.vue'
 import {
@@ -8,13 +8,11 @@ import {
   createHelpDisplay,
   createThroughputPanel,
   createWindowModeTexts,
-  createWindowProvisions,
+  mountWindow,
 } from './fakes/in-memory-network-quality-client'
 
-async function mountApp(client: InMemoryNetworkQualityClient) {
-  const wrapper = mount(App, { global: { provide: createWindowProvisions(client) } })
-  await flushPromises()
-  return wrapper
+function mountApp(client: InMemoryNetworkQualityClient) {
+  return mountWindow(App, client)
 }
 
 describe('App', () => {
@@ -25,11 +23,10 @@ describe('App', () => {
   it('shows the version reported by the Rust core', async () => {
     // Arrange
     const version = faker.system.semver()
-    const client = new InMemoryNetworkQualityClient({ name: faker.word.noun(), version })
+    const client = new InMemoryNetworkQualityClient({ appInfo: { name: faker.word.noun(), version } })
 
     // Act
-    const wrapper = mount(App, { global: { provide: createWindowProvisions(client) } })
-    await flushPromises()
+    const wrapper = await mountApp(client)
 
     // Assert
     expect(wrapper.get('h1').text()).toBe('Qualité de connexion')
@@ -39,7 +36,7 @@ describe('App', () => {
   it('explains the missing dot when the desktop has no tray', async () => {
     // Arrange
     const hint = createWindowModeTexts()
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay(), hint)
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay(), windowModeTexts: hint })
 
     // Act
     const wrapper = await mountApp(client)
@@ -61,7 +58,10 @@ describe('App', () => {
 
   it('opens the extension page from the note', async () => {
     // Arrange
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay(), createWindowModeTexts())
+    const client = new InMemoryNetworkQualityClient({
+      display: createConnectionDisplay(),
+      windowModeTexts: createWindowModeTexts(),
+    })
     const wrapper = await mountApp(client)
 
     // Act
@@ -73,7 +73,10 @@ describe('App', () => {
 
   it('keeps the note hidden once dismissed, across launches', async () => {
     // Arrange
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay(), createWindowModeTexts())
+    const client = new InMemoryNetworkQualityClient({
+      display: createConnectionDisplay(),
+      windowModeTexts: createWindowModeTexts(),
+    })
     const first = await mountApp(client)
     await first.get('[data-tray-hint-dismiss]').trigger('click')
     first.unmount()
@@ -88,7 +91,7 @@ describe('App', () => {
   it('offers a way to quit in window mode, even once the note is dismissed', async () => {
     // Arrange
     const texts = createWindowModeTexts()
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay(), texts)
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay(), windowModeTexts: texts })
     const wrapper = await mountApp(client)
     await wrapper.get('[data-tray-hint-dismiss]').trigger('click')
     const quit = wrapper.get('[data-quit]')
@@ -104,7 +107,7 @@ describe('App', () => {
   it('shows the version even when the window mode cannot be read', async () => {
     // Arrange
     const version = faker.system.semver()
-    const client = new InMemoryNetworkQualityClient({ name: faker.word.noun(), version })
+    const client = new InMemoryNetworkQualityClient({ appInfo: { name: faker.word.noun(), version } })
     client.failWindowModeRead()
 
     // Act
@@ -203,7 +206,7 @@ describe('App', () => {
 
   it('opens the help on the dashboard when the tray menu asks for it', async () => {
     // Arrange
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ help: createHelpDisplay() }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ help: createHelpDisplay() }) })
     const wrapper = await mountApp(client)
     client.sendDashboardRequest({ kind: 'settings' })
     await flushPromises()
@@ -219,7 +222,7 @@ describe('App', () => {
 
   it('unfolds the help again when asked after it was folded', async () => {
     // Arrange
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ help: createHelpDisplay() }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ help: createHelpDisplay() }) })
     const wrapper = await mountApp(client)
     client.sendDashboardRequest({ kind: 'help' })
     await flushPromises()
@@ -236,7 +239,7 @@ describe('App', () => {
 
   it('leaves the help folded when the dashboard comes back unasked', async () => {
     // Arrange
-    const client = new InMemoryNetworkQualityClient(undefined, createConnectionDisplay({ help: createHelpDisplay() }))
+    const client = new InMemoryNetworkQualityClient({ display: createConnectionDisplay({ help: createHelpDisplay() }) })
     const wrapper = await mountApp(client)
     client.sendDashboardRequest({ kind: 'help' })
     await flushPromises()

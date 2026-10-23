@@ -5,10 +5,7 @@ use std::time::Duration;
 use application::{
     DayOverview, Evolution, NetworkKey, NetworkStay, NetworkSummary, OutageEnd, Period,
 };
-use domain::{
-    Aggregate, CivilDate, CountedState, LossRate, Metric, SECONDS_PER_DAY, SECONDS_PER_HOUR,
-    SECONDS_PER_MINUTE, Thresholds,
-};
+use domain::{Aggregate, CountedState, GradeBounds, LossRate, Metric, SECONDS_PER_DAY, Thresholds};
 use fluent_bundle::FluentArgs;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -16,6 +13,7 @@ use specta::Type;
 use crate::display::{DisplayState, Displayable, to_lower_name_key};
 use crate::network_display::select_stored_network_keys;
 use crate::text_catalog::TextCatalog;
+use crate::time_display::{format_date_hour, format_duration, format_time_of_day};
 
 /// The period picked above the chart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Type)]
@@ -167,13 +165,13 @@ impl OverviewDisplay {
         let has_measures = overview.today.count_measured_seconds() > 0;
         Self {
             today: if has_measures {
-                render_value(
+                catalog.render_value(
                     "today-solid-share",
+                    "value",
                     compute_percent(seconds.solid, seconds.count_total()).to_string(),
-                    catalog,
                 )
             } else {
-                catalog.render("today-not-enough", None)
+                catalog.render_text("today-not-enough")
             },
             today_coverage: if has_measures {
                 describe_coverage(
@@ -188,11 +186,11 @@ impl OverviewDisplay {
             worst_moment: if has_measures {
                 describe_worst_minute(overview.worst_minute.as_ref(), offset, catalog)
             } else {
-                catalog.render("today-not-enough", None)
+                catalog.render_text("today-not-enough")
             },
             on_network_since: match overview.network_stay {
-                NetworkStay::NoNetwork => catalog.render("since-no-network", None),
-                NetworkStay::BeyondHistory => catalog.render("since-beyond", None),
+                NetworkStay::NoNetwork => catalog.render_text("since-no-network"),
+                NetworkStay::BeyondHistory => catalog.render_text("since-beyond"),
                 NetworkStay::Since(since) => format_duration(now - since, catalog),
             },
         }
@@ -222,14 +220,14 @@ impl NetworkRowDisplay {
         args.set("offline", percent(CountedState::Offline));
         Self {
             label: compose_network_name(&summary.network, catalog),
-            connection: catalog.render(connection_key, None),
+            connection: catalog.render_text(connection_key),
             shares: StateShares {
                 solid: share(CountedState::Solid),
                 unstable: share(CountedState::Unstable),
                 degraded: share(CountedState::Degraded),
                 offline: share(CountedState::Offline),
             },
-            solid_label: render_value("share-solid", percent(CountedState::Solid), catalog),
+            solid_label: catalog.render_value("share-solid", "value", percent(CountedState::Solid)),
             shares_label: catalog.render("shares", Some(&args)),
             latency_p90: format_or_unknown(summary.aggregate.compute_latency_p90(), catalog),
             loss: format_or_unknown(summary.aggregate.compute_loss(), catalog),
@@ -277,42 +275,33 @@ impl EvolutionDisplay {
                 &aggregates,
                 Aggregate::compute_latency_p90,
                 to_milliseconds,
-                (
-                    thresholds.latency.read_unstable_from(),
-                    thresholds.latency.read_degraded_above(),
-                ),
+                thresholds.latency,
                 catalog,
             ),
             jitter: compose_series(
                 &aggregates,
                 Aggregate::compute_mean_jitter,
                 to_milliseconds,
-                (
-                    thresholds.jitter.read_unstable_from(),
-                    thresholds.jitter.read_degraded_above(),
-                ),
+                thresholds.jitter,
                 catalog,
             ),
             loss: compose_series(
                 &aggregates,
                 Aggregate::compute_loss,
                 LossRate::to_percent,
-                (
-                    thresholds.loss.read_unstable_from(),
-                    thresholds.loss.read_degraded_above(),
-                ),
+                thresholds.loss,
                 catalog,
             ),
             network_changes: evolution
                 .network_changes
                 .iter()
-                .map(|event| {
-                    let mut args = FluentArgs::new();
-                    args.set("network", compose_network_name(&event.network, catalog));
-                    NetworkChangeDisplay {
-                        position: compute_fraction(event.utc - first, span),
-                        label: catalog.render("chart-network-change", Some(&args)),
-                    }
+                .map(|event| NetworkChangeDisplay {
+                    position: compute_fraction(event.utc - first, span),
+                    label: catalog.render_value(
+                        "chart-network-change",
+                        "network",
+                        compose_network_name(&event.network, catalog),
+                    ),
                 })
                 .collect(),
             state_labels: [
@@ -324,14 +313,14 @@ impl EvolutionDisplay {
             .into_iter()
             .map(|state| StateLabelDisplay {
                 state,
-                label: catalog.render(state.to_catalogue_key(), None),
+                label: catalog.render_text(state.to_catalogue_key()),
             })
             .collect(),
-            coverage: render_value(
+            coverage: catalog.render_value(
                 "chart-coverage",
+                "value",
                 // Rounded down, as every share: 100 % only for a fully measured period.
                 format!("{:.0}", (evolution.coverage * 100.0).floor()),
-                catalog,
             ),
         }
     }
@@ -342,9 +331,11 @@ fn compose_series<T: Displayable>(
     aggregates: &[&Aggregate],
     read: fn(&Aggregate) -> Option<T>,
     to_number: fn(T) -> f64,
-    (unstable_from, degraded_above): (T, T),
+    bounds: GradeBounds<T>,
     catalog: &TextCatalog,
 ) -> SeriesDisplay {
+    let unstable_from = bounds.read_unstable_from();
+    let degraded_above = bounds.read_degraded_above();
     let readings: Vec<Option<T>> = aggregates.iter().map(|aggregate| read(aggregate)).collect();
     SeriesDisplay {
         values: readings.iter().map(|value| value.map(to_number)).collect(),
@@ -354,11 +345,15 @@ fn compose_series<T: Displayable>(
             .collect(),
         unstable_from: to_number(unstable_from),
         degraded_above: to_number(degraded_above),
-        unstable_label: render_value("threshold-unstable", unstable_from.format(catalog), catalog),
-        degraded_label: render_value(
+        unstable_label: catalog.render_value(
+            "threshold-unstable",
+            "value",
+            unstable_from.format(catalog),
+        ),
+        degraded_label: catalog.render_value(
             "threshold-degraded",
+            "value",
             degraded_above.format(catalog),
-            catalog,
         ),
     }
 }
@@ -395,7 +390,7 @@ fn describe_outages(
 ) -> String {
     let outages = &overview.outages;
     let Some(last) = outages.last() else {
-        return catalog.render("outages-none", None);
+        return catalog.render_text("outages-none");
     };
     let mut args = FluentArgs::new();
     if last.end == OutageEnd::Ongoing {
@@ -437,7 +432,7 @@ fn describe_worst_minute(
     catalog: &TextCatalog,
 ) -> String {
     let Some((start, minute)) = worst else {
-        return catalog.render("worst-none", None);
+        return catalog.render_text("worst-none");
     };
     let mut args = FluentArgs::new();
     args.set("time", format_time_of_day(*start, offset, catalog));
@@ -456,7 +451,7 @@ fn describe_worst_minute(
     };
     match metric.zip(value) {
         Some((metric, value)) => {
-            args.set("metric", catalog.render(to_lower_name_key(metric), None));
+            args.set("metric", catalog.render_text(to_lower_name_key(metric)));
             args.set("value", value);
             catalog.render("worst-moment", Some(&args))
         }
@@ -470,57 +465,14 @@ fn compose_network_name(network: &NetworkKey, catalog: &TextCatalog) -> String {
     network
         .name
         .clone()
-        .unwrap_or_else(|| catalog.render(name_key, None))
+        .unwrap_or_else(|| catalog.render_text(name_key))
 }
 
 pub fn format_or_unknown<T: Displayable>(value: Option<T>, catalog: &TextCatalog) -> String {
     value.map_or_else(
-        || catalog.render("value-unknown", None),
+        || catalog.render_text("value-unknown"),
         |value| value.format(catalog),
     )
-}
-
-fn render_value(key: &str, value: String, catalog: &TextCatalog) -> String {
-    let mut args = FluentArgs::new();
-    args.set("value", value);
-    catalog.render(key, Some(&args))
-}
-
-/// "14 h 05" in the user's time zone. O(1).
-pub fn format_time_of_day(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
-    let seconds = (utc + offset).rem_euclid(SECONDS_PER_DAY);
-    let mut args = FluentArgs::new();
-    args.set("hours", (seconds / SECONDS_PER_HOUR).to_string());
-    args.set(
-        "minutes",
-        format!("{:02}", seconds % SECONDS_PER_HOUR / SECONDS_PER_MINUTE),
-    );
-    catalog.render("time-of-day", Some(&args))
-}
-
-/// "12/10, 14 h 05" in the user's time zone. O(1).
-pub fn format_date_time(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
-    let local = utc + offset;
-    let CivilDate { month, day, .. } = CivilDate::from_days(local.div_euclid(SECONDS_PER_DAY));
-    let mut args = FluentArgs::new();
-    args.set("day", format!("{day:02}"));
-    args.set("month", format!("{month:02}"));
-    args.set("time", format_time_of_day(utc, offset, catalog));
-    catalog.render("date-time", Some(&args))
-}
-
-/// "12/10, 14 h" in the user's time zone. O(1).
-fn format_date_hour(utc: i64, offset: i64, catalog: &TextCatalog) -> String {
-    let local = utc + offset;
-    let CivilDate { month, day, .. } = CivilDate::from_days(local.div_euclid(SECONDS_PER_DAY));
-    let mut args = FluentArgs::new();
-    args.set("day", format!("{day:02}"));
-    args.set("month", format!("{month:02}"));
-    args.set(
-        "hours",
-        (local.rem_euclid(SECONDS_PER_DAY) / SECONDS_PER_HOUR).to_string(),
-    );
-    catalog.render("date-hour", Some(&args))
 }
 
 /// « mesuré 18 h sur 24 h »: the seconds counted in a state out of those elapsed. O(1).
@@ -531,45 +483,11 @@ fn describe_coverage(measured: i64, elapsed: i64, catalog: &TextCatalog) -> Stri
     catalog.render("today-coverage", Some(&args))
 }
 
-/// The two largest units: "42 s", "12 min", "3 h 12 min", "2 j 5 h". O(1).
-fn format_duration(seconds: i64, catalog: &TextCatalog) -> String {
-    let seconds = seconds.max(0);
-    let mut args = FluentArgs::new();
-    if seconds < SECONDS_PER_MINUTE {
-        args.set("value", seconds.to_string());
-        return catalog.render("duration-seconds", Some(&args));
-    }
-    if seconds < SECONDS_PER_HOUR {
-        args.set("value", (seconds / SECONDS_PER_MINUTE).to_string());
-        return catalog.render("duration-minutes", Some(&args));
-    }
-    if seconds < SECONDS_PER_DAY {
-        let minutes = seconds % SECONDS_PER_HOUR / SECONDS_PER_MINUTE;
-        args.set("hours", (seconds / SECONDS_PER_HOUR).to_string());
-        args.set("minutes", minutes.to_string());
-        let key = if minutes == 0 {
-            "duration-hours"
-        } else {
-            "duration-hours-minutes"
-        };
-        return catalog.render(key, Some(&args));
-    }
-    let hours = seconds % SECONDS_PER_DAY / SECONDS_PER_HOUR;
-    args.set("days", (seconds / SECONDS_PER_DAY).to_string());
-    args.set("hours", hours.to_string());
-    let key = if hours == 0 {
-        "duration-days"
-    } else {
-        "duration-days-hours"
-    };
-    catalog.render(key, Some(&args))
-}
-
 #[cfg(test)]
 mod tests {
     use application::test_support::generate_network_name;
     use application::{HistoryEvent, NetworkKey, Outage};
-    use domain::{ConnectionKind, MacAddress, SecondSample};
+    use domain::{ConnectionKind, MacAddress, SECONDS_PER_HOUR, SecondSample};
 
     use super::*;
 
@@ -625,44 +543,6 @@ mod tests {
         assert_eq!(
             compute_day_start(MIDNIGHT + 23 * 3600 + 30 * 60, PARIS),
             MIDNIGHT + 23 * 3600
-        );
-    }
-
-    #[test]
-    fn writes_times_and_dates_in_the_user_time_zone() {
-        // Arrange
-        let catalog = TextCatalog::load();
-
-        // Act
-        let time = format_time_of_day(MIDNIGHT + 13 * 3600 + 5 * 60, PARIS, &catalog);
-        let date = format_date_hour(MIDNIGHT + 23 * 3600, PARIS, &catalog);
-
-        // Assert
-        assert_eq!(time, insert_no_break_spaces("14~h~05"));
-        assert_eq!(date, insert_no_break_spaces("15/11, 0~h"));
-    }
-
-    #[test]
-    fn keeps_the_two_largest_units_of_a_duration() {
-        // Arrange
-        let catalog = TextCatalog::load();
-
-        // Act
-        let durations: Vec<String> = [
-            42,
-            12 * 60,
-            3 * 3600,
-            3 * 3600 + 12 * 60,
-            2 * 86_400 + 5 * 3600,
-        ]
-        .into_iter()
-        .map(|seconds| format_duration(seconds, &catalog))
-        .collect();
-
-        // Assert
-        assert_eq!(
-            durations,
-            ["42~s", "12~min", "3~h", "3~h 12~min", "2~j 5~h"].map(insert_no_break_spaces)
         );
     }
 

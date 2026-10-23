@@ -10,7 +10,7 @@ use domain::Settings;
 use crate::display::ConnectionDisplay;
 use crate::text_catalog::TextCatalog;
 use crate::throughput_display::ProfileChoice;
-use crate::windows::{DashboardRequested, request_from_dashboard, show_dashboard};
+use crate::windows::{DashboardRequested, report_failure, request_from_dashboard, show_dashboard};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuAction {
@@ -103,27 +103,27 @@ pub fn compose_menu_entries(
     if settings.allows_throughput_tests {
         entries.push(MenuEntry::Action(
             MenuAction::RunQuickTest,
-            catalog.render("ui-quick-test", None),
+            catalog.render_text("ui-quick-test"),
         ));
         entries.push(MenuEntry::Action(
             MenuAction::RunFullTest,
-            catalog.render("ui-full-test", None),
+            catalog.render_text("ui-full-test"),
         ));
     }
     // Linux has no popover: the menu is the way to the help there.
     if display.help.is_some() {
         entries.push(MenuEntry::Action(
             MenuAction::OpenHelp,
-            catalog.render("menu-ping-help", None),
+            catalog.render_text("menu-ping-help"),
         ));
     }
     entries.extend([
         MenuEntry::Action(
             MenuAction::OpenSettings,
-            catalog.render("menu-settings", None),
+            catalog.render_text("menu-settings"),
         ),
         MenuEntry::Separator,
-        MenuEntry::Action(MenuAction::Quit, catalog.render("menu-quit", None)),
+        MenuEntry::Action(MenuAction::Quit, catalog.render_text("menu-quit")),
     ]);
     entries
 }
@@ -225,9 +225,7 @@ impl TrayMenu {
             return;
         }
         for (item, text) in built.infos.iter().zip(&texts) {
-            if let Err(error) = item.set_text(text) {
-                eprintln!("Updating the tray menu failed: {error}");
-            }
+            report_failure("Updating the tray menu", item.set_text(text));
         }
         built.texts = texts;
     }
@@ -312,10 +310,10 @@ mod tests {
                 MenuEntry::Action(MenuAction::OpenDashboard, display.open_dashboard_label),
                 MenuEntry::Action(
                     MenuAction::OpenSettings,
-                    catalog.render("menu-settings", None)
+                    catalog.render_text("menu-settings")
                 ),
                 MenuEntry::Separator,
-                MenuEntry::Action(MenuAction::Quit, catalog.render("menu-quit", None)),
+                MenuEntry::Action(MenuAction::Quit, catalog.render_text("menu-quit")),
             ]
         );
     }

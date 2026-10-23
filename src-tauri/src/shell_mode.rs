@@ -61,10 +61,10 @@ impl WindowModeTexts {
     #[must_use]
     pub fn compose(mode: ShellMode, catalog: &TextCatalog) -> Option<Self> {
         (mode == ShellMode::Window).then(|| Self {
-            message: catalog.render("tray-hint-message", None),
-            link_label: catalog.render("tray-hint-link", None),
-            dismiss_label: catalog.render("tray-hint-dismiss", None),
-            quit_label: catalog.render("menu-quit", None),
+            message: catalog.render_text("tray-hint-message"),
+            link_label: catalog.render_text("tray-hint-link"),
+            dismiss_label: catalog.render_text("tray-hint-dismiss"),
+            quit_label: catalog.render_text("menu-quit"),
         })
     }
 }

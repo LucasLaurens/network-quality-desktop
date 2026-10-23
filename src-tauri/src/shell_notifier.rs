@@ -1,12 +1,15 @@
 //! The system notification of a durable degradation: the state as its title, the finding as its
 //! body, and neither an action nor a figure.
 
+use std::sync::Arc;
+
 use application::{Notifier, VerdictView};
 use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
 
 use crate::display::ConnectionDisplay;
 use crate::text_catalog::TextCatalog;
+use crate::windows::report_failure;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Notice {
@@ -28,12 +31,12 @@ impl Notice {
 
 pub struct ShellNotifier {
     app: AppHandle,
-    catalog: TextCatalog,
+    catalog: Arc<TextCatalog>,
 }
 
 impl ShellNotifier {
     #[must_use]
-    pub const fn new(app: AppHandle, catalog: TextCatalog) -> Self {
+    pub const fn new(app: AppHandle, catalog: Arc<TextCatalog>) -> Self {
         Self { app, catalog }
     }
 }
@@ -48,9 +51,7 @@ impl Notifier for ShellNotifier {
             .title(notice.title)
             .body(notice.body)
             .show();
-        if let Err(error) = shown {
-            eprintln!("Showing the degradation notice failed: {error}");
-        }
+        report_failure("Showing the degradation notice", shown);
     }
 }
 

@@ -23,13 +23,7 @@ impl LatencyWindow {
     /// O(n log n) time, O(n) space with n ≤ 15, so effectively constant.
     #[must_use]
     pub fn compute_p90(&self) -> Option<Duration> {
-        let mut samples: Vec<Duration> = self.seconds.iter().flatten().copied().collect();
-        if samples.is_empty() {
-            return None;
-        }
-        samples.sort_unstable();
-        let rank = (samples.len() * PERCENTILE).div_ceil(100);
-        samples.get(rank.saturating_sub(1)).copied()
+        compute_nearest_rank(self.seconds.iter().flatten().copied().collect(), PERCENTILE)
     }
 }
 
@@ -44,9 +38,26 @@ impl LatencyWindow {
             .zip(self.seconds.iter().skip(1))
             .filter_map(|(previous, current)| Some(current.as_ref()?.abs_diff(*previous.as_ref()?)))
             .collect();
-        let count = u32::try_from(gaps.len()).ok().filter(|count| *count > 0)?;
-        Some(gaps.iter().sum::<Duration>() / count)
+        compute_mean_duration(&gaps)
     }
+}
+
+/// The value at the nearest rank of `percentile` (out of 100), `None` without any value.
+/// O(n log n) time for the sort, O(1) extra space.
+#[must_use]
+pub fn compute_nearest_rank<T: Ord + Copy>(mut values: Vec<T>, percentile: usize) -> Option<T> {
+    values.sort_unstable();
+    let rank = (values.len() * percentile).div_ceil(100).max(1);
+    values.get(rank - 1).copied()
+}
+
+/// `None` without any duration. O(n) time, O(1) space.
+#[must_use]
+pub fn compute_mean_duration(durations: &[Duration]) -> Option<Duration> {
+    let count = u32::try_from(durations.len())
+        .ok()
+        .filter(|count| *count > 0)?;
+    Some(durations.iter().sum::<Duration>() / count)
 }
 
 /// Median of the round trips that came back, `None` when no target answered.
@@ -63,5 +74,34 @@ pub fn compute_median(round_trips: &[Option<Duration>]) -> Option<Duration> {
         answered.get(middle).copied()
     } else {
         Some((answered[middle - 1] + answered[middle]) / 2)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn picks_the_nearest_rank() {
+        // Arrange
+        let values: Vec<u32> = (1..=20).collect();
+
+        // Act & Assert
+        assert_eq!(compute_nearest_rank(values, 90), Some(18));
+        assert_eq!(compute_nearest_rank(vec![7_u32], 90), Some(7));
+        assert_eq!(compute_nearest_rank(Vec::<u32>::new(), 90), None);
+    }
+
+    #[test]
+    fn averages_durations() {
+        // Arrange
+        let durations = [Duration::from_millis(10), Duration::from_millis(30)];
+
+        // Act & Assert
+        assert_eq!(
+            compute_mean_duration(&durations),
+            Some(Duration::from_millis(20))
+        );
+        assert_eq!(compute_mean_duration(&[]), None);
     }
 }

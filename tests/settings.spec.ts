@@ -1,15 +1,11 @@
 import { faker } from '@faker-js/faker'
-import { flushPromises, mount, type DOMWrapper } from '@vue/test-utils'
+import { flushPromises, type DOMWrapper } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import SettingsView from '../src/components/SettingsView.vue'
-import { InMemoryNetworkQualityClient, createWindowProvisions } from './fakes/in-memory-network-quality-client'
+import { InMemoryNetworkQualityClient, mountWindow, createSettingsForm } from './fakes/in-memory-network-quality-client'
 
-async function mountSettings(client: InMemoryNetworkQualityClient) {
-  const wrapper = mount(SettingsView, {
-    global: { provide: createWindowProvisions(client) },
-  })
-  await flushPromises()
-  return wrapper
+function mountSettings(client: InMemoryNetworkQualityClient) {
+  return mountWindow(SettingsView, client)
 }
 
 const createAddress = (): string => faker.internet.ipv4()
@@ -44,15 +40,7 @@ describe('SettingsView', () => {
     await flushPromises()
 
     // Assert
-    expect(client.savedForms).toEqual([
-      {
-        launchAtLogin: false,
-        appearance: 'system',
-        ownServer: null,
-        notifiesOnDegradation: true,
-        allowsThroughputTests: false,
-      },
-    ])
+    expect(client.savedForms).toEqual([createSettingsForm({ launchAtLogin: false })])
     expect(wrapper.get('[data-saved]').text()).toBe(client.readConfirmation())
   })
 
@@ -72,13 +60,7 @@ describe('SettingsView', () => {
   it('shows the notifications as turned off once saved so', async () => {
     // Arrange
     const client = new InMemoryNetworkQualityClient()
-    await client.saveSettings({
-      launchAtLogin: true,
-      appearance: 'system',
-      ownServer: null,
-      notifiesOnDegradation: false,
-      allowsThroughputTests: false,
-    })
+    await client.saveSettings(createSettingsForm({ notifiesOnDegradation: false }))
 
     // Act
     const wrapper = await mountSettings(client)
@@ -141,15 +123,7 @@ describe('SettingsView', () => {
     await flushPromises()
 
     // Assert
-    expect(client.savedForms).toEqual([
-      {
-        launchAtLogin: true,
-        appearance: 'system',
-        ownServer: address,
-        notifiesOnDegradation: true,
-        allowsThroughputTests: false,
-      },
-    ])
+    expect(client.savedForms).toEqual([createSettingsForm({ ownServer: address })])
   })
 
   it('saves the look with the last accepted server while an address is half typed', async () => {
@@ -164,15 +138,7 @@ describe('SettingsView', () => {
     await flushPromises()
 
     // Assert
-    expect(client.savedForms).toEqual([
-      {
-        launchAtLogin: true,
-        appearance: 'dark',
-        ownServer: null,
-        notifiesOnDegradation: true,
-        allowsThroughputTests: false,
-      },
-    ])
+    expect(client.savedForms).toEqual([createSettingsForm({ appearance: 'dark' })])
     expect(wrapper.find('[data-refused]').exists()).toBe(false)
   })
 

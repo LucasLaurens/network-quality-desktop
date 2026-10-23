@@ -1,4 +1,6 @@
 import { faker } from '@faker-js/faker'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import type { Component } from 'vue'
 import type {
   AppInfo,
   ConnectionDisplay,
@@ -34,6 +36,32 @@ import {
   type NetworkQualityClient,
 } from '../../src/services/network-quality-client'
 import interfaceTexts from './interface-texts.json'
+
+/** What a test sets on the fake core; anything left out is generated. */
+export interface FakeClientOptions {
+  appInfo?: AppInfo | undefined
+  display?: ConnectionDisplay | undefined
+  windowModeTexts?: WindowModeTexts | null | undefined
+}
+
+/** The settings of a first launch, as the core reads them. */
+export function createSettingsForm(overrides: Partial<SettingsForm> = {}): SettingsForm {
+  return {
+    launchAtLogin: true,
+    appearance: 'system',
+    ownServer: null,
+    notifiesOnDegradation: true,
+    allowsThroughputTests: false,
+    ...overrides,
+  }
+}
+
+/** Mounts a window component with what `main.ts` gives it, and lets its first reads land. */
+export async function mountWindow(component: Component, client: NetworkQualityClient): Promise<VueWrapper> {
+  const wrapper = mount(component, { global: { provide: createWindowProvisions(client) } })
+  await flushPromises()
+  return wrapper
+}
 
 /** What `main.ts` gives a window: the client, and the catalogue's texts as the core renders them. */
 export function createWindowProvisions(client: NetworkQualityClient): Record<symbol, unknown> {
@@ -256,24 +284,26 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private throughputWarning = ''
   private isHoldingThroughput = false
   private releaseThroughputTest = (): void => undefined
-  private settings: SettingsForm = {
-    launchAtLogin: true,
-    appearance: 'system',
-    ownServer: null,
-    notifiesOnDegradation: true,
-    allowsThroughputTests: false,
-  }
+  private settings: SettingsForm = createSettingsForm()
   /** Empty while saves are accepted. */
   private settingsRefusal = ''
   private readonly confirmation = faker.lorem.sentence()
   private isHoldingSaves = false
   private heldSaves: (() => void)[] = []
 
-  constructor(
-    private readonly appInfo: AppInfo = { name: faker.word.noun(), version: faker.system.semver() },
-    private display: ConnectionDisplay = createConnectionDisplay(),
-    private readonly windowModeTexts: WindowModeTexts | null = null,
-  ) {}
+  private readonly appInfo: AppInfo
+  private display: ConnectionDisplay
+  private readonly windowModeTexts: WindowModeTexts | null
+
+  constructor({
+    appInfo = { name: faker.word.noun(), version: faker.system.semver() },
+    display = createConnectionDisplay(),
+    windowModeTexts = null,
+  }: FakeClientOptions = {}) {
+    this.appInfo = appInfo
+    this.display = display
+    this.windowModeTexts = windowModeTexts
+  }
 
   get listenerCount(): number {
     return this.listeners.length
@@ -398,13 +428,9 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     return Promise.resolve({ ...this.settings })
   }
 
-  /** Every save is refused with `refusal` until `acceptSettings`. */
+  /** Every save from now on is refused with `refusal`. */
   refuseSettings(refusal: string): void {
     this.settingsRefusal = refusal
-  }
-
-  acceptSettings(): void {
-    this.settingsRefusal = ''
   }
 
   saveSettings(form: SettingsForm): Promise<string> {

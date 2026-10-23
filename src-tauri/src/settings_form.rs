@@ -1,12 +1,11 @@
 //! The settings as the Réglages page reads and sends them, and the words of its answers.
 
 use domain::{Appearance, MeasurementServers, Settings, Target};
-use fluent_bundle::FluentArgs;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::dashboard_display::format_time_of_day;
 use crate::text_catalog::TextCatalog;
+use crate::time_display::format_time_of_day;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
@@ -56,7 +55,7 @@ impl SettingsForm {
         let servers = match self.own_server.as_deref() {
             None => MeasurementServers::Default,
             Some(text) => MeasurementServers::Custom(
-                Target::try_parse(text).ok_or_else(|| catalog.render("server-invalid", None))?,
+                Target::try_parse(text).ok_or_else(|| catalog.render_text("server-invalid"))?,
             ),
         };
         Ok(Settings {
@@ -88,13 +87,11 @@ pub fn format_save_confirmation(
     durability: Durability,
     catalog: &TextCatalog,
 ) -> String {
-    let mut args = FluentArgs::new();
-    args.set("time", format_time_of_day(now, offset, catalog));
     let key = match durability {
         Durability::OnDisk => "settings-saved",
         Durability::ThisSession => "settings-saved-session",
     };
-    catalog.render(key, Some(&args))
+    catalog.render_value(key, "time", format_time_of_day(now, offset, catalog))
 }
 
 #[cfg(test)]

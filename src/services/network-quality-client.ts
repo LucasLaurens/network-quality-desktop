@@ -1,4 +1,4 @@
-import type { InjectionKey } from 'vue'
+import { inject, type InjectionKey } from 'vue'
 import type {
   AppInfo,
   ConnectionDisplay,
@@ -73,3 +73,15 @@ export interface NetworkQualityClient {
 }
 
 export const NETWORK_QUALITY_CLIENT_KEY: InjectionKey<NetworkQualityClient> = Symbol('NetworkQualityClient')
+
+/** The client a component talks to the core through. */
+export function useNetworkQualityClient(): NetworkQualityClient {
+  const client = inject(NETWORK_QUALITY_CLIENT_KEY)
+  if (!client) throw new Error('NetworkQualityClient is not provided')
+  return client
+}
+
+/** What a refusal from the core says, whatever shape it came in. */
+export function readErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}

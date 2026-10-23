@@ -1,15 +1,11 @@
 import { faker } from '@faker-js/faker'
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import SettingsView from '../src/components/SettingsView.vue'
-import { InMemoryNetworkQualityClient, createWindowProvisions } from './fakes/in-memory-network-quality-client'
+import { InMemoryNetworkQualityClient, mountWindow } from './fakes/in-memory-network-quality-client'
 
-async function mountSection(client: InMemoryNetworkQualityClient) {
-  const wrapper = mount(SettingsView, {
-    global: { provide: createWindowProvisions(client) },
-  })
-  await flushPromises()
-  return wrapper
+function mountSection(client: InMemoryNetworkQualityClient) {
+  return mountWindow(SettingsView, client)
 }
 
 describe('SettingsView, data', () => {

@@ -62,23 +62,9 @@ const STATES = ['solid', 'unstable', 'degraded', 'offline'] as const satisfies r
   overflow-x: auto;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
 th,
 td {
-  padding: var(--s2) var(--s3) var(--s2) 0;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
   vertical-align: top;
-}
-
-th {
-  color: var(--muted);
-  font-size: var(--t-xs);
-  font-weight: 500;
 }
 
 .right {

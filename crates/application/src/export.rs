@@ -7,9 +7,9 @@ use std::time::Duration;
 
 use domain::{Aggregate, Bitrate, CivilDateTime, ConnectionKind, Granularity, TestProfile};
 
+use crate::history::MINUTE_RETENTION_SECONDS;
 use crate::{
-    EventKind, HistoryEvent, HistoryStream, MINUTE_RETENTION, NetworkKey, Period, RepositoryError,
-    ThroughputRecord,
+    EventKind, HistoryEvent, HistoryStream, NetworkKey, Period, RepositoryError, ThroughputRecord,
 };
 
 const MEASURE_HEADER: [&str; 14] = [
@@ -41,7 +41,6 @@ const TEST_HEADER: [&str; 9] = [
     "duration_ms",
 ];
 const BITS_PER_KILOBIT: u64 = 1000;
-const MINUTE_RETENTION_SECONDS: i64 = MINUTE_RETENTION.as_secs().cast_signed();
 /// What a spreadsheet reads as the start of a formula.
 const FORMULA_STARTS: [char; 6] = ['=', '+', '-', '@', '\t', '\r'];
 
