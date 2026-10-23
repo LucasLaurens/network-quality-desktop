@@ -9,6 +9,8 @@ use std::time::Duration;
 use application::AccessTechnologyDetector;
 use domain::{Bitrate, BoxLine, WanAccessType};
 use futures_util::StreamExt;
+use rupnp::Device;
+use rupnp::http::Uri;
 use rupnp::ssdp::{SearchTarget, URN};
 
 const WAN_COMMON_INTERFACE: URN = URN::service("schemas-upnp-org", "WANCommonInterfaceConfig", 1);
@@ -46,27 +48,31 @@ impl AccessTechnologyDetector for UpnpAccessDetector {
     }
 }
 
-/// The gateway's answer, or the first one when the gateway is unknown. O(d) for d devices
-/// answering the search.
+/// The gateway's answer. Only the description the gateway announces is fetched: any device on the
+/// network may answer the search, and following its address would let it make the app download
+/// without limit, or reach any other host. Without a known gateway, nothing tells the box apart,
+/// so nothing is asked. O(r) for r answers to the search.
 async fn read_box_line_now(gateway: Option<Ipv4Addr>) -> Option<BoxLine> {
+    let gateway = gateway?;
     let target = SearchTarget::URN(WAN_COMMON_INTERFACE);
-    let devices = match rupnp::discover(&target, DISCOVERY_TIMEOUT, None).await {
-        Ok(devices) => devices,
+    let responses = match rupnp::ssdp::search(&target, DISCOVERY_TIMEOUT, 3, None).await {
+        Ok(responses) => responses,
         Err(error) => {
             eprintln!("Searching the box over UPnP failed: {error}");
             return None;
         }
     };
-    let mut devices = pin!(devices);
-    while let Some(device) = devices.next().await {
-        let Ok(device) = device else {
+    let mut responses = pin!(responses);
+    while let Some(response) = responses.next().await {
+        let Some(url) = response
+            .ok()
+            .and_then(|response| parse_gateway_location(response.location(), gateway))
+        else {
             continue;
         };
-        let is_gateway =
-            gateway.is_none_or(|gateway| device.url().host() == Some(gateway.to_string().as_str()));
-        if !is_gateway {
+        let Ok(device) = Device::from_url(url).await else {
             continue;
-        }
+        };
         let Some(service) = device.find_service(&WAN_COMMON_INTERFACE) else {
             continue;
         };
@@ -94,6 +100,14 @@ async fn read_box_line_now(gateway: Option<Ipv4Addr>) -> Option<BoxLine> {
         ));
     }
     None
+}
+
+/// The description address, when the gateway announced it over plain HTTP. O(length).
+fn parse_gateway_location(location: &str, gateway: Ipv4Addr) -> Option<Uri> {
+    let url: Uri = location.parse().ok()?;
+    let is_gateway =
+        url.scheme_str() == Some("http") && url.host() == Some(gateway.to_string().as_str());
+    is_gateway.then_some(url)
 }
 
 /// A rate of zero means the box does not know it. O(1).
@@ -127,7 +141,8 @@ fn read_count(answer: &HashMap<String, String>, name: &str) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use application::AccessTechnologyDetector;
+    use application::test_support::generate_address;
+    use application::{AccessTechnologyDetector, ConnectionContextReader};
 
     use super::*;
 
@@ -164,12 +179,49 @@ mod tests {
         );
     }
 
+    #[test]
+    fn follows_only_what_the_gateway_announces() {
+        // Arrange
+        let gateway = generate_address();
+        let other = Ipv4Addr::from(u32::from(gateway).wrapping_add(1));
+
+        // Act
+        let from_gateway =
+            parse_gateway_location(&format!("http://{gateway}:49000/desc.xml"), gateway);
+        let from_elsewhere =
+            parse_gateway_location(&format!("http://{other}:49000/desc.xml"), gateway);
+        let elsewhere_on_the_box =
+            parse_gateway_location(&format!("http://{gateway}.example/desc.xml"), gateway);
+        let not_http = parse_gateway_location(&format!("file://{gateway}/etc/passwd"), gateway);
+        let garbled = parse_gateway_location("not a url", gateway);
+
+        // Assert
+        assert!(from_gateway.is_some());
+        assert!(from_elsewhere.is_none());
+        assert!(elsewhere_on_the_box.is_none());
+        assert!(not_http.is_none());
+        assert!(garbled.is_none());
+    }
+
+    #[tokio::test]
+    async fn asks_nothing_when_the_gateway_is_unknown() {
+        // Act
+        let line = UpnpAccessDetector::new(None).read_box_line().await;
+
+        // Assert
+        assert_eq!(line, None, "any device could answer for the box");
+    }
+
     // Asks the real box: `cargo test -p infrastructure -- --ignored --nocapture`.
     #[tokio::test]
     #[ignore = "asks the box of the network the computer is on"]
     async fn asks_the_box_about_its_line_within_the_time_allowed() {
         // Arrange
-        let detector = UpnpAccessDetector::new(None);
+        let gateway = crate::NetdevContextReader::new(Ipv4Addr::new(1, 1, 1, 1).into())
+            .read_context()
+            .await
+            .and_then(|context| context.gateway_address);
+        let detector = UpnpAccessDetector::new(gateway);
         let started = std::time::Instant::now();
 
         // Act
