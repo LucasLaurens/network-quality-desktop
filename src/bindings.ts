@@ -368,7 +368,7 @@ export type StateShares = {
 export type TechnicalDetails = {
 	/**  The connection, the Wi-Fi when it carries the traffic, the traffic seen. */
 	sections: DetailSection[],
-	/**  The traffic is averaged over this long: reading it faster shows nothing new. */
+	/**  The volume moves with every sample: reading faster shows nothing new. */
 	refreshSeconds: number,
 };
 

@@ -3,8 +3,7 @@
 
 use application::LineReading;
 use domain::{
-    AccessEstimate, Bitrate, ConnectionContext, TRAFFIC_WINDOW, TrafficRate, TrafficReading,
-    WifiLink,
+    AccessEstimate, ConnectionContext, TRAFFIC_WINDOW, TrafficRate, TrafficReading, WifiLink,
 };
 use fluent_bundle::FluentArgs;
 use serde::Serialize;
@@ -14,6 +13,7 @@ use crate::network_display::{NetworkDisplay, select_band_key};
 use crate::shell_presenter::ConnectionReading;
 use crate::text_catalog::TextCatalog;
 use crate::throughput_display::{format_bitrate, format_megabytes, format_one_decimal};
+use crate::traffic_store::SAMPLE_EVERY;
 
 const BYTES_PER_GIGABYTE: u64 = 1_000_000_000;
 
@@ -36,7 +36,7 @@ pub struct DetailSection {
 pub struct TechnicalDetails {
     /// The connection, the Wi-Fi when it carries the traffic, the traffic seen.
     pub sections: Vec<DetailSection>,
-    /// The traffic is averaged over this long: reading it faster shows nothing new.
+    /// The volume moves with every sample: reading faster shows nothing new.
     pub refresh_seconds: u32,
 }
 
@@ -83,7 +83,7 @@ impl TechnicalDetails {
         sections.push(compose_traffic_section(traffic, catalog));
         Self {
             sections,
-            refresh_seconds: u32::try_from(TRAFFIC_WINDOW.as_secs()).unwrap_or(u32::MAX),
+            refresh_seconds: u32::try_from(SAMPLE_EVERY.as_secs()).unwrap_or(u32::MAX),
         }
     }
 }
@@ -138,9 +138,20 @@ fn compose_traffic_section(traffic: TrafficReading, catalog: &TextCatalog) -> De
     let format = |rate: Option<TrafficRate>| {
         rate.map_or_else(
             || catalog.render_text("details-traffic-waiting"),
-            |rate| format_pair(rate.received, rate.sent, catalog),
+            |rate| {
+                format_pair(
+                    format_bitrate(rate.received, catalog),
+                    format_bitrate(rate.sent, catalog),
+                    catalog,
+                )
+            },
         )
     };
+    let volume = format_pair(
+        format_bytes(traffic.volume.received, catalog),
+        format_bytes(traffic.volume.sent, catalog),
+        catalog,
+    );
     DetailSection {
         title: catalog.render_text("details-traffic"),
         rows: vec![
@@ -153,6 +164,7 @@ fn compose_traffic_section(traffic: TrafficReading, catalog: &TextCatalog) -> De
                 value: format(traffic.current),
             },
             DetailRow::compose("details-traffic-peak", format(traffic.peak), catalog),
+            DetailRow::compose("details-traffic-volume", volume, catalog),
         ],
     }
 }
@@ -212,24 +224,25 @@ fn format_known_pair(
         return None;
     }
     let unknown = || catalog.render_text("value-unknown");
-    let mut args = FluentArgs::new();
-    args.set("received", received.unwrap_or_else(unknown));
-    args.set("sent", sent.unwrap_or_else(unknown));
-    Some(catalog.render("details-pair", Some(&args)))
+    Some(format_pair(
+        received.unwrap_or_else(unknown),
+        sent.unwrap_or_else(unknown),
+        catalog,
+    ))
 }
 
 /// « ↓ 85 Mbit/s, ↑ 2,5 Mbit/s ». O(1).
-fn format_pair(received: Bitrate, sent: Bitrate, catalog: &TextCatalog) -> String {
+fn format_pair(received: String, sent: String, catalog: &TextCatalog) -> String {
     let mut args = FluentArgs::new();
-    args.set("received", format_bitrate(received, catalog));
-    args.set("sent", format_bitrate(sent, catalog));
+    args.set("received", received);
+    args.set("sent", sent);
     catalog.render("details-pair", Some(&args))
 }
 
 /// « 850,0 Mo » below a gigabyte, « 9,0 Go » above. O(1).
 #[expect(
     clippy::cast_precision_loss,
-    reason = "a box counts a few terabytes at most"
+    reason = "a byte counter reaches a few terabytes at most"
 )]
 fn format_bytes(bytes: u64, catalog: &TextCatalog) -> String {
     if bytes < BYTES_PER_GIGABYTE {
@@ -245,7 +258,10 @@ fn format_bytes(bytes: u64, catalog: &TextCatalog) -> String {
 #[cfg(test)]
 mod tests {
     use application::test_support::{generate_address, generate_network_name};
-    use domain::{BoxLine, ConnectionKind, MacAddress, Medium, Metering, WanAccessType, WifiBand};
+    use domain::{
+        Bitrate, BoxLine, ConnectionKind, MacAddress, Medium, Metering, TrafficVolume,
+        WanAccessType, WifiBand,
+    };
 
     use super::*;
 
@@ -303,6 +319,10 @@ mod tests {
             TrafficReading {
                 current: Some(rate),
                 peak: None,
+                volume: TrafficVolume {
+                    received: 1_500_000_000,
+                    sent: 42_000_000,
+                },
             },
             &catalog,
         );
@@ -320,6 +340,10 @@ mod tests {
         assert_eq!(
             traffic[1].value,
             catalog.render_text("details-traffic-waiting")
+        );
+        assert_eq!(
+            traffic[2].value,
+            insert_no_break_spaces("↓ 1,5~Go, ↑ 42,0~Mo")
         );
         assert_eq!(details.sections[0].rows[2].value, gateway.to_string());
     }

@@ -55,7 +55,9 @@ pub use throughput::{
     ThroughputResult, Transfer,
 };
 pub use timestamp::Timestamp;
-pub use traffic::{ByteCounters, TRAFFIC_WINDOW, TrafficMeter, TrafficRate, TrafficReading};
+pub use traffic::{
+    ByteCounters, TRAFFIC_WINDOW, TrafficMeter, TrafficRate, TrafficReading, TrafficVolume,
+};
 pub use verdict::Verdict;
 pub use wifi::{
     WEAK_SIGNAL_DBM, WifiBand, WifiLink, compute_channel, convert_kilobits_to_megabits,

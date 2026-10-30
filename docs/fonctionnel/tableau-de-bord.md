@@ -54,14 +54,14 @@ Une valeur que l'app ne peut pas connaître s'écrit « valeur inconnue » : adr
 
 Sous le débit, un panneau replié, « Détails techniques ». Replié, il ne lit rien et la box n'est pas interrogée. Une fois ouvert :
 
-| Section        | Ce qu'elle montre                                                                                                                                                        |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Connexion      | Le réseau, la liaison (type de connexion) et l'adresse de la box. Absente sans connexion.                                                                                |
-| Wi-Fi          | Le signal, la bande, le canal et le débit négocié avec la borne. Seulement quand le Wi-Fi porte le trafic.                                                               |
-| Trafic observé | Ce que l'ordinateur reçoit (↓) et envoie (↑), en moyenne sur 5 secondes, et le pic de la dernière heure. « Disponible dans quelques secondes » juste après le lancement. |
-| Ligne          | L'accès (ADSL, fibre ou inconnu) et, si la box le dit, le débit synchronisé de sa ligne et son trafic total.                                                             |
+| Section        | Ce qu'elle montre                                                                                                                                                                                                                        |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Connexion      | Le réseau, la liaison (type de connexion) et l'adresse de la box. Absente sans connexion.                                                                                                                                                |
+| Wi-Fi          | Le signal, la bande, le canal et le débit négocié avec la borne. Seulement quand le Wi-Fi porte le trafic.                                                                                                                               |
+| Trafic observé | Ce que l'ordinateur reçoit (↓) et envoie (↑), en moyenne sur 5 secondes, le pic de la dernière heure et le volume échangé depuis le lancement de l'app. « Disponible dans quelques secondes » juste après le lancement, pour les débits. |
+| Ligne          | L'accès (ADSL, fibre ou inconnu) et, si la box le dit, le débit synchronisé de sa ligne et son trafic total.                                                                                                                             |
 
-Les trois premières sections se relisent toutes les 5 secondes tant que le panneau est ouvert. La ligne est lue à chaque ouverture, à part, car la box peut mettre quelques secondes à répondre (« Interrogation de la box… » en attendant).
+Les trois premières sections se relisent chaque seconde tant que le panneau est ouvert : le volume avance en direct. La ligne est lue à chaque ouverture, à part, car la box peut mettre quelques secondes à répondre (« Interrogation de la box… » en attendant).
 
 Le trafic observé vient des compteurs de l'interface réseau : c'est ce que l'ordinateur échange, toutes applications confondues, pas ce que la ligne peut porter. Il ne compte jamais dans l'état. Pour la capacité de la ligne, lancer un [test de débit](tests-de-debit.md).
 

@@ -9,7 +9,7 @@ use domain::{TrafficMeter, TrafficReading};
 
 use crate::windows::report_failure;
 
-const SAMPLE_EVERY: Duration = Duration::from_secs(1);
+pub const SAMPLE_EVERY: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Default)]
 pub struct TrafficStore(Arc<Mutex<TrafficMeter>>);

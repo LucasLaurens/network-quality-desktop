@@ -46,6 +46,7 @@ Le code est en anglais, l'interface et la documentation en français. Chaque con
 | Pire moment            | `worst_minute`                   | La minute du jour la plus pénible pour un appel                                                       |
 | Bilan d'un réseau      | `NetworkSummary`                 | 30 jours d'un réseau : temps par état, latence p90, perte, actuel, le plus fiable                     |
 | Trafic observé         | `TrafficMeter`, `TrafficRate`    | Ce que l'interface reçoit et envoie, moyenné sur 5 s, avec le pic de la dernière heure ; hors verdict |
+| Volume échangé         | `TrafficVolume`                  | Octets reçus et envoyés depuis le lancement de l'app, sens par sens ; hors verdict                    |
 | Compteurs d'octets     | `ByteCounters`                   | Totaux d'octets reçus et envoyés d'une interface, lus auprès du système                               |
 | Ligne de la box        | `BoxLine`                        | Ce que la box dit de sa ligne en UPnP : type d'accès, débit synchronisé, trafic total                 |
 | Type d'accès           | `WanAccessType`                  | Valeur UPnP `WANAccessType` : seul « DSL » prouve quelque chose                                       |
