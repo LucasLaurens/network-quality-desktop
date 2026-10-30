@@ -52,6 +52,7 @@
 - Passif : aucune donnée envoyée. Le port `TrafficCounterReader` (`NetdevContextReader`) lit les compteurs d'octets reçus et envoyés de l'interface qui porte la route par défaut, la même que celle du contexte (`ByteCounters` : index de l'interface, reçus, envoyés).
 - `TrafficStore` (crate `app`) les lit chaque seconde sur un fil dédié, pour toute la vie de l'app : le pic de la dernière heure est là dès que les détails s'ouvrent.
 - `TrafficMeter` (domaine) cumule les écarts entre deux lectures et ferme une fenêtre toutes les 5 s (`TRAFFIC_WINDOW`) ; il garde les fenêtres fermées depuis moins d'une heure (720 au plus) pour le pic, calculé sens par sens. Après un trou (veille), la dernière fenêtre n'est plus montrée comme « sur 5 secondes » ; le pic garde ce qui reste dans l'heure. Un compteur qui recule (remise à zéro, retour à zéro d'un compteur 32 bits), une autre interface ou plus de 3 s entre deux lectures (veille, fil retardé) ne comptent pas : l'intervalle repart de la lecture suivante.
+- Le même compteur additionne aussi le volume reçu et envoyé depuis le lancement (`TrafficVolume`). Un trou y compte, car ses octets ont bien circulé ; un compteur qui recule ou une autre interface non, car l'écart ne veut rien dire. Il repart de zéro à chaque lancement. Les détails se relisent chaque seconde (`SAMPLE_EVERY`), au rythme des lectures.
 - C'est ce que l'ordinateur échange, pas ce que la ligne peut porter : affiché à côté du verdict, jamais dedans.
 
 ## Ligne et accès

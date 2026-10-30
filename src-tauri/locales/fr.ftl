@@ -249,6 +249,7 @@ details-traffic = Trafic observé
 details-traffic-now = Sur { $seconds } secondes
 details-traffic-peak = Pic de la dernière heure
 details-traffic-waiting = Disponible dans quelques secondes
+details-traffic-volume = Volume depuis le lancement
 details-pair = ↓ { $received }, ↑ { $sent }
 details-line = Ligne
 details-access = Accès

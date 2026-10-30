@@ -28,11 +28,19 @@ pub struct TrafficRate {
     pub sent: Bitrate,
 }
 
-/// What the meter says: `None` until a whole window was seen.
+/// The bytes moved since the meter started, each way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TrafficVolume {
+    pub received: u64,
+    pub sent: u64,
+}
+
+/// What the meter says: the rates are `None` until a whole window was seen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TrafficReading {
     pub current: Option<TrafficRate>,
     pub peak: Option<TrafficRate>,
+    pub volume: TrafficVolume,
 }
 
 /// Rates over `TRAFFIC_WINDOW`, the last hour of them.
@@ -45,11 +53,13 @@ pub struct TrafficMeter {
     elapsed: Duration,
     /// Each window with the time it closed, oldest first.
     windows: VecDeque<(Duration, TrafficRate)>,
+    volume: TrafficVolume,
 }
 
 impl TrafficMeter {
     /// `at` is a monotonic time. A counter that went back (a reset, a 32-bit wrap on macOS), another
-    /// interface or a long gap only starts a new interval. O(1) amortised.
+    /// interface or a long gap only starts a new interval; the volume still counts a gap's bytes.
+    /// O(1) amortised.
     pub fn record(&mut self, at: Duration, counters: ByteCounters) {
         let previous = self.previous.replace((at, counters));
         while self
@@ -69,7 +79,13 @@ impl TrafficMeter {
         ) else {
             return;
         };
-        if counters.interface != previous_counters.interface || gap > MAX_READING_GAP {
+        if counters.interface != previous_counters.interface {
+            return;
+        }
+        // A gap tells nothing about a rate, but its bytes did move.
+        self.volume.received = self.volume.received.saturating_add(received);
+        self.volume.sent = self.volume.sent.saturating_add(sent);
+        if gap > MAX_READING_GAP {
             return;
         }
         self.received = self.received.saturating_add(received);
@@ -105,6 +121,7 @@ impl TrafficMeter {
         TrafficReading {
             current: self.compute_current(),
             peak: self.compute_peak(),
+            volume: self.volume,
         }
     }
 
@@ -294,6 +311,53 @@ mod tests {
         // Assert
         assert_eq!(meter.compute_current(), None);
         assert_eq!(meter.compute_peak(), None);
+    }
+
+    #[test]
+    fn adds_up_the_bytes_moved_each_way() {
+        // Arrange
+        let mut meter = TrafficMeter::default();
+
+        // Act
+        record_seconds(&mut meter, 0, 3, MEGABYTE, MEGABYTE / 10);
+
+        // Assert
+        assert_eq!(
+            meter.compute_reading().volume,
+            TrafficVolume {
+                received: 3 * MEGABYTE,
+                sent: 3 * MEGABYTE / 10,
+            },
+            "counted before a whole window"
+        );
+    }
+
+    #[test]
+    fn counts_a_gap_in_the_volume_but_not_a_reset_or_another_interface() {
+        // Arrange
+        let mut meter = TrafficMeter::default();
+        meter.record(Duration::ZERO, create_counters(5 * MEGABYTE, 0));
+
+        // Act
+        meter.record(Duration::from_mins(10), create_counters(7 * MEGABYTE, 0));
+        meter.record(Duration::from_secs(601), create_counters(0, 0));
+        meter.record(
+            Duration::from_secs(602),
+            ByteCounters {
+                interface: 9,
+                received: 900 * MEGABYTE,
+                sent: 0,
+            },
+        );
+
+        // Assert
+        assert_eq!(
+            meter.compute_reading().volume,
+            TrafficVolume {
+                received: 2 * MEGABYTE,
+                sent: 0,
+            }
+        );
     }
 
     #[test]
