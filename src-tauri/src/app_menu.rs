@@ -1,5 +1,5 @@
-//! The macOS application menu. The menu bar stays hidden (no Dock icon), but its shortcuts still
-//! work while a window of the app is in front: ⌘Q quits the whole app, as the dot's menu does.
+//! The macOS application menu, shown while a window of the app is in front, with its shortcuts:
+//! ⌘Q quits the whole app, as the dot's menu does.
 
 use tauri::menu::{Menu, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Wry};

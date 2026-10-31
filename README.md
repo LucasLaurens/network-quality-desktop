@@ -76,7 +76,7 @@ Sur macOS, `make install` construit l'app et la copie dans Applications. Sur Win
 
 ## Utiliser
 
-1. **Lancez « Qualité de connexion »**. Elle vit dans la barre des menus (la zone de notification sous Windows), sous la forme d'une pastille ; sur macOS, elle n'a pas d'icône dans le Dock. Les premières secondes affichent « Mesure en cours ».
+1. **Lancez « Qualité de connexion »**. Elle vit dans la barre des menus (la zone de notification sous Windows), sous la forme d'une pastille ; son tableau de bord s'ouvre au lancement, et sur macOS son icône reste dans le Dock tant qu'elle tourne. Les premières secondes affichent « Mesure en cours ».
 2. **Lisez la pastille** :
 
    | Pastille | État            | Ce que ça veut dire                                                         |

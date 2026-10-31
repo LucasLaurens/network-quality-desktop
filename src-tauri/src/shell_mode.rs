@@ -35,12 +35,40 @@ impl ShellMode {
         }
     }
 
+    /// A launch by the user shows that it worked; a login stays in the tray, unless there is none.
+    #[must_use]
+    pub fn should_open_dashboard_at_launch(self, origin: LaunchOrigin) -> bool {
+        self == Self::Window || origin == LaunchOrigin::User
+    }
+
     #[must_use]
     pub fn detect(host: &impl TrayHost) -> Self {
         if host.is_tray_available() {
             Self::Tray
         } else {
             Self::Window
+        }
+    }
+}
+
+/// Passed by the login item, so the app can tell a login from a launch by the user.
+pub const LOGIN_LAUNCH_FLAG: &str = "--from-login";
+
+/// Who started the app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchOrigin {
+    User,
+    Login,
+}
+
+impl LaunchOrigin {
+    /// O(n) time, O(1) space, on the n command-line arguments.
+    #[must_use]
+    pub fn detect(args: impl IntoIterator<Item = String>) -> Self {
+        if args.into_iter().any(|arg| arg == LOGIN_LAUNCH_FLAG) {
+            Self::Login
+        } else {
+            Self::User
         }
     }
 }
@@ -71,6 +99,9 @@ impl WindowModeTexts {
 
 #[cfg(test)]
 mod tests {
+    use fake::Fake;
+    use fake::faker::filesystem::en::FilePath;
+
     use super::*;
 
     struct InMemoryTrayHost {
@@ -126,5 +157,51 @@ mod tests {
         let window_hint = window_hint.expect("a hint in window mode");
         assert!(window_hint.message.contains("AppIndicator"));
         assert_eq!(tray_hint, None);
+    }
+
+    #[test]
+    fn knows_a_launch_from_the_login_item_by_the_flag_it_passes() {
+        // Arrange
+        let program: String = FilePath().fake();
+
+        // Act
+        let origin = LaunchOrigin::detect([program, LOGIN_LAUNCH_FLAG.to_owned()]);
+
+        // Assert
+        assert_eq!(origin, LaunchOrigin::Login);
+    }
+
+    #[test]
+    fn takes_any_other_launch_for_the_users() {
+        // Arrange
+        let program: String = FilePath().fake();
+
+        // Act
+        let origin = LaunchOrigin::detect([program]);
+
+        // Assert
+        assert_eq!(origin, LaunchOrigin::User);
+    }
+
+    #[test]
+    fn opens_the_dashboard_at_launch_in_tray_mode_only_when_the_user_launched_it() {
+        // Act
+        let user_launch = ShellMode::Tray.should_open_dashboard_at_launch(LaunchOrigin::User);
+        let login_launch = ShellMode::Tray.should_open_dashboard_at_launch(LaunchOrigin::Login);
+
+        // Assert
+        assert!(user_launch);
+        assert!(!login_launch);
+    }
+
+    #[test]
+    fn always_opens_the_dashboard_at_launch_in_window_mode() {
+        // Act
+        let user_launch = ShellMode::Window.should_open_dashboard_at_launch(LaunchOrigin::User);
+        let login_launch = ShellMode::Window.should_open_dashboard_at_launch(LaunchOrigin::Login);
+
+        // Assert
+        assert!(user_launch);
+        assert!(login_launch);
     }
 }

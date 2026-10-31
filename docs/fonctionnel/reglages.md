@@ -10,10 +10,10 @@ Les réglages sont gardés avec l'historique, sur l'ordinateur. S'ils ne peuvent
 
 ## Général
 
-| Réglage                         | Par défaut | Effet                                                                                                                                                                                                                                                      |
-| ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lancer à l'ouverture de session | activé     | L'app démarre avec la session, l'état visible dans la barre des menus. Le réglage de l'app fait foi : retirer l'app des éléments d'ouverture du système sans le décocher l'y remet au lancement suivant. Une version de développement ne s'inscrit jamais. |
-| Apparence                       | Système    | Système suit le réglage clair ou sombre de l'ordinateur ; Clair et Sombre l'imposent à toutes les fenêtres, tout de suite.                                                                                                                                 |
+| Réglage                         | Par défaut | Effet                                                                                                                                                                                                                                                                    |
+| ------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Lancer à l'ouverture de session | activé     | L'app démarre avec la session, sans fenêtre, l'état visible dans la barre des menus. Le réglage de l'app fait foi : retirer l'app des éléments d'ouverture du système sans le décocher l'y remet au lancement suivant. Une version de développement ne s'inscrit jamais. |
+| Apparence                       | Système    | Système suit le réglage clair ou sombre de l'ordinateur ; Clair et Sombre l'imposent à toutes les fenêtres, tout de suite.                                                                                                                                               |
 
 ## Mesure
 

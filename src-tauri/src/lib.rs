@@ -43,7 +43,7 @@ use infrastructure::{
     NetdevContextReader, SystemClock, SystemColorSchemeReader, SystemPowerEventSource,
     SystemTrayHost, SystemWifiReader, TcpConnectionOpener, keep_measuring_in_background,
 };
-use shell_mode::{ShellMode, WindowModeTexts};
+use shell_mode::{LOGIN_LAUNCH_FLAG, LaunchOrigin, ShellMode, WindowModeTexts};
 use shell_presenter::{
     ConnectionDisplayChanged, ConnectionStore, DisplayStore, ShellPresenter, ShellTrayPainter,
     create_icon_image, describe_verdict,
@@ -117,7 +117,11 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             show_dashboard(app);
         }))
-        .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .arg(LOGIN_LAUNCH_FLAG)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_positioner::init());
@@ -129,9 +133,6 @@ pub fn run() {
     app.invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);
-            // A menu-bar app: no Dock icon, whose click would find the dashboard hidden.
-            #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             if HAS_POPOVER {
                 create_popover(app.handle())?;
             }
@@ -141,12 +142,17 @@ pub fn run() {
         .on_window_event(apply_window_event)
         .build(tauri::generate_context!())
         .expect("the Tauri runtime failed to start")
-        .run(|app, event| {
-            if matches!(event, RunEvent::Exit)
-                && let Some(inbox) = app.try_state::<EngineInbox>()
-            {
-                inbox.flush();
+        .run(|app, event| match event {
+            RunEvent::Exit => {
+                if let Some(inbox) = app.try_state::<EngineInbox>() {
+                    inbox.flush();
+                }
             }
+            // A click on the Dock icon of the running app: without it, the hidden dashboard stays
+            // hidden.
+            #[cfg(target_os = "macos")]
+            RunEvent::Reopen { .. } => show_dashboard(app),
+            _ => {}
         });
 }
 
@@ -182,7 +188,7 @@ fn start_measurement(app: &tauri::AppHandle, catalog: &Arc<TextCatalog>) -> taur
         describe_verdict(Verdict::Measuring, catalog),
     ));
     follow_color_scheme(Arc::clone(&painter));
-    if mode == ShellMode::Window {
+    if mode.should_open_dashboard_at_launch(LaunchOrigin::detect(std::env::args())) {
         show_dashboard(app);
     }
     // The default route is the one to the Internet, whichever server the user measures against.
