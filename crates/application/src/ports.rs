@@ -185,6 +185,24 @@ pub trait HistoryReader {
         from: i64,
         to: i64,
     ) -> Result<Vec<ThroughputRecord>, RepositoryError>;
+
+    /// At most `limit` throughput tests, newest first, after the `offset` newest.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn list_throughput_page(
+        &self,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<ThroughputRecord>, RepositoryError>;
+
+    /// How many throughput tests are kept.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn count_throughput_tests(&self) -> Result<usize, RepositoryError>;
 }
 
 /// Reads whether the system shows light or dark, as its menu bar does. Called once a second:

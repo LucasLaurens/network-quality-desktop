@@ -64,14 +64,14 @@ export const commands = {
 	 */
 	saveSettings: (form: SettingsForm, utcOffsetSeconds: number) => typedError<string, string>(__TAURI_INVOKE("save_settings", { form, utcOffsetSeconds })),
 	/**
-	 *  The dashboard's throughput section: whether tests are allowed, what they may use, and the
-	 *  last tests.
+	 *  The dashboard's throughput section: whether tests are allowed, what they may use, and one
+	 *  page of tests, newest first; past the last page, the last one.
 	 * 
 	 *  # Errors
 	 * 
 	 *  The history could not be read.
 	 */
-	readThroughputPanel: (utcOffsetSeconds: number) => typedError<ThroughputPanel, string>(__TAURI_INVOKE("read_throughput_panel", { utcOffsetSeconds })),
+	readThroughputPanel: (utcOffsetSeconds: number, page: number) => typedError<ThroughputPanel, string>(__TAURI_INVOKE("read_throughput_panel", { utcOffsetSeconds, page })),
 	/**
 	 *  Runs the test the user clicked. Where data counts, the first click only returns the warning:
 	 *  the test runs once the user confirms, the connection read again at that moment. The engine
@@ -382,6 +382,12 @@ export type ThroughputPanel = {
 	note: string,
 	/**  Newest first. */
 	tests: ThroughputRow[],
+	/**  From 0, the newest tests first. */
+	page: number,
+	/**  At least 1, even without tests. */
+	pageCount: number,
+	/**  « Page 2 sur 5 ». */
+	pageLabel: string,
 };
 
 export type ThroughputRow = {

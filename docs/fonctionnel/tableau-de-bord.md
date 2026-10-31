@@ -44,7 +44,7 @@ Chaque réseau des 30 derniers jours, le plus utilisé en premier : son nom (cel
 
 ## Débit
 
-Les tests de débit lancés d'un clic et les derniers résultats : voir [Tests de débit](tests-de-debit.md).
+Les tests de débit lancés d'un clic et leurs résultats, par pages de 20 : voir [Tests de débit](tests-de-debit.md).
 
 ## Valeurs inconnues
 

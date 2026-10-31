@@ -8,7 +8,7 @@ const emit = defineEmits<{ openSettings: [] }>()
 
 const client = useNetworkQualityClient()
 const say = useInterfaceTexts()
-const { panel, loadPanel } = useThroughputPanel(client)
+const { panel, showPage, showFirstPage } = useThroughputPanel(client)
 </script>
 
 <template>
@@ -20,7 +20,7 @@ const { panel, loadPanel } = useThroughputPanel(client)
       </button>
     </p>
     <template v-else>
-      <ThroughputControls @done="loadPanel" />
+      <ThroughputControls @done="showFirstPage" />
       <div v-if="panel.tests.length > 0" class="scroll">
         <table>
           <thead>
@@ -45,6 +45,27 @@ const { panel, loadPanel } = useThroughputPanel(client)
           </tbody>
         </table>
       </div>
+      <nav v-if="panel.pageCount > 1" class="pager" data-pager :aria-label="say('ui-throughput-pages')">
+        <button
+          type="button"
+          class="secondary"
+          data-newer
+          :disabled="panel.page === 0"
+          @click="showPage(panel.page - 1)"
+        >
+          {{ say('ui-throughput-newer') }}
+        </button>
+        <span class="small num" data-page-label aria-live="polite">{{ panel.pageLabel }}</span>
+        <button
+          type="button"
+          class="secondary"
+          data-older
+          :disabled="panel.page >= panel.pageCount - 1"
+          @click="showPage(panel.page + 1)"
+        >
+          {{ say('ui-throughput-older') }}
+        </button>
+      </nav>
       <p class="small" data-note>{{ panel.note }}</p>
     </template>
   </div>
@@ -67,6 +88,31 @@ const { panel, loadPanel } = useThroughputPanel(client)
 
 .scroll {
   overflow-x: auto;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  align-items: center;
+}
+
+/* Same look as the test buttons above (ThroughputControls). */
+.secondary {
+  min-height: 32px;
+  padding: 0 var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.secondary:disabled {
+  color: var(--muted);
+  cursor: default;
 }
 
 th,

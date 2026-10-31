@@ -94,8 +94,8 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
     return unwrap(await commands.saveSettings(form, utcOffsetSeconds))
   }
 
-  async readThroughputPanel(utcOffsetSeconds: number): Promise<ThroughputPanel> {
-    return unwrap(await commands.readThroughputPanel(utcOffsetSeconds))
+  async readThroughputPanel(utcOffsetSeconds: number, page: number): Promise<ThroughputPanel> {
+    return unwrap(await commands.readThroughputPanel(utcOffsetSeconds, page))
   }
 
   async runThroughputTest(

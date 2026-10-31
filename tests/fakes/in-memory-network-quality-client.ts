@@ -164,7 +164,15 @@ export function createThroughputRow(overrides: Partial<ThroughputRow> = {}): Thr
 }
 
 export function createThroughputPanel(overrides: Partial<ThroughputPanel> = {}): ThroughputPanel {
-  return { isAllowed: true, note: faker.lorem.sentence(), tests: [], ...overrides }
+  return {
+    isAllowed: true,
+    note: faker.lorem.sentence(),
+    tests: [],
+    page: 0,
+    pageCount: 1,
+    pageLabel: faker.lorem.words(3),
+    ...overrides,
+  }
 }
 
 export function createOverviewDisplay(overrides: Partial<OverviewDisplay> = {}): OverviewDisplay {
@@ -276,7 +284,10 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private releaseExport = (): void => undefined
   /** Empty while exports and erases succeed. */
   private dataRefusal = ''
-  private throughputPanel = createThroughputPanel()
+  /** One panel per page, the newest tests first. */
+  private throughputPages: ThroughputPanel[] = [createThroughputPanel()]
+  /** Every page asked for, in order. */
+  readonly throughputPageReads: number[] = []
   private readonly nextThroughputRow = createThroughputRow()
   /** Empty while tests run. */
   private throughputRefusal = ''
@@ -465,12 +476,19 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     return this.confirmation
   }
 
-  readThroughputPanel(): Promise<ThroughputPanel> {
-    return Promise.resolve(this.throughputPanel)
+  /** Past the last page, the last one, as the app answers after an erase. */
+  readThroughputPanel(_utcOffsetSeconds: number, page: number): Promise<ThroughputPanel> {
+    this.throughputPageReads.push(page)
+    const last = this.throughputPages.length - 1
+    return Promise.resolve(this.throughputPages[Math.min(page, last)] ?? createThroughputPanel())
   }
 
   setThroughputPanel(panel: ThroughputPanel): void {
-    this.throughputPanel = panel
+    this.throughputPages = [panel]
+  }
+
+  setThroughputPages(pages: ThroughputPanel[]): void {
+    this.throughputPages = pages
   }
 
   runThroughputTest(profile: ProfileChoice, isConfirmed: boolean): Promise<ThroughputOutcome> {
@@ -480,7 +498,8 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     this.throughputRuns.push(profile)
     const answer = (): Promise<ThroughputOutcome> => {
       if (this.throughputRefusal !== '') return Promise.reject(new Error(this.throughputRefusal))
-      this.throughputPanel = { ...this.throughputPanel, tests: [this.nextThroughputRow, ...this.throughputPanel.tests] }
+      const [first = createThroughputPanel(), ...older] = this.throughputPages
+      this.throughputPages = [{ ...first, tests: [this.nextThroughputRow, ...first.tests] }, ...older]
       return Promise.resolve({ kind: 'done', row: this.nextThroughputRow })
     }
     if (!this.isHoldingThroughput) return answer()

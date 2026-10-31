@@ -17,7 +17,14 @@ const MIGRATIONS: &[M<'static>] = &[
     M::up(include_str!(
         "migrations/0002_index_purge_and_unreadable_gateways.sql"
     )),
+    M::up(include_str!(
+        "migrations/0003_index_throughput_tests_by_time.sql"
+    )),
 ];
+/// The columns `read_throughput_record` reads, in its order.
+const THROUGHPUT_COLUMNS: &str = "SELECT n.gateway_mac, n.connection_kind, n.label, t.ts, t.profile, \
+     t.down_kbps, t.up_kbps, t.loaded_latency_ms, t.bytes, t.duration_ms FROM throughput_tests t \
+     JOIN networks n ON n.id = t.network_id";
 const MINUTE: i64 = 0;
 const HOUR: i64 = 1;
 const SECONDS_PER_HOUR: i64 = Granularity::Hour.to_seconds();
@@ -339,6 +346,45 @@ impl HistoryReader for SqliteMeasurementRepository {
         Ok(tests)
     }
 
+    /// O(log t + offset + limit) through the time index, for the t tests kept.
+    fn list_throughput_page(
+        &self,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<ThroughputRecord>, RepositoryError> {
+        let mut statement = self
+            .connection
+            .prepare(&format!(
+                "{THROUGHPUT_COLUMNS} WHERE t.status = ?1 ORDER BY t.ts DESC, t.rowid DESC \
+                 LIMIT ?2 OFFSET ?3"
+            ))
+            .map_err(to_error)?;
+        let rows = statement
+            .query_map(
+                params![
+                    STATUS_DONE,
+                    to_column(limit as u64),
+                    to_column(offset as u64)
+                ],
+                read_throughput_record,
+            )
+            .map_err(to_error)?;
+        rows.collect::<rusqlite::Result<_>>().map_err(to_error)
+    }
+
+    /// O(t): one pass over the tests kept, a few hundred at most.
+    fn count_throughput_tests(&self) -> Result<usize, RepositoryError> {
+        let count: i64 = self
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM throughput_tests WHERE status = ?1",
+                params![STATUS_DONE],
+                |row| row.get(0),
+            )
+            .map_err(to_error)?;
+        Ok(usize::try_from(count).unwrap_or(0))
+    }
+
     /// O(1): each table is asked for one row at most.
     fn is_history_empty(&self) -> Result<bool, RepositoryError> {
         self.connection
@@ -430,31 +476,31 @@ impl HistoryStream for SqliteMeasurementRepository {
     ) -> Result<(), E> {
         let mut statement = self
             .connection
-            .prepare(
-                "SELECT n.gateway_mac, n.connection_kind, n.label, t.ts, t.profile, t.down_kbps, \
-                 t.up_kbps, t.loaded_latency_ms, t.bytes, t.duration_ms FROM throughput_tests t \
-                 JOIN networks n ON n.id = t.network_id WHERE t.ts >= ?1 AND t.ts < ?2 \
-                 AND t.status = ?3 ORDER BY t.ts, t.rowid",
-            )
+            .prepare(&format!(
+                "{THROUGHPUT_COLUMNS} WHERE t.ts >= ?1 AND t.ts < ?2 AND t.status = ?3 \
+                 ORDER BY t.ts, t.rowid"
+            ))
             .map_err(to_error)?;
         let rows = statement
-            .query_map(params![from, to, STATUS_DONE], |row| {
-                Ok(ThroughputRecord {
-                    network: read_network(row, 0)?,
-                    utc: row.get(3)?,
-                    result: ThroughputResult {
-                        profile: from_profile_text(&row.get::<_, String>(4)?),
-                        download: row.get::<_, Option<i64>>(5)?.map(from_kilobits),
-                        upload: row.get::<_, Option<i64>>(6)?.map(from_kilobits),
-                        loaded_latency: row.get::<_, Option<i64>>(7)?.map(from_millis),
-                        bytes: from_column(row.get(8)?),
-                        duration: from_millis(row.get(9)?),
-                    },
-                })
-            })
+            .query_map(params![from, to, STATUS_DONE], read_throughput_record)
             .map_err(to_error)?;
         visit_rows(rows, |row| visit(&row))
     }
+}
+
+fn read_throughput_record(row: &Row<'_>) -> rusqlite::Result<ThroughputRecord> {
+    Ok(ThroughputRecord {
+        network: read_network(row, 0)?,
+        utc: row.get(3)?,
+        result: ThroughputResult {
+            profile: from_profile_text(&row.get::<_, String>(4)?),
+            download: row.get::<_, Option<i64>>(5)?.map(from_kilobits),
+            upload: row.get::<_, Option<i64>>(6)?.map(from_kilobits),
+            loaded_latency: row.get::<_, Option<i64>>(7)?.map(from_millis),
+            bytes: from_column(row.get(8)?),
+            duration: from_millis(row.get(9)?),
+        },
+    })
 }
 
 /// Hands each row to `visit` as the cursor reads it; the first failure stops the reading.

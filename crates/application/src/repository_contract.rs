@@ -64,8 +64,56 @@ pub fn check_contract<R: MeasurementRepository + HistoryReader + HistoryStream>(
     check_lists_the_rows_of_every_network_in_range(&mut create());
     check_keeps_every_kind_of_event(&mut create());
     check_keeps_throughput_tests_newest_first(&mut create());
+    check_reads_one_page_of_throughput_tests(&mut create());
     check_erases_the_whole_history(&mut create());
     check_tells_an_empty_history(&mut create());
+}
+
+/// A page skips the newer tests and stops after its size, so the dashboard reads only what it
+/// shows.
+fn check_reads_one_page_of_throughput_tests(
+    repository: &mut (impl MeasurementRepository + HistoryReader + HistoryStream),
+) {
+    // Arrange
+    let name = generate_network_name();
+    let network = create_network(24, Some(name.as_str()));
+    let records: Vec<ThroughputRecord> = (0..5)
+        .map(|minute| ThroughputRecord {
+            utc: SOME_HOUR + minute * MINUTE,
+            network: network.clone(),
+            result: ThroughputResult {
+                profile: TestProfile::Quick,
+                download: Some(Bitrate::from_bits_per_second(85_000_000)),
+                upload: None,
+                loaded_latency: None,
+                bytes: 4_200_000,
+                duration: Duration::from_millis(3_100),
+            },
+        })
+        .collect();
+    for record in &records {
+        repository
+            .record_throughput_test(record)
+            .expect("a kept test");
+    }
+
+    // Act
+    let first = repository.list_throughput_page(0, 2).expect("a first page");
+    let middle = repository
+        .list_throughput_page(2, 2)
+        .expect("a middle page");
+    let last = repository.list_throughput_page(4, 2).expect("a last page");
+    let beyond = repository
+        .list_throughput_page(5, 2)
+        .expect("a page past the end");
+    let count = repository.count_throughput_tests().expect("a count");
+
+    // Assert
+    assert_eq!(first, vec![records[4].clone(), records[3].clone()]);
+    assert_eq!(middle, vec![records[2].clone(), records[1].clone()]);
+    assert_eq!(last, vec![records[0].clone()]);
+    assert_eq!(beyond, Vec::new());
+    assert_eq!(count, 5);
 }
 
 /// Rates in whole kbit/s and round trips in whole milliseconds: the precision the storage keeps.

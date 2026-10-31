@@ -12,7 +12,8 @@ import { NBSP, connectionScenarios } from './connection-scenarios'
 
 // `?scenario=window` shows the window mode note, as on a desktop without a tray;
 // `?scenario=first` shows a first launch, before any minute is kept;
-// `?scenario=undetermined` shows the help to allow the ping.
+// `?scenario=undetermined` shows the help to allow the ping;
+// `?scenario=pages` shows the second of three pages of throughput tests.
 const scenario = new URLSearchParams(window.location.search).get('scenario')
 const windowModeTexts =
   scenario === 'window'
@@ -173,6 +174,9 @@ client.setThroughputPanel({
       data: `2,7${NBSP}Mo`,
     },
   ],
+  page: scenario === 'pages' ? 1 : 0,
+  pageCount: scenario === 'pages' ? 3 : 1,
+  pageLabel: scenario === 'pages' ? 'Page 2 sur 3' : 'Page 1 sur 1',
 })
 if (scenario === 'first') {
   client.setDashboardSummary(firstRun)

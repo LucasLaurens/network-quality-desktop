@@ -459,6 +459,24 @@ impl HistoryReader for InMemoryMeasurementRepository {
         Ok(tests)
     }
 
+    /// O(t log t) for the t tests kept: a fake keeps few.
+    fn list_throughput_page(
+        &self,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<ThroughputRecord>, RepositoryError> {
+        Ok(self
+            .list_throughput_tests(i64::MIN, i64::MAX)?
+            .into_iter()
+            .skip(offset)
+            .take(limit)
+            .collect())
+    }
+
+    fn count_throughput_tests(&self) -> Result<usize, RepositoryError> {
+        Ok(self.throughput_tests.len())
+    }
+
     fn is_history_empty(&self) -> Result<bool, RepositoryError> {
         Ok(self.rows.is_empty() && self.events.is_empty() && self.throughput_tests.is_empty())
     }

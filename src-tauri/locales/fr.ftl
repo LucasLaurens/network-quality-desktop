@@ -180,6 +180,7 @@ throughput-warning-hotspot = Partage de connexion : ce test consomme jusqu'à {
 throughput-note = Les tests ne partent que sur un clic, vers Cloudflare. Rapide : jusqu'à { $quick }. Complet : jusqu'à { $full }. La latence en charge s'affiche sans compter dans l'état.
 throughput-disabled = Les tests de débit sont désactivés dans les réglages.
 throughput-busy = Un test est déjà en cours.
+throughput-page = Page { $page } sur { $count }
 throughput-unreachable = Test indisponible : le serveur de test ne répond pas. Réessayer dans quelques minutes.
 
 ## Window mode, when the desktop shows no tray icon
@@ -330,6 +331,9 @@ ui-throughput-download = Réception
 ui-throughput-upload = Envoi
 ui-throughput-loaded-latency = Latence en charge
 ui-throughput-data = Données
+ui-throughput-pages = Pages des tests de débit
+ui-throughput-newer = Plus récents
+ui-throughput-older = Plus anciens
 ui-quick-test = Test rapide
 ui-full-test = Test complet
 ui-test-running = Test en cours…

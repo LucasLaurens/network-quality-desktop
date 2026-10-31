@@ -52,6 +52,39 @@ pub struct ThroughputPanel {
     pub note: String,
     /// Newest first.
     pub tests: Vec<ThroughputRow>,
+    /// From 0, the newest tests first.
+    pub page: u32,
+    /// At least 1, even without tests.
+    pub page_count: u32,
+    /// « Page 2 sur 5 ».
+    pub page_label: String,
+}
+
+/// Which tests the panel shows: pages of `SIZE`, the newest first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThroughputPage {
+    pub index: u32,
+    pub count: u32,
+}
+
+impl ThroughputPage {
+    pub const SIZE: usize = 20;
+
+    /// The requested page, or the last one when the tests no longer reach it (an erase). O(1).
+    #[must_use]
+    pub fn locate(requested: u32, total: usize) -> Self {
+        let count = u32::try_from(total.div_ceil(Self::SIZE).max(1)).unwrap_or(u32::MAX);
+        Self {
+            index: requested.min(count - 1),
+            count,
+        }
+    }
+
+    /// How many newer tests the page skips. O(1).
+    #[must_use]
+    pub fn compute_offset(self) -> usize {
+        usize::try_from(self.index).unwrap_or(usize::MAX) * Self::SIZE
+    }
 }
 
 /// What a click on a test gives: its row, or the warning to accept first where data counts.
@@ -68,9 +101,13 @@ impl ThroughputPanel {
     pub fn compose(
         is_allowed: bool,
         records: &[ThroughputRecord],
+        page: ThroughputPage,
         offset: i64,
         catalog: &TextCatalog,
     ) -> Self {
+        let mut page_args = FluentArgs::new();
+        page_args.set("page", page.index + 1);
+        page_args.set("count", page.count);
         let mut args = FluentArgs::new();
         args.set(
             "quick",
@@ -87,6 +124,9 @@ impl ThroughputPanel {
                 .iter()
                 .map(|record| ThroughputRow::compose(record.utc, &record.result, offset, catalog))
                 .collect(),
+            page: page.index,
+            page_count: page.count,
+            page_label: catalog.render("throughput-page", Some(&page_args)),
         }
     }
 }
@@ -286,12 +326,58 @@ mod tests {
         let catalog = TextCatalog::load();
 
         // Act
-        let panel = ThroughputPanel::compose(true, &[], PARIS, &catalog);
+        let panel =
+            ThroughputPanel::compose(true, &[], ThroughputPage::locate(0, 0), PARIS, &catalog);
 
         // Assert
         assert!(panel.note.contains(&format_megabytes(
             TestProfile::Quick.compute_max_bytes(),
             &catalog
         )));
+    }
+
+    #[test]
+    fn locates_the_requested_page_among_the_tests() {
+        // Act
+        let page = ThroughputPage::locate(1, 45);
+
+        // Assert
+        assert_eq!(page, ThroughputPage { index: 1, count: 3 });
+        assert_eq!(page.compute_offset(), 20);
+    }
+
+    #[test]
+    fn falls_back_to_the_last_page_past_the_end() {
+        // Act
+        let page = ThroughputPage::locate(7, 45);
+
+        // Assert
+        assert_eq!(page, ThroughputPage { index: 2, count: 3 });
+        assert_eq!(page.compute_offset(), 40);
+    }
+
+    #[test]
+    fn keeps_one_empty_page_without_tests() {
+        // Act
+        let page = ThroughputPage::locate(3, 0);
+
+        // Assert
+        assert_eq!(page, ThroughputPage { index: 0, count: 1 });
+        assert_eq!(page.compute_offset(), 0);
+    }
+
+    #[test]
+    fn says_which_page_the_panel_shows() {
+        // Arrange
+        let catalog = TextCatalog::load();
+
+        // Act
+        let panel =
+            ThroughputPanel::compose(true, &[], ThroughputPage::locate(1, 45), PARIS, &catalog);
+
+        // Assert
+        assert_eq!(panel.page, 1);
+        assert_eq!(panel.page_count, 3);
+        assert_eq!(panel.page_label, "Page 2 sur 3");
     }
 }

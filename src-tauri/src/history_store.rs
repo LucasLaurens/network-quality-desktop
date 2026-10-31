@@ -88,6 +88,18 @@ impl HistoryReader for EmptyHistory {
     ) -> Result<Vec<ThroughputRecord>, RepositoryError> {
         Ok(Vec::new())
     }
+
+    fn list_throughput_page(
+        &self,
+        _offset: usize,
+        _limit: usize,
+    ) -> Result<Vec<ThroughputRecord>, RepositoryError> {
+        Ok(Vec::new())
+    }
+
+    fn count_throughput_tests(&self) -> Result<usize, RepositoryError> {
+        Ok(0)
+    }
 }
 
 /// Everything kept in the history file, each with the connection it needs.

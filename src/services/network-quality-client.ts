@@ -50,7 +50,8 @@ export interface NetworkQualityClient {
   readSettings(): Promise<SettingsForm>
   /** Resolves to the confirmation to show; rejects with the sentence explaining the refusal. */
   saveSettings(form: SettingsForm, utcOffsetSeconds: number): Promise<string>
-  readThroughputPanel(utcOffsetSeconds: number): Promise<ThroughputPanel>
+  /** One page of tests, from 0 for the newest; past the last page, the last one. */
+  readThroughputPanel(utcOffsetSeconds: number, page: number): Promise<ThroughputPanel>
   /**
    * Runs the test, or asks first where data counts (`isConfirmed` false); rejects with the
    * sentence explaining why it did not run.

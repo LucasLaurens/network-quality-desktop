@@ -40,7 +40,8 @@ use crate::shell_presenter::DisplayStore;
 use crate::technical_details::{LineDetails, TechnicalDetails};
 use crate::text_catalog::TextCatalog;
 use crate::throughput_display::{
-    ProfileChoice, ThroughputOutcome, ThroughputPanel, ThroughputRow, compose_warning,
+    ProfileChoice, ThroughputOutcome, ThroughputPage, ThroughputPanel, ThroughputRow,
+    compose_warning,
 };
 use crate::throughput_lab::{LabRefusal, ThroughputLab};
 use crate::traffic_store::TrafficStore;
@@ -278,11 +279,8 @@ pub async fn save_settings(
     ))
 }
 
-/// The tests shown at most, newest first.
-const THROUGHPUT_ROWS: usize = 20;
-
-/// The dashboard's throughput section: whether tests are allowed, what they may use, and the
-/// last tests.
+/// The dashboard's throughput section: whether tests are allowed, what they may use, and one
+/// page of tests, newest first; past the last page, the last one.
 ///
 /// # Errors
 ///
@@ -291,14 +289,19 @@ const THROUGHPUT_ROWS: usize = 20;
 #[specta::specta]
 pub async fn read_throughput_panel(
     utc_offset_seconds: i32,
+    page: u32,
     settings: State<'_, SettingsStore>,
     history: State<'_, DashboardHistory>,
     catalog: State<'_, Arc<TextCatalog>>,
 ) -> Result<ThroughputPanel, String> {
-    let now = SystemClock::start().read_utc_seconds();
-    let mut records = history
-        .read(|reader| reader.list_throughput_tests(0, now + 1))
-        .map_err(|error| {
+    let (page, records) = history
+        .read(|reader| {
+            let page = ThroughputPage::locate(page, reader.count_throughput_tests()?);
+            let records =
+                reader.list_throughput_page(page.compute_offset(), ThroughputPage::SIZE)?;
+            Ok((page, records))
+        })
+        .map_err(|error: application::RepositoryError| {
             report_and_render(
                 &catalog,
                 "history-not-read",
@@ -306,10 +309,10 @@ pub async fn read_throughput_panel(
                 error.0,
             )
         })?;
-    records.truncate(THROUGHPUT_ROWS);
     Ok(ThroughputPanel::compose(
         settings.read().allows_throughput_tests,
         &records,
+        page,
         i64::from(utc_offset_seconds),
         &catalog,
     ))
