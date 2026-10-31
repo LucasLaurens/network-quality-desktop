@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/LucasLaurens/network-quality-desktop/compare/v0.9.3...v0.10.0) (2026-10-31)
+
+
+### Features
+
+* **details:** show the volume moved since launch ([#94](https://github.com/LucasLaurens/network-quality-desktop/issues/94)) ([58b4670](https://github.com/LucasLaurens/network-quality-desktop/commit/58b46708d1c35fca5ee6ecb85f2651343fde3e12))
+* **throughput:** page the dashboard's test list ([b373e0d](https://github.com/LucasLaurens/network-quality-desktop/commit/b373e0dd6e6551d5b5f713ca48d37b1a8ab2daf9)), closes [#95](https://github.com/LucasLaurens/network-quality-desktop/issues/95)
+
+
+### Bug Fixes
+
+* **macos:** keep the Dock dot and open the dashboard at launch ([02f46af](https://github.com/LucasLaurens/network-quality-desktop/commit/02f46af046afb7d142b348763234f4d8e1baa610)), closes [#97](https://github.com/LucasLaurens/network-quality-desktop/issues/97) [#98](https://github.com/LucasLaurens/network-quality-desktop/issues/98)
+* **release:** upload the installers from their bundle folders ([#91](https://github.com/LucasLaurens/network-quality-desktop/issues/91)) ([ee3468e](https://github.com/LucasLaurens/network-quality-desktop/commit/ee3468e6d3555dec7eb201e5d2fe8282881bfe50))
+
 ## [0.9.3](https://github.com/LucasLaurens/network-quality-desktop/compare/v0.9.2...v0.9.3) (2026-10-23)
 
 
