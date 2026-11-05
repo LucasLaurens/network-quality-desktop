@@ -7,7 +7,7 @@ import { mkdirSync, rmSync } from 'node:fs'
 import process from 'node:process'
 
 const FPS = 30
-const DURATION = 44.5
+const DURATION = 49.1
 const OUTPUT = 'marketing/video'
 const FRAMES = `${OUTPUT}/.frames`
 const square = process.argv.includes('square')

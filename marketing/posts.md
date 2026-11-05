@@ -1,6 +1,6 @@
 # Textes de lancement
 
-Vidéos à joindre (44 s, sans son) :
+Vidéos à joindre (49 s, sans son) :
 
 - `marketing/video/qualite-de-connexion-carre.mp4` (1080×1080) : à privilégier sur Instagram, Facebook, LinkedIn et X, lus surtout sur mobile.
 - `marketing/video/qualite-de-connexion.mp4` (1920×1080) : pour un écran large, YouTube ou une page web.
@@ -21,6 +21,10 @@ Ce qu'elle fait, concrètement :
 
 • Vos lieux, nommés. Donnez un nom à chaque réseau : « Maison », « Bureau », « le café d'en bas ». Le tableau dit alors où la connexion tient vraiment, et où mieux vaut ne pas caler un appel important.
 
+• Un test de débit d'un clic, avec ce que les autres oublient : la latence en charge. C'est elle qui fait hacher une visio malgré un bon débit, quand la ligne est pleine. Et votre ligne identifiée : fibre ou ADSL, lue auprès de la box quand elle répond (Livebox comprise), estimée sinon.
+
+• Lisible par tous. Les détails techniques se lisent au lecteur d'écran : « reçu 128 Mbit/s, envoyé 54 Mbit/s », pas des flèches.
+
 • Tout reste sur votre machine. Historique et lieux en local, export CSV, effacement en un clic. Par défaut, seuls de petits pings quittent l'ordinateur ; les tests de débit ne partent que sur un clic.
 
 Elle tourne sur macOS, Windows et Linux, et elle est gratuite.
@@ -39,9 +43,9 @@ Alors dites-le-moi : est-ce que vous l'utiliseriez ? Un commentaire, un like ou 
 
 La visio hache : Wi-Fi, box ou opérateur ?
 
-J'ai créé pour moi une app qui répond en un clic : une pastille dans la barre des menus, la cause en une phrase, et les lieux où la connexion tient.
+J'ai créé pour moi une app qui répond en un clic : une pastille dans la barre des menus, la cause en une phrase, la latence en charge, et où la connexion tient.
 
-Prête, pas encore sur les stores. Ça vous tente ? Dites-le : ça pourrait arriver.
+Prête, pas encore sur les stores. Ça vous tente ? Dites-le.
 
 ### Fil (si vous préférez détailler)
 
@@ -53,9 +57,11 @@ Prête, pas encore sur les stores. Ça vous tente ? Dites-le : ça pourrait arri
 
 4/ Nommez vos lieux : maison, bureau, café. Vous savez où la connexion tient, et où éviter de caler un appel important.
 
-5/ Tout reste en local, lieux compris. Gratuite. macOS, Windows, Linux.
+5/ Un test de débit d'un clic mesure aussi la latence en charge : ce qui fait hacher une visio malgré un bon débit. Et l'app dit si votre ligne est fibre ou ADSL.
 
-6/ Elle est prête, mais pas sur les stores : elle est née pour mon usage. Si elle vous donne envie, dites-le en réponse. Assez d'intérêt, et je la publie.
+6/ Tout reste en local, lieux compris. Gratuite. macOS, Windows, Linux.
+
+7/ Elle est prête, mais pas sur les stores : elle est née pour mon usage. Si elle vous donne envie, dites-le en réponse. Assez d'intérêt, et je la publie.
 
 ## Instagram
 
@@ -68,17 +74,19 @@ J'en avais assez de deviner, alors j'ai créé pour moi une petite app : Qualit�
 🟢 Une pastille dans la barre des menus, qui mesure la connexion chaque seconde.
 💬 Un clic, et la cause en une phrase.
 📍 Vos lieux nommés (maison, bureau, café) pour savoir où la connexion tient vraiment.
+⚡ Un test de débit d'un clic, avec la latence en charge : ce qui fait hacher une visio malgré un bon débit.
 🔒 Tout reste sur votre ordinateur.
 
 Gratuite, sur macOS, Windows et Linux. Elle est prête, mais pas encore sur les stores. Si elle vous tente, dites-le en commentaire : assez d'envies, et je la publie.
 
 #teletravail #visio #wifi #productivite #devperso #macos #windows #linux #remotework
 
-Texte de la story (sur la vidéo, en trois écrans) :
+Texte de la story (sur la vidéo, en quatre écrans) :
 
 1. La visio hache. Wi-Fi, box ou opérateur ?
 2. Mon app répond en un clic. Et dit où la connexion tient : maison, bureau, café.
-3. Vous l'utiliseriez ? Répondez au sondage. (Sondage : « Oui, je veux ! » / « Pas pour moi »)
+3. Un bon débit ne suffit pas : elle mesure la latence en charge.
+4. Vous l'utiliseriez ? Répondez au sondage. (Sondage : « Oui, je veux ! » / « Pas pour moi »)
 
 ## Facebook
 
@@ -90,6 +98,8 @@ Une pastille dans la barre des menus surveille la connexion en continu. Quand ç
 
 Et comme je travaille un peu partout, j'ai ajouté une chose qui me sert tous les jours : on peut nommer ses lieux. Maison, bureau, le café d'en bas, le train. Le tableau de bord montre alors où la connexion tient vraiment, sur les 30 derniers jours. Pratique pour savoir où caler un appel important.
 
-Tout reste sur l'ordinateur, rien n'est envoyé ailleurs. Elle est gratuite et tourne sur Mac, Windows et Linux.
+Elle fait aussi des tests de débit d'un clic, en mesurant ce qui compte vraiment pour une visio : la latence en charge, c'est-à-dire ce que devient la connexion quand la ligne est pleine. Et elle dit si votre ligne est en fibre ou en ADSL, en le demandant à la box quand elle répond.
+
+Vos données restent sur l'ordinateur : l'historique, les lieux, les tests. Elle est gratuite et tourne sur Mac, Windows et Linux.
 
 Elle est prête, mais pas sur les stores : la publier demande du travail en plus. Si elle vous intéresse, dites-le-moi en commentaire ou partagez à quelqu'un dont la visio hache aussi. Avec assez d'intérêt, je me lance.

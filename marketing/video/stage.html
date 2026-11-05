@@ -168,7 +168,7 @@
       }
       .viewport iframe {
         width: 960px;
-        height: 1756px;
+        height: 2600px;
         transform: scale(1.15);
       }
       .loupe {
@@ -319,7 +319,7 @@
       <div class="sub" data-in="1.5" data-out="4.4" style="font-size: 44px">Le Wi-Fi ? La box ? L'opérateur ?</div>
     </div>
 
-    <div class="layer menubar" data-in="4.6" data-out="32.2" data-rise="-44">
+    <div class="layer menubar" data-in="4.6" data-out="36.8" data-rise="-44">
       <span class="apple">Finder</span>
       <span class="menus"><span>Fichier</span><span>Édition</span><span>Présentation</span><span>Aller</span></span>
       <span class="glyph"></span>
@@ -364,6 +364,10 @@
       <div class="headline">Où la connexion tient-elle le mieux ?</div>
       <div class="sub">Nommez vos lieux, maison, bureau, café : ils sont comparés pour la visio.</div>
     </div>
+    <div class="layer caption" data-in="32.5" data-out="36.6">
+      <div class="headline">La visio <span style="white-space: nowrap">tiendra-t-elle ?</span></div>
+      <div class="sub">Un test de débit d'un clic, la latence en charge, et votre ligne : fibre ou ADSL.</div>
+    </div>
 
     <div class="layer loupe" data-in="5.2" data-out="9.9" data-rise="30">
       <span class="glyph"></span>
@@ -406,12 +410,12 @@
       />
     </svg>
 
-    <div class="layer frame window" data-in="22.5" data-out="32.2" data-rise="30">
+    <div class="layer frame window" data-in="22.5" data-out="36.8" data-rise="30">
       <div class="titlebar"><i></i><i></i><i></i></div>
       <div class="viewport"><iframe id="dashboard" src="/tests/preview/dashboard.html"></iframe></div>
     </div>
 
-    <div class="layer center" data-in="32.5" data-out="36.7">
+    <div class="layer center" data-in="37.1" data-out="41.3">
       <div class="headline" style="font-size: 70px">Pensée pour se faire oublier.</div>
       <div class="facts">
         <div class="fact">
@@ -424,15 +428,15 @@
       </div>
     </div>
 
-    <div class="layer center" data-in="37" data-out="44.5">
+    <div class="layer center" data-in="41.6" data-out="49.1">
       <div class="brand">
         <svg width="72" height="72" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="var(--solid)" /></svg>
         <div class="big">Qualité de connexion</div>
       </div>
-      <div class="sub" data-in="38.2" data-out="44.5" style="font-size: 40px">
+      <div class="sub" data-in="42.8" data-out="49.1" style="font-size: 40px">
         Créée pour mon usage. Prête aujourd'hui.
       </div>
-      <div class="headline" data-in="39.8" data-out="44.5" style="font-size: 54px; margin-top: 24px">
+      <div class="headline" data-in="44.4" data-out="49.1" style="font-size: 54px; margin-top: 24px">
         Sur les stores ? Ça dépend de vous.
       </div>
     </div>
@@ -490,9 +494,23 @@
         cursor.style.top = `${CUT.cursorFrom[1] + (14 - CUT.cursorFrom[1]) * travel}px`
         cursor.style.transform = `scale(${press})`
 
-        const scroll = 680 * ramp(t, 24.2, 26.8) + CUT.scrollEnd * ramp(t, 27.8, 29.6)
-        document.getElementById('dashboard').style.transform = `translateY(${-scroll * CUT.zoom}px) scale(${CUT.zoom})`
+        const dashboard = document.getElementById('dashboard')
+        const throughput = dashboard.contentDocument?.querySelector('[aria-labelledby="throughput-title"]')
+        const placesScroll = 680 + CUT.scrollEnd
+        const throughputScroll = throughput ? throughput.getBoundingClientRect().top - 24 : placesScroll
+        const scroll =
+          680 * ramp(t, 24.2, 26.8) +
+          CUT.scrollEnd * ramp(t, 27.8, 29.6) +
+          (throughputScroll - placesScroll) * ramp(t, 32.3, 34.1)
+        dashboard.style.transform = `translateY(${-scroll * CUT.zoom}px) scale(${CUT.zoom})`
       }
+      // The technical details open once the dashboard has mounted: the last scene shows the line.
+      const opening = setInterval(() => {
+        const details = document.getElementById('dashboard').contentDocument?.querySelector('[data-details]')
+        if (!details) return
+        details.open = true
+        clearInterval(opening)
+      }, 100)
       window.seek(0)
     </script>
   </body>
