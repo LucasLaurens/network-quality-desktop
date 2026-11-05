@@ -22,7 +22,7 @@ Chaque donnée stockée sert un affichage ; ce qui se déduit n'est pas stocké.
 | `throughput_tests`                                                 | `ts`, `network_id`, `profile`, `down_kbps`, `up_kbps`, `loaded_latency_ms`, `bytes`, `duration_ms`, `status`                                                                                                 | illimitée (remplie avec les tests de débit) |
 | `settings`                                                         | une seule ligne typée (`CHECK (id = 1)`) : `autostart`, `theme`, `ping_target`, `notify`, `tests_allowed`                                                                                                    | — (lue avec la page Réglages)               |
 
-Les migrations sont numérotées, jamais modifiées une fois publiées ; un test les valide sur une base vide. Une nouvelle colonne ou table = un nouveau fichier. `0002_index_purge_and_unreadable_gateways.sql` ajoute l'index `(granularity, start)` pour la purge, et un index unique partiel : une seule ligne `networks` par type quand la MAC est illisible (UNIQUE traite les NULL comme distincts). `0003_index_throughput_tests_by_time.sql` ajoute l'index `throughput_tests (ts)`, pour lire une page de tests sans trier toute la table.
+Les migrations sont numérotées, jamais modifiées une fois publiées ; un test les valide sur une base vide. Une nouvelle colonne ou table = un nouveau fichier. `0002_index_purge_and_unreadable_gateways.sql` ajoute l'index `(granularity, start)` pour la purge, et un index unique partiel : une seule ligne `networks` par type quand la MAC est illisible (UNIQUE traite les NULL comme distincts). `0003_index_throughput_tests_by_time.sql` ajoute l'index `throughput_tests (ts)`, pour lire une page de tests sans trier toute la table. `0004_name_the_place_of_networks.sql` ajoute `networks.place` (texte, vide tant que l'utilisateur n'a pas nommé le lieu).
 
 Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; le libellé (nom du Wi-Fi) est mis à jour quand il devient lisible, jamais effacé.
 
@@ -74,6 +74,12 @@ Le réseau d'une ligne est identifié par la MAC de la passerelle et le type ; l
 
 - La ligne typée `settings` (id 1, créée par la première migration) garde `autostart`, `theme` (`system`, `light`, `dark`), `notify` et `ping_target` (adresse IP du serveur personnalisé, `NULL` pour les serveurs publics). Une adresse illisible relue retombe sur les serveurs publics.
 - Le port `SettingsRepository` (`read_settings`, `save_settings`, une transaction) est servi par une connexion d'écriture de plus, ouverte après l'écrivain (`SqliteMeasurementRepository::open_alongside`) : une écriture rare, qui attend l'écrivain au plus `BUSY_TIMEOUT`. Suite de contrat : `check_settings_contract`, sur le faux en mémoire et sur SQLite.
+
+## Lieux
+
+- `networks.place` garde le nom que l'utilisateur donne au lieu d'un réseau (`PlaceName` du domaine : texte rogné, 60 caractères au plus, vide = pas de lieu). L'écrivain ne le touche jamais : `find_or_create_network` ne réécrit que `label`, si bien qu'un Wi-Fi renommé garde son lieu.
+- Écriture : port `PlaceRepository::save_place` (un `UPDATE` par la MAC et le type, O(log n) par l'index unique), servi par sa propre connexion `open_alongside` (`PlaceStore` dans `app`, ou un objet nul qui refuse quand l'historique n'est pas sur disque). Lecture : `HistoryReader::list_places`, les seuls réseaux nommés ; `list_network_summaries` les rattache aux réseaux des 30 jours par leur identité, O(p).
+- Le lieu n'entre pas dans l'export CSV ; l'effacement le supprime avec `networks`. Suite de contrat : `check_names_renames_and_forgets_a_place`, `check_keeps_a_place_when_the_network_name_changes`, et l'effacement.
 
 ## Contrat
 

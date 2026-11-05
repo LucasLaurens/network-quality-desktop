@@ -14,7 +14,7 @@ pub struct LineReading {
 }
 
 /// `tests` newest first, as the history lists them; `network` the current one, `None` before
-/// any was seen: no test counts then. `round_trip` is the latency measured at rest.
+/// any was seen: no test counts then. `round_trip` is the latency at rest beyond the box.
 /// O(t) for t tests, plus the box's answer time.
 pub async fn detect_access(
     detector: &impl AccessTechnologyDetector,

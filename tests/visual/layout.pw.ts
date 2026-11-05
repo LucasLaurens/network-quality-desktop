@@ -36,6 +36,8 @@ function findOverflows(page: Page): Promise<string[]> {
     const found: string[] = []
     if (document.documentElement.scrollWidth > window.innerWidth) found.push('the page scrolls sideways')
     for (const element of document.querySelectorAll('body *')) {
+      // Text for screen readers only is clipped on purpose.
+      if (element.closest('.visually-hidden')) continue
       const box = element.getBoundingClientRect()
       if (box.width === 0) continue
       if (box.right > window.innerWidth + tolerance && !isClippedWithinTheWindow(element)) {

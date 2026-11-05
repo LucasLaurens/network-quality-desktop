@@ -147,7 +147,10 @@ export function createWindowModeTexts(): WindowModeTexts {
 export function createDetailSection(): DetailSection {
   return {
     title: faker.word.words(2),
-    rows: Array.from({ length: 2 }, () => ({ label: faker.word.noun(), value: faker.word.words(3) })),
+    rows: Array.from({ length: 2 }, () => {
+      const value = faker.word.words(3)
+      return { label: faker.word.noun(), value, spokenValue: value }
+    }),
   }
 }
 
@@ -189,6 +192,8 @@ export function createOverviewDisplay(overrides: Partial<OverviewDisplay> = {}):
 export function createNetworkRowDisplay(overrides: Partial<NetworkRowDisplay> = {}): NetworkRowDisplay {
   const solid = faker.number.int({ min: 40, max: 90 })
   return {
+    networkId: `wifi:${faker.string.hexadecimal({ length: 12, prefix: '', casing: 'lower' })}`,
+    place: '',
     label: faker.company.name(),
     connection: faker.lorem.words(2),
     shares: { solid, unstable: 100 - solid, degraded: 0, offline: 0 },
@@ -271,7 +276,7 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
     sections: [createDetailSection(), createDetailSection()],
     refreshSeconds: faker.number.int({ min: 2, max: 10 }),
   }
-  readonly lineDetails: LineDetails = { section: createDetailSection(), note: faker.lorem.sentence() }
+  lineDetails: LineDetails = { section: createDetailSection(), note: faker.lorem.sentence() }
   /** Empty while the line is read. */
   private lineRefusal = ''
   exportRevealings = 0
@@ -298,6 +303,7 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private settings: SettingsForm = createSettingsForm()
   /** Empty while saves are accepted. */
   private settingsRefusal = ''
+  private placeRefusal = ''
   private readonly confirmation = faker.lorem.sentence()
   private isHoldingSaves = false
   private heldSaves: (() => void)[] = []
@@ -433,6 +439,24 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   setEvolution(evolution: EvolutionDisplay): void {
     this.evolution = evolution
+  }
+
+  /** Names a network's place in the summary it serves, as the core would on the next read. */
+  savePlace(networkId: string, place: string): Promise<void> {
+    if (this.placeRefusal !== '') return Promise.reject(new Error(this.placeRefusal))
+    const trimmed = place.trim()
+    this.dashboardSummary = {
+      ...this.dashboardSummary,
+      networks: this.dashboardSummary.networks.map((network) =>
+        network.networkId === networkId ? { ...network, place: trimmed } : network,
+      ),
+    }
+    return Promise.resolve()
+  }
+
+  /** Every place named from now on is refused with `refusal`. */
+  refusePlaces(refusal: string): void {
+    this.placeRefusal = refusal
   }
 
   readSettings(): Promise<SettingsForm> {

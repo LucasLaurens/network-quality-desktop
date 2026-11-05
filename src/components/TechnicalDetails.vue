@@ -3,6 +3,7 @@ import { useInterfaceTexts } from '../composables/interface-texts'
 import { computed, onUnmounted, ref } from 'vue'
 import type { LineDetails, TechnicalDetails } from '../bindings'
 import { readErrorMessage, useNetworkQualityClient } from '../services/network-quality-client'
+import DetailRows from './DetailRows.vue'
 
 const client = useNetworkQualityClient()
 const say = useInterfaceTexts()
@@ -12,7 +13,7 @@ const line = ref<LineDetails | null>(null)
 const lineRefusal = ref('')
 let refresh: ReturnType<typeof setInterval> | undefined
 
-const sections = computed(() => [...(details.value?.sections ?? []), ...(line.value ? [line.value.section] : [])])
+const sections = computed(() => details.value?.sections ?? [])
 
 const loadDetails = async (): Promise<void> => {
   try {
@@ -58,17 +59,19 @@ onUnmounted(stopRefreshing)
     <div class="sections">
       <section v-for="section in sections" :key="section.title" data-detail-section>
         <h3>{{ section.title }}</h3>
-        <dl>
-          <div v-for="row in section.rows" :key="row.label" class="row">
-            <dt>{{ row.label }}</dt>
-            <dd>{{ row.value }}</dd>
-          </div>
-        </dl>
+        <DetailRows :rows="section.rows" />
       </section>
+      <!-- The box answers after a few seconds: the line is announced once it arrives. -->
+      <div v-if="details" class="line" aria-live="polite" data-line-section>
+        <section v-if="line" data-detail-section>
+          <h3>{{ line.section.title }}</h3>
+          <DetailRows :rows="line.section.rows" aria-describedby="line-note" />
+          <p id="line-note" class="small" data-line-note>{{ line.note }}</p>
+        </section>
+        <p v-else-if="lineRefusal" class="small" data-line-refused>{{ lineRefusal }}</p>
+        <p v-else class="small">{{ say('ui-details-asking-box') }}</p>
+      </div>
     </div>
-    <p v-if="line" class="small" data-line-note>{{ line.note }}</p>
-    <p v-else-if="lineRefusal" class="small" role="alert" data-line-refused>{{ lineRefusal }}</p>
-    <p v-else-if="details" class="small" role="status">{{ say('ui-details-asking-box') }}</p>
   </details>
 </template>
 
@@ -80,8 +83,9 @@ summary {
 
 .sections {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--s5);
+  /* Two columns on the dashboard, one in a narrow window: never a lone section on a third row. */
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--s5) var(--s6);
   margin-top: var(--s4);
 }
 
@@ -92,32 +96,13 @@ h3 {
   font-weight: 600;
 }
 
-dl {
-  margin: 0;
-}
-
-.row {
-  display: flex;
-  gap: var(--s3);
-  justify-content: space-between;
-  padding: var(--s1) 0;
-  border-bottom: 1px solid var(--line);
-}
-
-dt {
-  color: var(--muted);
-}
-
-dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  white-space: nowrap;
-}
-
 .small {
-  margin: var(--s4) 0 0;
+  margin: var(--s3) 0 0;
   color: var(--muted);
   font-size: var(--t-xs);
+}
+
+.line > .small:only-child {
+  margin: 0;
 }
 </style>

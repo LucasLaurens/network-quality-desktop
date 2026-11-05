@@ -43,6 +43,21 @@ pub enum LocalSegment {
     },
 }
 
+impl LocalSegment {
+    /// The round trip beyond the box: `internet` less the time to reach the box, so a Wi-Fi in
+    /// between does not count. All of `internet` while the box is not measured. O(1).
+    #[must_use]
+    pub fn compute_line_round_trip(&self, internet: Duration) -> Duration {
+        match self {
+            Self::Measured {
+                latency: Some(local),
+                ..
+            } => internet.saturating_sub(*local),
+            Self::Measured { latency: None, .. } | Self::Unmeasurable(_) => internet,
+        }
+    }
+}
+
 /// One ping of the gateway.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GatewayEcho {
@@ -379,6 +394,41 @@ mod tests {
         assert_eq!(
             Fault::attribute(ConnectionKind::WiFi, GOOD_LOCAL, Some(&weak)),
             Fault::Operator
+        );
+    }
+    #[test]
+    fn leaves_the_wifi_out_of_the_line_round_trip() {
+        // Arrange
+        let internet = Duration::from_millis(15);
+        let measured = LocalSegment::Measured {
+            latency: Some(Duration::from_millis(5)),
+            loss: None,
+            lost: 0,
+        };
+        let silent = LocalSegment::Measured {
+            latency: None,
+            loss: None,
+            lost: 0,
+        };
+        let slower_than_internet = LocalSegment::Measured {
+            latency: Some(Duration::from_millis(20)),
+            loss: None,
+            lost: 0,
+        };
+
+        // Act & Assert
+        assert_eq!(
+            measured.compute_line_round_trip(internet),
+            Duration::from_millis(10)
+        );
+        assert_eq!(silent.compute_line_round_trip(internet), internet);
+        assert_eq!(
+            LocalSegment::Unmeasurable(Unmeasurable::NoAnswer).compute_line_round_trip(internet),
+            internet
+        );
+        assert_eq!(
+            slower_than_internet.compute_line_round_trip(internet),
+            Duration::ZERO
         );
     }
 }

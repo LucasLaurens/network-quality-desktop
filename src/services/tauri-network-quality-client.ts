@@ -86,6 +86,10 @@ export class TauriNetworkQualityClient implements NetworkQualityClient {
     return unwrap(await commands.readEvolution(period, utcOffsetSeconds))
   }
 
+  async savePlace(networkId: string, place: string): Promise<void> {
+    unwrap(await commands.savePlace(networkId, place))
+  }
+
   readSettings(): Promise<SettingsForm> {
     return commands.readSettings()
   }

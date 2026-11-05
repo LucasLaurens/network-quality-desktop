@@ -1,15 +1,18 @@
 //! Throughput transfers against Cloudflare's speed test endpoints (`__down`, `__up`), in plain
-//! HTTPS. While a transfer runs, empty requests every 250 ms time the round trip under load; HTTP/2
+//! HTTPS. While a transfer runs, empty requests every 50 ms time the round trip under load; HTTP/2
 //! carries them on the transfer's own connection, so no handshake weighs on them.
 
 use std::time::{Duration, Instant};
+
+use tokio::sync::Notify;
 
 use application::{ThroughputFailure, ThroughputProbe};
 use domain::{Direction, Transfer};
 
 const DOWNLOAD_URL: &str = "https://speed.cloudflare.com/__down";
 const UPLOAD_URL: &str = "https://speed.cloudflare.com/__up";
-const ROUND_TRIP_EVERY: Duration = Duration::from_millis(250);
+/// A fast line moves a test's 1 MB in well under 100 ms: sampled any slower, it keeps no round trip.
+const ROUND_TRIP_EVERY: Duration = Duration::from_millis(50);
 /// Longer than any transfer a test starts: the slowest line stops climbing after 1 MB.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const USER_AGENT: &str = concat!("network-quality/", env!("CARGO_PKG_VERSION"));
@@ -73,15 +76,15 @@ impl CloudflareThroughputProbe {
         Some(started.elapsed())
     }
 
-    /// Times the round trip every `ROUND_TRIP_EVERY` until it is dropped; the first one once the
-    /// transfer has had time to fill the line.
-    async fn sample_round_trips(&self, round_trips: &mut Vec<Duration>) {
-        let mut ticks = tokio::time::interval_at(
-            tokio::time::Instant::now() + ROUND_TRIP_EVERY,
-            ROUND_TRIP_EVERY,
-        );
+    /// Times the round trip every `ROUND_TRIP_EVERY` until `finished`, the first one once the
+    /// transfer has had time to fill the line. A round trip started under load is waited for even
+    /// when the transfer ends meanwhile: cut short, a fast line would never keep one.
+    async fn sample_round_trips_until(&self, finished: &Notify, round_trips: &mut Vec<Duration>) {
         loop {
-            ticks.tick().await;
+            tokio::select! {
+                () = tokio::time::sleep(ROUND_TRIP_EVERY) => {}
+                () = finished.notified() => return,
+            }
             if let Some(round_trip) = self.measure_round_trip().await {
                 round_trips.push(round_trip);
             }
@@ -96,19 +99,21 @@ impl ThroughputProbe for CloudflareThroughputProbe {
         bytes: u64,
     ) -> Result<Transfer, ThroughputFailure> {
         let started = Instant::now();
+        let finished = Notify::new();
         let mut loaded_round_trips = Vec::new();
-        let moved = tokio::select! {
-            moved = async {
-                match direction {
+        let ((moved, elapsed), ()) = tokio::join!(
+            async {
+                let moved = match direction {
                     Direction::Download => self.download(bytes).await,
                     Direction::Upload => self.upload(bytes).await,
-                }
-            } => moved,
-            () = self.sample_round_trips(&mut loaded_round_trips) => {
-                unreachable!("the sampling never ends")
-            }
-        };
-        let elapsed = started.elapsed();
+                };
+                let elapsed = started.elapsed();
+                // Stored when the sampler is busy timing a round trip: it stops right after.
+                finished.notify_one();
+                (moved, elapsed)
+            },
+            self.sample_round_trips_until(&finished, &mut loaded_round_trips),
+        );
         match moved {
             Ok(moved) => Ok(Transfer {
                 bytes: moved,
@@ -145,5 +150,9 @@ mod tests {
         println!("{result:?}");
         assert!(result.download.is_some());
         assert!(result.upload.is_some());
+        assert!(
+            result.loaded_latency.is_some(),
+            "a fast line keeps round trips too"
+        );
     }
 }

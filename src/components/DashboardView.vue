@@ -136,7 +136,7 @@ onUnmounted(() => {
         <h2 id="networks-title">{{ say('ui-networks-title') }}</h2>
         <span class="muted">{{ say('ui-networks-period') }}</span>
       </div>
-      <NetworksTable v-if="summary" :networks="summary.networks" />
+      <NetworksTable v-if="summary" :networks="summary.networks" @place-named="loadSummary" />
     </section>
     <section aria-labelledby="throughput-title">
       <div class="section-head">

@@ -60,6 +60,8 @@ pub struct ConnectionReading {
     pub wifi: Option<WifiLink>,
     /// The latency at rest, as shown.
     pub latency: Option<Duration>,
+    /// The latency at rest beyond the box, the Wi-Fi left out: what the line itself adds.
+    pub line_round_trip: Option<Duration>,
 }
 
 /// The connection last measured, for the commands that depend on it (a throughput test's
@@ -89,6 +91,9 @@ impl ConnectionStore {
             context: view.context,
             wifi: view.wifi.clone(),
             latency: view.latency.map(|reading| reading.value),
+            line_round_trip: view
+                .latency
+                .map(|reading| view.local.compute_line_round_trip(reading.value)),
         };
     }
 }

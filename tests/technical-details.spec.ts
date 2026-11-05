@@ -83,4 +83,39 @@ describe('TechnicalDetails', () => {
     expect(wrapper.get('[data-line-refused]').text()).toBe(refusal)
     expect(wrapper.text()).not.toContain('Interrogation de la box')
   })
+  it('reads a value shown with arrows in words', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const value = `↓ ${String(faker.number.int({ max: 900 }))} Mbit/s, ↑ ${String(faker.number.int({ max: 300 }))} Mbit/s`
+    const spokenValue = faker.lorem.words(4)
+    client.technicalDetails = {
+      ...client.technicalDetails,
+      sections: [{ title: faker.word.words(2), rows: [{ label: faker.word.noun(), value, spokenValue }] }],
+    }
+    const wrapper = mountDetails(client)
+
+    // Act
+    await toggle(wrapper, true)
+
+    // Assert
+    const dd = wrapper.get('[data-detail-section] dd')
+    expect(dd.get('[aria-hidden="true"]').text()).toBe(value)
+    expect(dd.get('.visually-hidden').text()).toBe(spokenValue)
+  })
+
+  it('puts the line note under the line, which describes it, and announces the line', async () => {
+    // Arrange
+    const client = new InMemoryNetworkQualityClient()
+    const wrapper = mountDetails(client)
+
+    // Act
+    await toggle(wrapper, true)
+
+    // Assert
+    const line = wrapper.get('[data-line-section]')
+    expect(line.attributes('aria-live')).toBe('polite')
+    const note = line.get('[data-line-note]')
+    expect(line.get('dl').attributes('aria-describedby')).toBe(note.attributes('id'))
+    expect(line.get('h3').text()).toBe(client.lineDetails.section.title)
+  })
 })

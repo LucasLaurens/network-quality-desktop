@@ -42,9 +42,11 @@ Une courbe par mesure (latence p90, gigue moyenne, perte) sur 1 h, 24 h, 7 j ou 
 
 Chaque réseau des 30 derniers jours, le plus utilisé en premier : son nom (celui du Wi-Fi quand il est connu, sinon un nom générique), son type de connexion, la répartition de son temps entre les états, sa latence p90, sa perte et la durée mesurée sur laquelle reposent ces parts. Le réseau actuel porte la mention « actuel ». Quand au moins deux réseaux ont été mesurés une heure ou plus, celui qui a passé la plus grande part de son temps en Solide est désigné « le plus fiable pour la visio ».
 
+Chaque réseau peut recevoir le nom du lieu qu'il dessert (« Maison », « Bureau », « Café de la gare ») : « Nommer le lieu » sous la ligne ouvre un champ, Entrée ou « Enregistrer » le garde, Échap ou « Annuler » le referme sans rien changer. Le lieu devient le nom de la ligne, le nom du réseau passe en dessous ; un clic sur le lieu le renomme, un champ vidé l'oublie. Le tableau dit ainsi où la connexion tient le mieux. Le lieu tient en 60 caractères et ne quitte jamais l'ordinateur : il n'est pas dans l'export CSV et part avec l'effacement de l'historique. Il reste attaché au réseau (sa box et son type de connexion) : un Wi-Fi renommé garde son lieu.
+
 ## Débit
 
-Les tests de débit lancés d'un clic et leurs résultats, par pages de 20 : voir [Tests de débit](tests-de-debit.md).
+Les tests de débit lancés d'un clic et leurs résultats, par pages de 5 : voir [Tests de débit](tests-de-debit.md).
 
 ## Valeurs inconnues
 
@@ -61,22 +63,24 @@ Sous le débit, un panneau replié, « Détails techniques ». Replié, il ne li
 | Trafic observé | Ce que l'ordinateur reçoit (↓) et envoie (↑), en moyenne sur 5 secondes, le pic de la dernière heure et le volume échangé depuis le lancement de l'app. « Disponible dans quelques secondes » juste après le lancement, pour les débits. |
 | Ligne          | L'accès (ADSL, fibre ou inconnu) et, si la box le dit, le débit synchronisé de sa ligne et son trafic total.                                                                                                                             |
 
-Les trois premières sections se relisent chaque seconde tant que le panneau est ouvert : le volume avance en direct. La ligne est lue à chaque ouverture, à part, car la box peut mettre quelques secondes à répondre (« Interrogation de la box… » en attendant).
+Les sections tiennent sur deux colonnes (une seule dans une fenêtre étroite) : Connexion et Wi-Fi, puis Trafic observé et Ligne. Les trois premières se relisent chaque seconde tant que le panneau est ouvert : le volume avance en direct. La ligne est lue à chaque ouverture, à part, car la box peut mettre quelques secondes à répondre (« Interrogation de la box… » en attendant) ; sa note s'affiche juste sous elle.
+
+Accessibilité : un lecteur d'écran entend « reçu 0,8 Mbit/s, envoyé 0,3 Mbit/s » là où l'écran montre les flèches ↓ et ↑. L'arrivée de la ligne est annoncée une fois (zone `aria-live` polie), sans interrompre ; le trafic, relu chaque seconde, ne l'est pas. La note de la ligne décrit ses valeurs (`aria-describedby`).
 
 Le trafic observé vient des compteurs de l'interface réseau : c'est ce que l'ordinateur échange, toutes applications confondues, pas ce que la ligne peut porter. Il ne compte jamais dans l'état. Pour la capacité de la ligne, lancer un [test de débit](tests-de-debit.md).
 
 ### Accès et ligne
 
-L'app demande à la box, en UPnP et en lecture seule, ce qu'elle sait de sa ligne. Beaucoup de box ont l'UPnP désactivé ou ne répondent pas : le panneau le dit, et précise si l'accès est estimé ou reste inconnu faute de trois tests de débit concordants. Quand la box ne donne qu'un sens (souvent la réception), l'autre s'affiche « – ». Si la ligne ne peut pas être lue, le panneau l'écrit au lieu d'attendre.
+L'app demande à la box, en UPnP et en lecture seule, ce qu'elle sait de sa ligne. Beaucoup de box ont l'UPnP désactivé ou ne répondent pas : le panneau dit alors que la box ne décrit pas sa ligne, et précise si l'accès est estimé ou reste inconnu ; dans ce dernier cas, il invite à lancer trois tests de débit sur ce réseau. Quand la box ne donne qu'un sens (souvent la réception), l'autre s'affiche « – ». La Livebox d'Orange nomme sa réception `NewLayer1DownstreamBitRate`, sans « Max », contre la norme : l'app lit les deux noms. Sur une Livebox fibre (GPON), le débit annoncé est celui du lien entre la box et la fibre (2621 Mbit/s dans les deux sens), pas celui de l'abonnement. Elle répond aussi `4294967295` (le maximum d'un compteur 32 bits) pour un trafic total qu'elle ne compte pas : l'app le prend pour inconnu plutôt que d'afficher 4,3 Go. Si la ligne ne peut pas être lue, le panneau l'écrit au lieu d'attendre.
 
-| Accès affiché            | Quand                                                                                                                                     |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| DSL (annoncé par la box) | La box dit « DSL » (ADSL ou VDSL).                                                                                                        |
-| Fibre (estimé)           | Sinon : envoi d'au moins 20 Mbit/s (médiane des 5 derniers tests de débit sur ce réseau, 3 au moins) et latence affichée de 8 ms au plus. |
-| ADSL (estimé)            | Sinon : envoi de 2 Mbit/s au plus et latence affichée d'au moins 10 ms.                                                                   |
-| Inconnu                  | Dans tous les autres cas, et tant qu'il y a moins de trois tests de débit sur ce réseau ou pas de latence affichée.                       |
+| Accès affiché            | Quand                                                                                                                                         |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| DSL (annoncé par la box) | La box dit « DSL » (ADSL ou VDSL).                                                                                                            |
+| Fibre (estimé)           | Sinon : envoi d'au moins 20 Mbit/s (médiane des 5 derniers tests de débit sur ce réseau, 3 au moins) et latence de la ligne de 15 ms au plus. |
+| ADSL (estimé)            | Sinon : envoi de 2 Mbit/s au plus et latence de la ligne d'au moins 10 ms.                                                                    |
+| Inconnu                  | Dans tous les autres cas, et tant qu'il y a moins de trois tests de débit sur ce réseau ou pas de latence affichée.                           |
 
-Une box fibre se dit « Ethernet », comme une box câble ou une box derrière une autre : cette réponse ne prouve rien. La fibre et le câble se ressemblent, et le VDSL tombe entre les deux : ils restent « Inconnu » plutôt que devinés. Les seuils sont des propositions, pas encore vérifiées sur des lignes réelles.
+Une box fibre se dit « Ethernet », comme une box câble ou une box derrière une autre : cette réponse ne prouve rien. La fibre et le câble se ressemblent, et le VDSL tombe entre les deux : ils restent « Inconnu » plutôt que devinés. La latence de la ligne est la latence affichée moins celle de la box (le tronçon local) : un Wi-Fi entre l'ordinateur et la box ne compte pas. Sans mesure de la box, c'est la latence affichée. Le seuil de la fibre a été réglé sur une ligne FTTH réelle en Wi-Fi : 5 ms jusqu'à la box, 15 ms jusqu'à Cloudflare, soit 10 ms pour la ligne. Une box 4G ou 5G, qui peut envoyer autant, ajoute 20 ms et plus. Les autres seuils restent des propositions.
 
 Le débit synchronisé et le trafic total sont ceux que la box annonce, pas des mesures de l'app : le débit synchronisé est la vitesse négociée par la box avec l'opérateur, ou une valeur de sa configuration. Le compteur de trafic de la box compte tous les appareils derrière elle et repart souvent de zéro tous les 4 Go.
 
