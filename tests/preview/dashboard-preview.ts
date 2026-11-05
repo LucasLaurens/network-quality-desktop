@@ -158,6 +158,38 @@ const client = new InMemoryNetworkQualityClient({
   display: connectionScenarios[scenario ?? ''] ?? connectionScenarios.degraded,
   windowModeTexts: windowModeTexts,
 })
+// Real words, not generated ones: a value never wraps, so random text could overflow the layout.
+client.technicalDetails = {
+  sections: [
+    {
+      title: 'Connexion',
+      rows: [
+        { label: 'Réseau', value: 'Livebox-4F2A' },
+        { label: 'Liaison', value: `Wi-Fi 5${NBSP}GHz` },
+        { label: 'Box', value: '192.168.1.1' },
+      ],
+    },
+    {
+      title: 'Wi-Fi',
+      rows: [
+        { label: 'Signal', value: `−58${NBSP}dBm` },
+        { label: 'Canal', value: '36' },
+        { label: 'Débit du lien', value: `866${NBSP}Mbit/s` },
+      ],
+    },
+  ],
+  refreshSeconds: 1,
+}
+client.lineDetails = {
+  section: {
+    title: 'Ligne',
+    rows: [
+      { label: 'Accès', value: 'Fibre (estimé)' },
+      { label: 'Box', value: 'ne répond pas en UPnP' },
+    ],
+  },
+  note: `L'accès est estimé d'après les derniers tests de débit sur ce réseau.`,
+}
 client.setThroughputPanel({
   isAllowed: scenario !== 'first',
   note: `Les tests ne partent que sur un clic, vers Cloudflare. Rapide${NBSP}: jusqu'à 4,2${NBSP}Mo. Complet${NBSP}: jusqu'à 155,8${NBSP}Mo. La latence en charge s'affiche sans compter dans l'état.`,
