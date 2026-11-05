@@ -46,7 +46,7 @@ Chaque réseau peut recevoir le nom du lieu qu'il dessert (« Maison », « Bure
 
 ## Débit
 
-Les tests de débit lancés d'un clic et leurs résultats, par pages de 20 : voir [Tests de débit](tests-de-debit.md).
+Les tests de débit lancés d'un clic et leurs résultats, par pages de 5 : voir [Tests de débit](tests-de-debit.md).
 
 ## Valeurs inconnues
 
@@ -73,14 +73,14 @@ Le trafic observé vient des compteurs de l'interface réseau : c'est ce que l'o
 
 L'app demande à la box, en UPnP et en lecture seule, ce qu'elle sait de sa ligne. Beaucoup de box ont l'UPnP désactivé ou ne répondent pas : le panneau dit alors que la box ne décrit pas sa ligne, et précise si l'accès est estimé ou reste inconnu ; dans ce dernier cas, il invite à lancer trois tests de débit sur ce réseau. Quand la box ne donne qu'un sens (souvent la réception), l'autre s'affiche « – ». Si la ligne ne peut pas être lue, le panneau l'écrit au lieu d'attendre.
 
-| Accès affiché            | Quand                                                                                                                                     |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| DSL (annoncé par la box) | La box dit « DSL » (ADSL ou VDSL).                                                                                                        |
-| Fibre (estimé)           | Sinon : envoi d'au moins 20 Mbit/s (médiane des 5 derniers tests de débit sur ce réseau, 3 au moins) et latence affichée de 8 ms au plus. |
-| ADSL (estimé)            | Sinon : envoi de 2 Mbit/s au plus et latence affichée d'au moins 10 ms.                                                                   |
-| Inconnu                  | Dans tous les autres cas, et tant qu'il y a moins de trois tests de débit sur ce réseau ou pas de latence affichée.                       |
+| Accès affiché            | Quand                                                                                                                                         |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| DSL (annoncé par la box) | La box dit « DSL » (ADSL ou VDSL).                                                                                                            |
+| Fibre (estimé)           | Sinon : envoi d'au moins 20 Mbit/s (médiane des 5 derniers tests de débit sur ce réseau, 3 au moins) et latence de la ligne de 15 ms au plus. |
+| ADSL (estimé)            | Sinon : envoi de 2 Mbit/s au plus et latence de la ligne d'au moins 10 ms.                                                                    |
+| Inconnu                  | Dans tous les autres cas, et tant qu'il y a moins de trois tests de débit sur ce réseau ou pas de latence affichée.                           |
 
-Une box fibre se dit « Ethernet », comme une box câble ou une box derrière une autre : cette réponse ne prouve rien. La fibre et le câble se ressemblent, et le VDSL tombe entre les deux : ils restent « Inconnu » plutôt que devinés. Les seuils sont des propositions, pas encore vérifiées sur des lignes réelles.
+Une box fibre se dit « Ethernet », comme une box câble ou une box derrière une autre : cette réponse ne prouve rien. La fibre et le câble se ressemblent, et le VDSL tombe entre les deux : ils restent « Inconnu » plutôt que devinés. La latence de la ligne est la latence affichée moins celle de la box (le tronçon local) : un Wi-Fi entre l'ordinateur et la box ne compte pas. Sans mesure de la box, c'est la latence affichée. Le seuil de la fibre a été réglé sur une ligne FTTH réelle en Wi-Fi : 5 ms jusqu'à la box, 15 ms jusqu'à Cloudflare, soit 10 ms pour la ligne. Une box 4G ou 5G, qui peut envoyer autant, ajoute 20 ms et plus. Les autres seuils restent des propositions.
 
 Le débit synchronisé et le trafic total sont ceux que la box annonce, pas des mesures de l'app : le débit synchronisé est la vitesse négociée par la box avec l'opérateur, ou une valeur de sa configuration. Le compteur de trafic de la box compte tous les appareils derrière elle et repart souvent de zéro tous les 4 Go.
 

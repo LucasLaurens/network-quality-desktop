@@ -304,6 +304,7 @@ mod tests {
                 band: WifiBand::FiveGhz,
             }),
             latency: None,
+            line_round_trip: None,
         }
     }
 

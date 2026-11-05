@@ -579,7 +579,7 @@ pub fn read_technical_details(
 }
 
 /// What carries the line: the box asked over `UPnP` (a few seconds at most), then the estimate
-/// from this network's throughput tests and the latency at rest.
+/// from this network's throughput tests and the latency at rest beyond the box.
 ///
 /// # Errors
 ///
@@ -607,7 +607,7 @@ pub async fn read_line_details(
     let reading = connection.read_all();
     let detector =
         UpnpAccessDetector::new(reading.context.and_then(|context| context.gateway_address));
-    let line = detect_access(&detector, &tests, network.as_ref(), reading.latency).await;
+    let line = detect_access(&detector, &tests, network.as_ref(), reading.line_round_trip).await;
     Ok(LineDetails::compose(&line, &catalog))
 }
 

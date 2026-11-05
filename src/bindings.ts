@@ -129,7 +129,7 @@ export const commands = {
 	readTechnicalDetails: () => __TAURI_INVOKE<TechnicalDetails>("read_technical_details"),
 	/**
 	 *  What carries the line: the box asked over `UPnP` (a few seconds at most), then the estimate
-	 *  from this network's throughput tests and the latency at rest.
+	 *  from this network's throughput tests and the latency at rest beyond the box.
 	 * 
 	 *  # Errors
 	 * 
