@@ -68,7 +68,8 @@ pub struct ThroughputPage {
 }
 
 impl ThroughputPage {
-    pub const SIZE: usize = 20;
+    /// Few rows: the section stays short under the chart, the pager reached without scrolling.
+    pub const SIZE: usize = 5;
 
     /// The requested page, or the last one when the tests no longer reach it (an erase). O(1).
     #[must_use]
@@ -339,21 +340,21 @@ mod tests {
     #[test]
     fn locates_the_requested_page_among_the_tests() {
         // Act
-        let page = ThroughputPage::locate(1, 45);
+        let page = ThroughputPage::locate(1, 2 * ThroughputPage::SIZE + 1);
 
         // Assert
         assert_eq!(page, ThroughputPage { index: 1, count: 3 });
-        assert_eq!(page.compute_offset(), 20);
+        assert_eq!(page.compute_offset(), ThroughputPage::SIZE);
     }
 
     #[test]
     fn falls_back_to_the_last_page_past_the_end() {
         // Act
-        let page = ThroughputPage::locate(7, 45);
+        let page = ThroughputPage::locate(7, 2 * ThroughputPage::SIZE + 1);
 
         // Assert
         assert_eq!(page, ThroughputPage { index: 2, count: 3 });
-        assert_eq!(page.compute_offset(), 40);
+        assert_eq!(page.compute_offset(), 2 * ThroughputPage::SIZE);
     }
 
     #[test]
@@ -372,8 +373,8 @@ mod tests {
         let catalog = TextCatalog::load();
 
         // Act
-        let panel =
-            ThroughputPanel::compose(true, &[], ThroughputPage::locate(1, 45), PARIS, &catalog);
+        let page = ThroughputPage::locate(1, 2 * ThroughputPage::SIZE + 1);
+        let panel = ThroughputPanel::compose(true, &[], page, PARIS, &catalog);
 
         // Assert
         assert_eq!(panel.page, 1);
