@@ -164,17 +164,37 @@ client.technicalDetails = {
     {
       title: 'Connexion',
       rows: [
-        { label: 'Réseau', value: 'Livebox-4F2A' },
-        { label: 'Liaison', value: `Wi-Fi 5${NBSP}GHz` },
-        { label: 'Box', value: '192.168.1.1' },
+        { label: 'Réseau', value: 'Livebox-4F2A', spokenValue: 'Livebox-4F2A' },
+        { label: 'Liaison', value: `Wi-Fi 5${NBSP}GHz`, spokenValue: `Wi-Fi 5${NBSP}GHz` },
+        { label: 'Box', value: '192.168.1.1', spokenValue: '192.168.1.1' },
       ],
     },
     {
       title: 'Wi-Fi',
       rows: [
-        { label: 'Signal', value: `−58${NBSP}dBm` },
-        { label: 'Canal', value: '36' },
-        { label: 'Débit du lien', value: `866${NBSP}Mbit/s` },
+        { label: 'Signal', value: `−58${NBSP}dBm`, spokenValue: `−58${NBSP}dBm` },
+        { label: 'Canal', value: '36', spokenValue: '36' },
+        { label: 'Débit du lien', value: `866${NBSP}Mbit/s`, spokenValue: `866${NBSP}Mbit/s` },
+      ],
+    },
+    {
+      title: 'Trafic observé',
+      rows: [
+        {
+          label: 'Sur 5 secondes',
+          value: `↓ 0,8${NBSP}Mbit/s, ↑ 0,3${NBSP}Mbit/s`,
+          spokenValue: `reçu 0,8${NBSP}Mbit/s, envoyé 0,3${NBSP}Mbit/s`,
+        },
+        {
+          label: 'Pic de la dernière heure',
+          value: `↓ 42,6${NBSP}Mbit/s, ↑ 3,1${NBSP}Mbit/s`,
+          spokenValue: `reçu 42,6${NBSP}Mbit/s, envoyé 3,1${NBSP}Mbit/s`,
+        },
+        {
+          label: 'Volume depuis le lancement',
+          value: `↓ 812,4${NBSP}Mo, ↑ 96,0${NBSP}Mo`,
+          spokenValue: `reçu 812,4${NBSP}Mo, envoyé 96,0${NBSP}Mo`,
+        },
       ],
     },
   ],
@@ -183,12 +203,9 @@ client.technicalDetails = {
 client.lineDetails = {
   section: {
     title: 'Ligne',
-    rows: [
-      { label: 'Accès', value: 'Fibre (estimé)' },
-      { label: 'Box', value: 'ne répond pas en UPnP' },
-    ],
+    rows: [{ label: 'Accès', value: 'Fibre (estimé)', spokenValue: 'Fibre (estimé)' }],
   },
-  note: `L'accès est estimé d'après les derniers tests de débit sur ce réseau.`,
+  note: `La box ne décrit pas sa ligne${NBSP}: l'accès est estimé d'après les tests de débit sur ce réseau et la latence.`,
 }
 client.setThroughputPanel({
   isAllowed: scenario !== 'first',

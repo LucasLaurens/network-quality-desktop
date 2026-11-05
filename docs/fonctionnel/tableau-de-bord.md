@@ -63,13 +63,15 @@ Sous le débit, un panneau replié, « Détails techniques ». Replié, il ne li
 | Trafic observé | Ce que l'ordinateur reçoit (↓) et envoie (↑), en moyenne sur 5 secondes, le pic de la dernière heure et le volume échangé depuis le lancement de l'app. « Disponible dans quelques secondes » juste après le lancement, pour les débits. |
 | Ligne          | L'accès (ADSL, fibre ou inconnu) et, si la box le dit, le débit synchronisé de sa ligne et son trafic total.                                                                                                                             |
 
-Les trois premières sections se relisent chaque seconde tant que le panneau est ouvert : le volume avance en direct. La ligne est lue à chaque ouverture, à part, car la box peut mettre quelques secondes à répondre (« Interrogation de la box… » en attendant).
+Les sections tiennent sur deux colonnes (une seule dans une fenêtre étroite) : Connexion et Wi-Fi, puis Trafic observé et Ligne. Les trois premières se relisent chaque seconde tant que le panneau est ouvert : le volume avance en direct. La ligne est lue à chaque ouverture, à part, car la box peut mettre quelques secondes à répondre (« Interrogation de la box… » en attendant) ; sa note s'affiche juste sous elle.
+
+Accessibilité : un lecteur d'écran entend « reçu 0,8 Mbit/s, envoyé 0,3 Mbit/s » là où l'écran montre les flèches ↓ et ↑. L'arrivée de la ligne est annoncée une fois (zone `aria-live` polie), sans interrompre ; le trafic, relu chaque seconde, ne l'est pas. La note de la ligne décrit ses valeurs (`aria-describedby`).
 
 Le trafic observé vient des compteurs de l'interface réseau : c'est ce que l'ordinateur échange, toutes applications confondues, pas ce que la ligne peut porter. Il ne compte jamais dans l'état. Pour la capacité de la ligne, lancer un [test de débit](tests-de-debit.md).
 
 ### Accès et ligne
 
-L'app demande à la box, en UPnP et en lecture seule, ce qu'elle sait de sa ligne. Beaucoup de box ont l'UPnP désactivé ou ne répondent pas : le panneau le dit, et précise si l'accès est estimé ou reste inconnu faute de trois tests de débit concordants. Quand la box ne donne qu'un sens (souvent la réception), l'autre s'affiche « – ». Si la ligne ne peut pas être lue, le panneau l'écrit au lieu d'attendre.
+L'app demande à la box, en UPnP et en lecture seule, ce qu'elle sait de sa ligne. Beaucoup de box ont l'UPnP désactivé ou ne répondent pas : le panneau dit alors que la box ne décrit pas sa ligne, et précise si l'accès est estimé ou reste inconnu ; dans ce dernier cas, il invite à lancer trois tests de débit sur ce réseau. Quand la box ne donne qu'un sens (souvent la réception), l'autre s'affiche « – ». Si la ligne ne peut pas être lue, le panneau l'écrit au lieu d'attendre.
 
 | Accès affiché            | Quand                                                                                                                                     |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |

@@ -147,7 +147,10 @@ export function createWindowModeTexts(): WindowModeTexts {
 export function createDetailSection(): DetailSection {
   return {
     title: faker.word.words(2),
-    rows: Array.from({ length: 2 }, () => ({ label: faker.word.noun(), value: faker.word.words(3) })),
+    rows: Array.from({ length: 2 }, () => {
+      const value = faker.word.words(3)
+      return { label: faker.word.noun(), value, spokenValue: value }
+    }),
   }
 }
 

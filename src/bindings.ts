@@ -193,6 +193,8 @@ export type DashboardSummaryDisplay = {
 export type DetailRow = {
 	label: string,
 	value: string,
+	/**  What a screen reader says for `value`: words where the value shows arrows. */
+	spokenValue: string,
 };
 
 export type DetailSection = {
