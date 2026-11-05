@@ -162,6 +162,8 @@ share-solid = { $value } % Solide
 shares = { $solid } % Solide, { $unstable } % Instable, { $degraded } % Dégradée, { $offline } % Hors ligne
 value-unknown = valeur inconnue
 value-pending = en cours
+place-too-long = Un nom de lieu tient en { $max } caractères.
+place-not-saved = Le lieu n'a pas pu être enregistré.
 
 ## Settings
 
@@ -320,6 +322,11 @@ ui-networks-latency = Latence p90
 ui-networks-measured = Durée mesurée
 ui-networks-current = actuel
 ui-networks-most-reliable = le plus fiable pour la visio
+ui-place-name = Nommer le lieu
+ui-place-rename = Renommer le lieu de { $network }
+ui-place-field = Lieu de { $network }
+ui-place-placeholder = Maison, bureau, café…
+ui-place-save = Enregistrer
 ui-throughput-title = Débit
 ui-throughput-off = { ui-throughput-off-short } aucune donnée n'est consommée.
 ui-throughput-off-short = Tests de débit désactivés :

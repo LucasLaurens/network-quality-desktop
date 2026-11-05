@@ -172,4 +172,60 @@ describe('DashboardView', () => {
     expect(wrapper.find('[data-chart]').exists()).toBe(false)
     expect(wrapper.find('[data-networks-empty]').exists()).toBe(true)
   })
+  it('names the place a network serves and shows it as the row name', async () => {
+    // Arrange
+    const network = createNetworkRowDisplay()
+    const place = faker.location.city()
+    const client = new InMemoryNetworkQualityClient()
+    client.setDashboardSummary(createDashboardSummary({ networks: [network] }))
+    const wrapper = await mountDashboard(client)
+    await wrapper.get('[data-place-name]').trigger('click')
+    await wrapper.get('[data-place-input]').setValue(`  ${place} `)
+
+    // Act
+    await wrapper.get('[data-place-form]').trigger('submit')
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.find('[data-place-form]').exists()).toBe(false)
+    expect(wrapper.get('[data-place]').text()).toBe(place)
+    expect(wrapper.get('[data-network-row]').text()).toContain(network.label)
+    expect(wrapper.find('[data-place-name]').exists()).toBe(false)
+  })
+
+  it('leaves the place as it was when the editing is cancelled with Escape', async () => {
+    // Arrange
+    const network = createNetworkRowDisplay({ place: faker.location.city() })
+    const client = new InMemoryNetworkQualityClient()
+    client.setDashboardSummary(createDashboardSummary({ networks: [network] }))
+    const wrapper = await mountDashboard(client)
+    await wrapper.get('[data-place]').trigger('click')
+    await wrapper.get('[data-place-input]').setValue(faker.location.city())
+
+    // Act
+    await wrapper.get('[data-place-form]').trigger('keydown', { key: 'Escape' })
+
+    // Assert
+    expect(wrapper.find('[data-place-form]').exists()).toBe(false)
+    expect(wrapper.get('[data-place]').text()).toBe(network.place)
+  })
+
+  it('keeps the field open with the reason when the core refuses the place', async () => {
+    // Arrange
+    const refusal = faker.lorem.sentence()
+    const client = new InMemoryNetworkQualityClient()
+    client.setDashboardSummary(createDashboardSummary({ networks: [createNetworkRowDisplay()] }))
+    client.refusePlaces(refusal)
+    const wrapper = await mountDashboard(client)
+    await wrapper.get('[data-place-name]').trigger('click')
+    await wrapper.get('[data-place-input]').setValue(faker.location.city())
+
+    // Act
+    await wrapper.get('[data-place-form]').trigger('submit')
+    await flushPromises()
+
+    // Assert
+    expect(wrapper.get('[data-place-refusal]').text()).toBe(refusal)
+    expect(wrapper.get('[data-place-input]').attributes('aria-invalid')).toBe('true')
+  })
 })

@@ -189,6 +189,8 @@ export function createOverviewDisplay(overrides: Partial<OverviewDisplay> = {}):
 export function createNetworkRowDisplay(overrides: Partial<NetworkRowDisplay> = {}): NetworkRowDisplay {
   const solid = faker.number.int({ min: 40, max: 90 })
   return {
+    networkId: `wifi:${faker.string.hexadecimal({ length: 12, prefix: '', casing: 'lower' })}`,
+    place: '',
     label: faker.company.name(),
     connection: faker.lorem.words(2),
     shares: { solid, unstable: 100 - solid, degraded: 0, offline: 0 },
@@ -298,6 +300,7 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
   private settings: SettingsForm = createSettingsForm()
   /** Empty while saves are accepted. */
   private settingsRefusal = ''
+  private placeRefusal = ''
   private readonly confirmation = faker.lorem.sentence()
   private isHoldingSaves = false
   private heldSaves: (() => void)[] = []
@@ -433,6 +436,24 @@ export class InMemoryNetworkQualityClient implements NetworkQualityClient {
 
   setEvolution(evolution: EvolutionDisplay): void {
     this.evolution = evolution
+  }
+
+  /** Names a network's place in the summary it serves, as the core would on the next read. */
+  savePlace(networkId: string, place: string): Promise<void> {
+    if (this.placeRefusal !== '') return Promise.reject(new Error(this.placeRefusal))
+    const trimmed = place.trim()
+    this.dashboardSummary = {
+      ...this.dashboardSummary,
+      networks: this.dashboardSummary.networks.map((network) =>
+        network.networkId === networkId ? { ...network, place: trimmed } : network,
+      ),
+    }
+    return Promise.resolve()
+  }
+
+  /** Every place named from now on is refused with `refusal`. */
+  refusePlaces(refusal: string): void {
+    this.placeRefusal = refusal
   }
 
   readSettings(): Promise<SettingsForm> {

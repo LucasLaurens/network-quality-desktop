@@ -93,7 +93,8 @@ const summary: DashboardSummaryDisplay = {
   },
   networks: [
     {
-      label: 'Ethernet bureau',
+      place: 'Bureau',
+      label: 'Réseau Ethernet',
       connection: 'Ethernet',
       solid: 96,
       unstable: 4,
@@ -103,6 +104,7 @@ const summary: DashboardSummaryDisplay = {
       measured: '2 j 14 h',
     },
     {
+      place: 'Maison',
       label: 'Livebox-4F2A',
       connection: 'Wi-Fi',
       solid: 81,
@@ -113,6 +115,7 @@ const summary: DashboardSummaryDisplay = {
       measured: '5 j 20 h',
     },
     {
+      place: '',
       label: 'iPhone de Lucas',
       connection: 'Partage de connexion',
       solid: 52,
@@ -123,6 +126,8 @@ const summary: DashboardSummaryDisplay = {
       measured: '6 h',
     },
   ].map((network, index) => ({
+    networkId: `wifi:${String(index)}`,
+    place: network.place,
     label: network.label,
     connection: network.connection,
     shares: { solid: network.solid, unstable: network.unstable, degraded: network.degraded, offline: 0 },

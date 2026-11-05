@@ -12,14 +12,14 @@ use fake::faker::lorem::en::Word;
 use fake::{Fake, Faker};
 
 use domain::{
-    Aggregate, BoxLine, ConnectionContext, Direction, GatewayEcho, Granularity, ProbeOutcome,
-    Settings, Target, Timestamp, Transfer, WifiLink,
+    Aggregate, BoxLine, ConnectionContext, Direction, GatewayEcho, Granularity, PlaceName,
+    ProbeOutcome, Settings, Target, Timestamp, Transfer, WifiLink,
 };
 
 use crate::{
     AccessTechnologyDetector, Clock, ConnectionContextReader, GatewayProbe, HistoryCommand,
     HistoryEvent, HistoryReader, HistoryRecorder, HistoryStream, LatencyProbe,
-    MeasurementRepository, NetworkChangeWatcher, NetworkKey, Notifier, PowerEvent,
+    MeasurementRepository, NetworkChangeWatcher, NetworkKey, Notifier, PlaceRepository, PowerEvent,
     PowerEventSource, RepositoryError, SettingsRepository, ThroughputFailure, ThroughputProbe,
     ThroughputRecord, VerdictPresenter, VerdictView, WifiReader,
 };
@@ -254,6 +254,7 @@ pub struct InMemoryMeasurementRepository {
     rows: Vec<(NetworkKey, Granularity, i64, Aggregate)>,
     events: Vec<HistoryEvent>,
     throughput_tests: Vec<ThroughputRecord>,
+    places: Vec<(NetworkKey, PlaceName)>,
     is_erase_failing: bool,
 }
 
@@ -490,6 +491,26 @@ impl HistoryReader for InMemoryMeasurementRepository {
             .collect();
         events.sort_by_key(|event| event.utc);
         Ok(events)
+    }
+
+    fn list_places(&self) -> Result<Vec<(NetworkKey, PlaceName)>, RepositoryError> {
+        Ok(self.places.clone())
+    }
+}
+
+/// One name per network: naming it again replaces the name, an unnamed place drops it.
+impl PlaceRepository for InMemoryMeasurementRepository {
+    fn save_place(
+        &mut self,
+        network: &NetworkKey,
+        place: &PlaceName,
+    ) -> Result<(), RepositoryError> {
+        self.places
+            .retain(|(named, _)| !is_same_identity(named, network));
+        if place.is_named() {
+            self.places.push((network.clone(), place.clone()));
+        }
+        Ok(())
     }
 }
 

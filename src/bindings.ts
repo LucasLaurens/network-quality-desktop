@@ -64,6 +64,14 @@ export const commands = {
 	 */
 	saveSettings: (form: SettingsForm, utcOffsetSeconds: number) => typedError<string, string>(__TAURI_INVOKE("save_settings", { form, utcOffsetSeconds })),
 	/**
+	 *  Names the place a network of the dashboard serves; a blank name forgets it.
+	 * 
+	 *  # Errors
+	 * 
+	 *  The sentence shown under the field: a name too long, or a storage failure.
+	 */
+	savePlace: (networkId: string, place: string) => typedError<null, string>(__TAURI_INVOKE("save_place", { networkId, place })),
+	/**
 	 *  The dashboard's throughput section: whether tests are allowed, what they may use, and one
 	 *  page of tests, newest first; past the last page, the last one.
 	 * 
@@ -282,6 +290,10 @@ export type NetworkDisplay = {
 };
 
 export type NetworkRowDisplay = {
+	/**  Names the network back to the core, to name its place. */
+	networkId: string,
+	/**  What the user calls the place it serves; empty until named. */
+	place: string,
 	label: string,
 	connection: string,
 	shares: StateShares,

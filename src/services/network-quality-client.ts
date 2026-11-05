@@ -47,6 +47,8 @@ export interface NetworkQualityClient {
   readDashboardSummary(utcOffsetSeconds: number): Promise<DashboardSummaryDisplay>
   /** The chart of a period, every metric included. */
   readEvolution(period: PeriodChoice, utcOffsetSeconds: number): Promise<EvolutionDisplay>
+  /** Names the place a network of the dashboard serves, blank to forget it; rejects with why not. */
+  savePlace(networkId: string, place: string): Promise<void>
   readSettings(): Promise<SettingsForm>
   /** Resolves to the confirmation to show; rejects with the sentence explaining the refusal. */
   saveSettings(form: SettingsForm, utcOffsetSeconds: number): Promise<string>

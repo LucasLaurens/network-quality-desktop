@@ -4,7 +4,7 @@ use std::net::Ipv4Addr;
 
 use domain::{
     Aggregate, BoxLine, ByteCounters, ColorScheme, ConnectionContext, Direction, GatewayEcho,
-    Granularity, ProbeOutcome, Settings, Target, Timestamp, Transfer, WifiLink,
+    Granularity, PlaceName, ProbeOutcome, Settings, Target, Timestamp, Transfer, WifiLink,
 };
 
 use crate::{
@@ -203,6 +203,28 @@ pub trait HistoryReader {
     ///
     /// The storage failed.
     fn count_throughput_tests(&self) -> Result<usize, RepositoryError>;
+
+    /// Each network the user named the place of, with that name.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed.
+    fn list_places(&self) -> Result<Vec<(NetworkKey, PlaceName)>, RepositoryError>;
+}
+
+/// Where the user's names for the places networks serve are kept, apart from the measures.
+pub trait PlaceRepository {
+    /// Names the place `network` serves; an unnamed place forgets the name. The network's name
+    /// is ignored: its gateway and kind identify it.
+    ///
+    /// # Errors
+    ///
+    /// The storage failed; nothing was written.
+    fn save_place(
+        &mut self,
+        network: &NetworkKey,
+        place: &PlaceName,
+    ) -> Result<(), RepositoryError>;
 }
 
 /// Reads whether the system shows light or dark, as its menu bar does. Called once a second:

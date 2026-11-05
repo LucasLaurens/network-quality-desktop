@@ -3,11 +3,11 @@ use std::time::Duration;
 
 use application::{
     EventKind, HistoryEvent, HistoryReader, HistoryStream, MeasurementRepository, NetworkKey,
-    RepositoryError, SettingsRepository, ThroughputRecord,
+    PlaceRepository, RepositoryError, SettingsRepository, ThroughputRecord,
 };
 use domain::{
     Aggregate, Appearance, Bitrate, ConnectionKind, Granularity, LatencyHistogram, MacAddress,
-    MeasurementServers, Settings, StateSeconds, Target, TestProfile, ThroughputResult,
+    MeasurementServers, PlaceName, Settings, StateSeconds, Target, TestProfile, ThroughputResult,
 };
 use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension, Row, Transaction, params};
 use rusqlite_migration::{M, Migrations};
@@ -19,6 +19,9 @@ const MIGRATIONS: &[M<'static>] = &[
     )),
     M::up(include_str!(
         "migrations/0003_index_throughput_tests_by_time.sql"
+    )),
+    M::up(include_str!(
+        "migrations/0004_name_the_place_of_networks.sql"
     )),
 ];
 /// The columns `read_throughput_record` reads, in its order.
@@ -405,6 +408,51 @@ impl HistoryReader for SqliteMeasurementRepository {
             Ok::<_, RepositoryError>(())
         })?;
         Ok(events)
+    }
+
+    /// O(n) for the n networks kept: a handful. A name stored too long (edited by hand) is
+    /// skipped rather than failing the dashboard.
+    fn list_places(&self) -> Result<Vec<(NetworkKey, PlaceName)>, RepositoryError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT gateway_mac, connection_kind, label, place FROM networks WHERE place <> ''",
+            )
+            .map_err(to_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((read_network(row, 0)?, row.get::<_, String>(3)?))
+            })
+            .map_err(to_error)?;
+        let mut places = Vec::new();
+        for row in rows {
+            let (network, place) = row.map_err(to_error)?;
+            if let Ok(place) = PlaceName::parse(&place) {
+                places.push((network, place));
+            }
+        }
+        Ok(places)
+    }
+}
+
+impl PlaceRepository for SqliteMeasurementRepository {
+    /// O(log n) on the unique indexes. A network not kept yet has no row to name: nothing changes.
+    fn save_place(
+        &mut self,
+        network: &NetworkKey,
+        place: &PlaceName,
+    ) -> Result<(), RepositoryError> {
+        self.write(|transaction| {
+            transaction.execute(
+                "UPDATE networks SET place = ?3 WHERE gateway_mac IS ?1 AND connection_kind = ?2",
+                params![
+                    to_mac_blob(network.gateway),
+                    to_kind_text(network.kind),
+                    place.to_str()
+                ],
+            )
+        })?;
+        Ok(())
     }
 }
 

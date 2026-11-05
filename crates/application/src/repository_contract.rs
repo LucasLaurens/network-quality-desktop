@@ -5,13 +5,13 @@ use std::time::Duration;
 
 use domain::{
     Aggregate, Appearance, Bitrate, ConnectionKind, CountedState, Granularity, MacAddress,
-    MeasurementServers, SecondSample, Settings, Target, TestProfile, ThroughputResult,
+    MeasurementServers, PlaceName, SecondSample, Settings, Target, TestProfile, ThroughputResult,
 };
 
 use crate::test_support::{generate_network_name, generate_targets};
 use crate::{
     EventKind, HistoryEvent, HistoryReader, HistoryStream, MeasurementRepository, NetworkKey,
-    RepositoryError, SettingsRepository, ThroughputRecord,
+    PlaceRepository, RepositoryError, SettingsRepository, ThroughputRecord,
 };
 
 const HOUR: i64 = 3600;
@@ -46,7 +46,9 @@ fn create_aggregate(seconds: u32, latency_ms: u64) -> Aggregate {
 /// # Panics
 ///
 /// When the repository breaks the contract.
-pub fn check_contract<R: MeasurementRepository + HistoryReader + HistoryStream>(
+pub fn check_contract<
+    R: MeasurementRepository + HistoryReader + HistoryStream + PlaceRepository,
+>(
     create: impl Fn() -> R,
 ) {
     check_adds_to_a_minute_already_kept(&mut create());
@@ -67,6 +69,8 @@ pub fn check_contract<R: MeasurementRepository + HistoryReader + HistoryStream>(
     check_reads_one_page_of_throughput_tests(&mut create());
     check_erases_the_whole_history(&mut create());
     check_tells_an_empty_history(&mut create());
+    check_names_renames_and_forgets_a_place(&mut create());
+    check_keeps_a_place_when_the_network_name_changes(&mut create());
 }
 
 /// A page skips the newer tests and stops after its size, so the dashboard reads only what it
@@ -596,7 +600,9 @@ fn check_goes_back_to_the_public_servers(repository: &mut impl SettingsRepositor
     assert_eq!(settings.appearance, Appearance::Light);
 }
 
-fn check_erases_the_whole_history(repository: &mut (impl MeasurementRepository + HistoryReader)) {
+fn check_erases_the_whole_history(
+    repository: &mut (impl MeasurementRepository + HistoryReader + PlaceRepository),
+) {
     // Arrange
     let name = generate_network_name();
     let network = create_network(24, Some(name.as_str()));
@@ -627,6 +633,9 @@ fn check_erases_the_whole_history(repository: &mut (impl MeasurementRepository +
             },
         })
         .expect("a test");
+    repository
+        .save_place(&network, &create_place())
+        .expect("a place");
 
     // Act
     repository.erase_history().expect("an erase");
@@ -644,6 +653,7 @@ fn check_erases_the_whole_history(repository: &mut (impl MeasurementRepository +
         .list_throughput_tests(range.0, range.1)
         .expect("tests");
     assert!(minutes.is_empty() && hours.is_empty() && events.is_empty() && tests.is_empty());
+    assert!(repository.list_places().expect("places").is_empty());
     repository
         .add_minute(&network, SOME_HOUR, &create_aggregate(60, 20))
         .expect("a minute after the erase");
@@ -666,4 +676,85 @@ fn check_tells_an_empty_history(repository: &mut (impl MeasurementRepository + H
     // Assert
     assert!(is_empty_at_first);
     assert!(!is_empty_after);
+}
+
+fn create_place() -> PlaceName {
+    PlaceName::parse(&generate_network_name()).expect("a short name")
+}
+
+/// The places kept, each as the identity of its network and its name.
+fn list_place_names(
+    repository: &impl HistoryReader,
+) -> Vec<((Option<MacAddress>, ConnectionKind), String)> {
+    let mut places: Vec<_> = repository
+        .list_places()
+        .expect("places")
+        .into_iter()
+        .map(|(network, place)| (network.identify(), place.to_str().to_owned()))
+        .collect();
+    places.sort_by_key(|(_, place)| place.clone());
+    places
+}
+
+fn check_names_renames_and_forgets_a_place(
+    repository: &mut (impl MeasurementRepository + HistoryReader + PlaceRepository),
+) {
+    // Arrange
+    let home = create_network(30, Some(generate_network_name().as_str()));
+    let office = create_network(31, None);
+    for network in [&home, &office] {
+        repository
+            .add_minute(network, SOME_HOUR, &create_aggregate(60, 20))
+            .expect("a minute");
+    }
+    let first = create_place();
+    let second = create_place();
+    let office_place = create_place();
+
+    // Act
+    repository.save_place(&home, &first).expect("a place");
+    repository
+        .save_place(&office, &office_place)
+        .expect("a place");
+    repository.save_place(&home, &second).expect("a new name");
+    let renamed = list_place_names(repository);
+    repository
+        .save_place(&office, &PlaceName::default())
+        .expect("a forgotten place");
+
+    // Assert
+    let mut expected = vec![
+        (home.identify(), second.to_str().to_owned()),
+        (office.identify(), office_place.to_str().to_owned()),
+    ];
+    expected.sort_by_key(|(_, place)| place.clone());
+    assert_eq!(renamed, expected);
+    assert_eq!(
+        list_place_names(repository),
+        vec![(home.identify(), second.to_str().to_owned())]
+    );
+}
+
+fn check_keeps_a_place_when_the_network_name_changes(
+    repository: &mut (impl MeasurementRepository + HistoryReader + PlaceRepository),
+) {
+    // Arrange
+    let network = create_network(32, Some(generate_network_name().as_str()));
+    repository
+        .add_minute(&network, SOME_HOUR, &create_aggregate(60, 20))
+        .expect("a minute");
+    let place = create_place();
+    repository.save_place(&network, &place).expect("a place");
+    let renamed = create_network(32, Some(generate_network_name().as_str()));
+
+    // Act
+    repository
+        .add_minute(&renamed, SOME_HOUR + MINUTE, &create_aggregate(60, 20))
+        .expect("a minute under the new name");
+
+    // Assert
+    assert_eq!(
+        list_place_names(repository),
+        vec![(network.identify(), place.to_str().to_owned())]
+    );
 }

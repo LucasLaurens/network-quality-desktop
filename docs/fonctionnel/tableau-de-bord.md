@@ -42,6 +42,8 @@ Une courbe par mesure (latence p90, gigue moyenne, perte) sur 1 h, 24 h, 7 j ou 
 
 Chaque réseau des 30 derniers jours, le plus utilisé en premier : son nom (celui du Wi-Fi quand il est connu, sinon un nom générique), son type de connexion, la répartition de son temps entre les états, sa latence p90, sa perte et la durée mesurée sur laquelle reposent ces parts. Le réseau actuel porte la mention « actuel ». Quand au moins deux réseaux ont été mesurés une heure ou plus, celui qui a passé la plus grande part de son temps en Solide est désigné « le plus fiable pour la visio ».
 
+Chaque réseau peut recevoir le nom du lieu qu'il dessert (« Maison », « Bureau », « Café de la gare ») : « Nommer le lieu » sous la ligne ouvre un champ, Entrée ou « Enregistrer » le garde, Échap ou « Annuler » le referme sans rien changer. Le lieu devient le nom de la ligne, le nom du réseau passe en dessous ; un clic sur le lieu le renomme, un champ vidé l'oublie. Le tableau dit ainsi où la connexion tient le mieux. Le lieu tient en 60 caractères et ne quitte jamais l'ordinateur : il n'est pas dans l'export CSV et part avec l'effacement de l'historique. Il reste attaché au réseau (sa box et son type de connexion) : un Wi-Fi renommé garde son lieu.
+
 ## Débit
 
 Les tests de débit lancés d'un clic et leurs résultats, par pages de 20 : voir [Tests de débit](tests-de-debit.md).

@@ -16,14 +16,14 @@ use tauri_plugin_dialog::DialogExt;
 use application::{
     Clock, can_measure_against, detect_access, list_network_summaries, read_day_overview,
 };
-use domain::TestProfile;
+use domain::{PlaceName, TestProfile};
 use infrastructure::{
     LocationRequest, SystemClock, UpnpAccessDetector, request_location_permission,
 };
 
 use crate::create_latency_probe;
 use crate::dashboard_display::{
-    DashboardSummaryDisplay, EvolutionDisplay, PeriodChoice, compute_day_start,
+    DashboardSummaryDisplay, EvolutionDisplay, PeriodChoice, compute_day_start, decode_network_id,
 };
 use crate::display::ConnectionDisplay;
 use crate::engine_inbox::EngineInbox;
@@ -31,6 +31,7 @@ use crate::history_export::{
     ExportAvailability, ExportDone, ExportFolder, ExportPeriodChoice, HistoryLocation, write_export,
 };
 use crate::history_store::{DashboardHistory, HistoryNotice};
+use crate::place_store::PlaceStore;
 use crate::settings_effects::apply_settings;
 use crate::settings_form::{SettingsForm, format_save_confirmation};
 use crate::settings_store::SettingsStore;
@@ -229,6 +230,35 @@ pub async fn read_evolution(
                 error.0,
             )
         })
+}
+
+/// Names the place a network of the dashboard serves; a blank name forgets it.
+///
+/// # Errors
+///
+/// The sentence shown under the field: a name too long, or a storage failure.
+#[tauri::command]
+#[specta::specta]
+pub async fn save_place(
+    network_id: String,
+    place: String,
+    store: State<'_, PlaceStore>,
+    catalog: State<'_, Arc<TextCatalog>>,
+) -> Result<(), String> {
+    let place = PlaceName::parse(&place).map_err(|_| {
+        catalog.render_value("place-too-long", "max", PlaceName::MAX_CHARS.to_string())
+    })?;
+    let network = decode_network_id(&network_id).ok_or_else(|| {
+        report_and_render(
+            &catalog,
+            "place-not-saved",
+            "Naming a place",
+            format!("unknown network {network_id}"),
+        )
+    })?;
+    store
+        .save(&network, &place)
+        .map_err(|error| report_and_render(&catalog, "place-not-saved", "Naming a place", error.0))
 }
 
 /// The settings as last saved, for the Réglages page.

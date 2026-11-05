@@ -5,11 +5,12 @@ use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 
 use application::{HistoryEvent, HistoryReader, NetworkKey, RepositoryError, ThroughputRecord};
-use domain::{Aggregate, Granularity};
+use domain::{Aggregate, Granularity, PlaceName};
 use infrastructure::{SqliteHistoryRecorder, SqliteMeasurementRepository, SystemClock};
 use tauri::{AppHandle, Manager};
 
 use crate::history_export::HistoryLocation;
+use crate::place_store::PlaceStore;
 use crate::settings_store::SettingsStore;
 use crate::text_catalog::TextCatalog;
 
@@ -100,6 +101,10 @@ impl HistoryReader for EmptyHistory {
     fn count_throughput_tests(&self) -> Result<usize, RepositoryError> {
         Ok(0)
     }
+
+    fn list_places(&self) -> Result<Vec<(NetworkKey, PlaceName)>, RepositoryError> {
+        Ok(Vec::new())
+    }
 }
 
 /// Everything kept in the history file, each with the connection it needs.
@@ -108,6 +113,7 @@ pub struct OpenedStores {
     pub notice: HistoryNotice,
     pub dashboard: DashboardHistory,
     pub settings: SettingsStore,
+    pub places: PlaceStore,
     pub location: HistoryLocation,
 }
 
@@ -141,6 +147,7 @@ pub fn open_stores(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> Open
                 notice: HistoryNotice::from_sentences([set_aside, unreadable]),
                 dashboard,
                 settings: SettingsStore::open(&path),
+                places: PlaceStore::open(&path),
                 location: HistoryLocation::OnDisk(path),
             }
         }
@@ -153,6 +160,7 @@ pub fn open_stores(app: &AppHandle, catalog: &TextCatalog, now_utc: i64) -> Open
                     notice,
                     dashboard: DashboardHistory::create_empty(),
                     settings: SettingsStore::create_in_memory(),
+                    places: PlaceStore::create_unsaved(),
                     location: HistoryLocation::InMemory,
                 },
                 Err(error) => panic!("an in-memory history cannot fail to open: {}", error.0),
