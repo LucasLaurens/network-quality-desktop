@@ -1,11 +1,15 @@
 //! The dashboard's figures in words: the day so far, the evolution chart and the networks.
 
+use std::fmt::Write as _;
 use std::time::Duration;
 
 use application::{
     DayOverview, Evolution, NetworkKey, NetworkStay, NetworkSummary, OutageEnd, Period,
 };
-use domain::{Aggregate, CountedState, GradeBounds, LossRate, Metric, SECONDS_PER_DAY, Thresholds};
+use domain::{
+    Aggregate, ConnectionKind, CountedState, GradeBounds, LossRate, MacAddress, Metric,
+    SECONDS_PER_DAY, Thresholds,
+};
 use fluent_bundle::FluentArgs;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -61,6 +65,10 @@ pub struct StateShares {
 #[derive(Debug, Clone, PartialEq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct NetworkRowDisplay {
+    /// Names the network back to the core, to name its place.
+    pub network_id: String,
+    /// What the user calls the place it serves; empty until named.
+    pub place: String,
     pub label: String,
     pub connection: String,
     pub shares: StateShares,
@@ -219,6 +227,8 @@ impl NetworkRowDisplay {
         args.set("degraded", percent(CountedState::Degraded));
         args.set("offline", percent(CountedState::Offline));
         Self {
+            network_id: encode_network_id(&summary.network),
+            place: summary.place.to_str().to_owned(),
             label: compose_network_name(&summary.network, catalog),
             connection: catalog.render_text(connection_key),
             shares: StateShares {
@@ -236,6 +246,62 @@ impl NetworkRowDisplay {
             is_most_reliable: summary.is_most_reliable,
         }
     }
+}
+
+const NETWORK_ID_SEPARATOR: char = ':';
+const NETWORK_KINDS: [(ConnectionKind, &str); 5] = [
+    (ConnectionKind::Ethernet, "ethernet"),
+    (ConnectionKind::WiFi, "wifi"),
+    (ConnectionKind::Cellular, "cellular"),
+    (ConnectionKind::PhoneHotspot, "hotspot"),
+    (ConnectionKind::Other, "other"),
+];
+
+/// The network's identity as text, `wifi:549b4987e3a1`, the gateway left empty when unreadable.
+/// O(1).
+#[must_use]
+pub fn encode_network_id(network: &NetworkKey) -> String {
+    let kind = NETWORK_KINDS
+        .iter()
+        .find(|(kind, _)| *kind == network.kind)
+        .map_or("other", |(_, text)| text);
+    let gateway = network.gateway.map_or_else(String::new, |mac| {
+        mac.to_octets()
+            .iter()
+            .fold(String::new(), |mut hex, octet| {
+                // Writing into a String cannot fail.
+                let _ = write!(hex, "{octet:02x}");
+                hex
+            })
+    });
+    format!("{kind}{NETWORK_ID_SEPARATOR}{gateway}")
+}
+
+/// The network `encode_network_id` wrote, without its name; `None` for any other text. O(1).
+#[must_use]
+pub fn decode_network_id(id: &str) -> Option<NetworkKey> {
+    let (kind, gateway) = id.split_once(NETWORK_ID_SEPARATOR)?;
+    let kind = NETWORK_KINDS
+        .iter()
+        .find(|(_, text)| *text == kind)
+        .map(|(kind, _)| *kind)?;
+    let gateway = if gateway.is_empty() {
+        None
+    } else {
+        let mut octets = [0_u8; 6];
+        if gateway.len() != octets.len() * 2 {
+            return None;
+        }
+        for (index, octet) in octets.iter_mut().enumerate() {
+            *octet = u8::from_str_radix(gateway.get(index * 2..index * 2 + 2)?, 16).ok()?;
+        }
+        Some(MacAddress::from_octets(octets)?)
+    };
+    Some(NetworkKey {
+        gateway,
+        kind,
+        name: None,
+    })
 }
 
 impl EvolutionDisplay {
@@ -487,7 +553,7 @@ fn describe_coverage(measured: i64, elapsed: i64, catalog: &TextCatalog) -> Stri
 mod tests {
     use application::test_support::generate_network_name;
     use application::{HistoryEvent, NetworkKey, Outage};
-    use domain::{ConnectionKind, MacAddress, SECONDS_PER_HOUR, SecondSample};
+    use domain::{PlaceName, SECONDS_PER_HOUR, SecondSample};
 
     use super::*;
 
@@ -691,6 +757,7 @@ mod tests {
             aggregate,
             is_current: true,
             is_most_reliable: false,
+            place: PlaceName::default(),
         };
 
         // Act
@@ -721,6 +788,7 @@ mod tests {
             aggregate,
             is_current: false,
             is_most_reliable: false,
+            place: PlaceName::default(),
         };
 
         // Act
@@ -779,5 +847,72 @@ mod tests {
         assert_eq!(display.times[0], insert_no_break_spaces("1~h~00"));
         assert!(!display.is_empty);
         assert_eq!(display.state_labels[3].label, "Hors ligne");
+    }
+
+    #[test]
+    fn reads_back_every_network_id_it_writes() {
+        // Arrange
+        let networks: Vec<NetworkKey> = NETWORK_KINDS
+            .iter()
+            .flat_map(|(kind, _)| {
+                [
+                    MacAddress::from_octets([0x54, 0x9b, 0x49, 0x87, 0xe3, 0xa1]),
+                    None,
+                ]
+                .map(|gateway| NetworkKey {
+                    gateway,
+                    kind: *kind,
+                    name: None,
+                })
+            })
+            .collect();
+
+        // Act
+        let decoded: Vec<Option<NetworkKey>> = networks
+            .iter()
+            .map(|network| decode_network_id(&encode_network_id(network)))
+            .collect();
+
+        // Assert
+        assert_eq!(decoded, networks.into_iter().map(Some).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn refuses_a_network_id_it_did_not_write() {
+        // Act & Assert
+        for id in [
+            "",
+            "wifi",
+            "boat:",
+            "wifi:549b4987e3",
+            "wifi:549b4987e3zz",
+            "wifi:000000000000",
+        ] {
+            assert_eq!(decode_network_id(id), None, "{id}");
+        }
+    }
+
+    #[test]
+    fn carries_the_place_the_user_named() {
+        // Arrange
+        let catalog = TextCatalog::load();
+        let place = PlaceName::parse(&generate_network_name()).expect("a short name");
+        let summary = NetworkSummary {
+            network: create_network(None),
+            aggregate: create_aggregate(60, CountedState::Solid, 20),
+            is_current: false,
+            is_most_reliable: false,
+            place: place.clone(),
+        };
+
+        // Act
+        let row = NetworkRowDisplay::compose(&summary, &catalog);
+
+        // Assert
+        assert_eq!(row.place, place.to_str());
+        assert_eq!(
+            decode_network_id(&row.network_id),
+            Some(create_network(None))
+        );
     }
 }

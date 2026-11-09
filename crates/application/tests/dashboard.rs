@@ -5,9 +5,11 @@ use std::time::Duration;
 use application::test_support::{InMemoryMeasurementRepository, generate_network_name};
 use application::{
     EventKind, HistoryEvent, LiveHistory, MeasurementRepository, NetworkKey, NetworkStay,
-    OutageEnd, Period, list_network_summaries, read_day_overview, read_evolution,
+    OutageEnd, Period, PlaceRepository, list_network_summaries, read_day_overview, read_evolution,
 };
-use domain::{Aggregate, ConnectionKind, CountedState, MacAddress, SecondPoint, SecondSample};
+use domain::{
+    Aggregate, ConnectionKind, CountedState, MacAddress, PlaceName, SecondPoint, SecondSample,
+};
 
 /// A midnight, UTC, in seconds since 1970.
 const MIDNIGHT: i64 = 1_699_920_000;
@@ -581,4 +583,43 @@ fn names_no_most_reliable_network_without_another_to_compare() {
     // Assert
     assert_eq!(summaries.len(), 2);
     assert!(summaries.iter().all(|summary| !summary.is_most_reliable));
+}
+
+#[test]
+fn names_each_network_after_the_place_the_user_gave_it() {
+    // Arrange
+    let mut repository = InMemoryMeasurementRepository::default();
+    let home = create_network(15);
+    let cafe = create_network(16);
+    for network in [&home, &cafe] {
+        add_minute(
+            &mut repository,
+            network,
+            MIDNIGHT,
+            &create_aggregate(60, CountedState::Solid),
+        );
+    }
+    let place = PlaceName::parse(&generate_network_name()).expect("a short name");
+    // The name the network had when it was seen does not matter: its gateway and kind do.
+    let renamed_home = NetworkKey {
+        name: None,
+        ..home.clone()
+    };
+    repository
+        .save_place(&renamed_home, &place)
+        .expect("a place");
+
+    // Act
+    let summaries = list_network_summaries(&repository, &create_live(None), MIDNIGHT + MINUTE)
+        .expect("summaries");
+
+    // Assert
+    let place_of = |network: &NetworkKey| {
+        summaries
+            .iter()
+            .find(|summary| summary.network.is_same_identity(network))
+            .map(|summary| summary.place.clone())
+    };
+    assert_eq!(place_of(&home), Some(place));
+    assert_eq!(place_of(&cafe), Some(PlaceName::default()));
 }

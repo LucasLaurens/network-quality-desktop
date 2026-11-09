@@ -5,9 +5,11 @@ use std::time::Duration;
 
 use crate::Bitrate;
 
-/// Fibre uploads tens of Mbit/s and adds a few milliseconds at most.
+/// Fibre uploads tens of Mbit/s, and its round trip beyond the box stays near the distance to
+/// the server: 10 ms measured on a real FTTH line to Cloudflare, Wi-Fi left out. A 4G or 5G box,
+/// fast enough to upload as much, adds 20 ms and more.
 const FIBRE_UPLOAD_FROM: Bitrate = Bitrate::from_bits_per_second(20_000_000);
-const FIBRE_ROUND_TRIP_UP_TO: Duration = Duration::from_millis(8);
+const FIBRE_ROUND_TRIP_UP_TO: Duration = Duration::from_millis(15);
 /// ADSL uploads about 1 Mbit/s (3 with Annex M); its interleaving adds 10 to 40 ms.
 const ADSL_UPLOAD_UP_TO: Bitrate = Bitrate::from_bits_per_second(2_000_000);
 const ADSL_ROUND_TRIP_FROM: Duration = Duration::from_millis(10);
@@ -60,7 +62,7 @@ pub enum AccessEstimate {
 
 impl AccessEstimate {
     /// `uploads` are the latest throughput tests on this network, any order, `ACCESS_MIN_TESTS`
-    /// at least; `round_trip` the latency measured at rest. Fibre and cable look alike, and VDSL falls in between: both
+    /// at least; `round_trip` the latency at rest beyond the box (`compute_line_round_trip`). Fibre and cable look alike, and VDSL falls in between: both
     /// stay unknown rather than guessed. O(u log u) for u uploads.
     #[must_use]
     pub fn estimate(
@@ -150,13 +152,16 @@ mod tests {
         // Act
         let fibre = AccessEstimate::estimate(None, &fast, Some(Duration::from_millis(4)));
         let adsl = AccessEstimate::estimate(None, &slow, Some(Duration::from_millis(28)));
-        let fast_but_far = AccessEstimate::estimate(None, &fast, Some(Duration::from_millis(9)));
+        let fast_but_far = AccessEstimate::estimate(None, &fast, Some(Duration::from_millis(16)));
+        let fibre_across_the_country =
+            AccessEstimate::estimate(None, &fast, Some(Duration::from_millis(15)));
         let slow_but_near = AccessEstimate::estimate(None, &slow, Some(Duration::from_millis(9)));
 
         // Assert
         assert_eq!(fibre, AccessEstimate::EstimatedFibre);
         assert_eq!(adsl, AccessEstimate::EstimatedAdsl);
         assert_eq!(fast_but_far, AccessEstimate::Unknown);
+        assert_eq!(fibre_across_the_country, AccessEstimate::EstimatedFibre);
         assert_eq!(slow_but_near, AccessEstimate::Unknown);
     }
 

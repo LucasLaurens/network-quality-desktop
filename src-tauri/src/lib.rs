@@ -11,6 +11,7 @@ mod history_export;
 mod history_store;
 mod network_display;
 mod path_display;
+mod place_store;
 mod settings_effects;
 mod settings_form;
 mod settings_store;
@@ -87,6 +88,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             commands::read_evolution,
             commands::read_settings,
             commands::save_settings,
+            commands::save_place,
             commands::read_throughput_panel,
             commands::run_throughput_test,
             commands::choose_export_folder,
@@ -167,6 +169,7 @@ fn start_measurement(app: &tauri::AppHandle, catalog: &Arc<TextCatalog>) -> taur
     app.manage(stores.notice);
     app.manage(stores.dashboard);
     app.manage(stores.settings);
+    app.manage(stores.places);
     app.manage(stores.location);
     app.manage(history_export::ExportFolder::default());
     let mode = ShellMode::detect(&SystemTrayHost);

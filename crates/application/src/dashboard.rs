@@ -5,7 +5,7 @@ use std::cmp::Reverse;
 use std::collections::HashMap;
 
 use domain::{
-    Aggregate, ConnectionKind, CountedState, Granularity, MacAddress, SECONDS_PER_DAY,
+    Aggregate, ConnectionKind, CountedState, Granularity, MacAddress, PlaceName, SECONDS_PER_DAY,
     SECONDS_PER_HOUR, SECONDS_PER_MINUTE,
 };
 
@@ -107,6 +107,8 @@ pub struct NetworkSummary {
     pub is_current: bool,
     /// The network solid most often, among at least two measured for an hour or more.
     pub is_most_reliable: bool,
+    /// What the user calls the place the network serves; unnamed until then.
+    pub place: PlaceName,
 }
 
 /// The chart's buckets over `period`, the last hour from memory and the rest from the history.
@@ -224,8 +226,8 @@ pub fn read_day_overview(
     })
 }
 
-/// Each network of the last 30 days, the most measured first. O(r + k log k) for r rows and k
-/// networks.
+/// Each network of the last 30 days with its place, the most measured first. O(r + p + k log k)
+/// for r rows, p places named and k networks.
 ///
 /// # Errors
 ///
@@ -247,10 +249,17 @@ pub fn list_network_summaries(
                 network,
                 aggregate: Aggregate::default(),
                 is_most_reliable: false,
+                place: PlaceName::default(),
             });
             summaries.len() - 1
         });
         summaries[index].aggregate.merge(&aggregate);
+    }
+    // Before `retain`: it moves the summaries the indexes point at.
+    for (network, place) in reader.list_places()? {
+        if let Some(&index) = indexes.get(&network.identify()) {
+            summaries[index].place = place;
+        }
     }
     summaries.retain(|summary| summary.aggregate.count_measured_seconds() > 0);
     summaries.sort_by_key(|summary| Reverse(summary.aggregate.count_measured_seconds()));

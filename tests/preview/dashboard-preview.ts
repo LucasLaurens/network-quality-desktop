@@ -93,7 +93,8 @@ const summary: DashboardSummaryDisplay = {
   },
   networks: [
     {
-      label: 'Ethernet bureau',
+      place: 'Bureau',
+      label: 'Réseau Ethernet',
       connection: 'Ethernet',
       solid: 96,
       unstable: 4,
@@ -103,6 +104,7 @@ const summary: DashboardSummaryDisplay = {
       measured: '2 j 14 h',
     },
     {
+      place: 'Maison',
       label: 'Livebox-4F2A',
       connection: 'Wi-Fi',
       solid: 81,
@@ -113,6 +115,7 @@ const summary: DashboardSummaryDisplay = {
       measured: '5 j 20 h',
     },
     {
+      place: '',
       label: 'iPhone de Lucas',
       connection: 'Partage de connexion',
       solid: 52,
@@ -123,6 +126,8 @@ const summary: DashboardSummaryDisplay = {
       measured: '6 h',
     },
   ].map((network, index) => ({
+    networkId: `wifi:${String(index)}`,
+    place: network.place,
     label: network.label,
     connection: network.connection,
     shares: { solid: network.solid, unstable: network.unstable, degraded: network.degraded, offline: 0 },
@@ -153,6 +158,55 @@ const client = new InMemoryNetworkQualityClient({
   display: connectionScenarios[scenario ?? ''] ?? connectionScenarios.degraded,
   windowModeTexts: windowModeTexts,
 })
+// Real words, not generated ones: a value never wraps, so random text could overflow the layout.
+client.technicalDetails = {
+  sections: [
+    {
+      title: 'Connexion',
+      rows: [
+        { label: 'Réseau', value: 'Livebox-4F2A', spokenValue: 'Livebox-4F2A' },
+        { label: 'Liaison', value: `Wi-Fi 5${NBSP}GHz`, spokenValue: `Wi-Fi 5${NBSP}GHz` },
+        { label: 'Box', value: '192.168.1.1', spokenValue: '192.168.1.1' },
+      ],
+    },
+    {
+      title: 'Wi-Fi',
+      rows: [
+        { label: 'Signal', value: `−58${NBSP}dBm`, spokenValue: `−58${NBSP}dBm` },
+        { label: 'Canal', value: '36', spokenValue: '36' },
+        { label: 'Débit du lien', value: `866${NBSP}Mbit/s`, spokenValue: `866${NBSP}Mbit/s` },
+      ],
+    },
+    {
+      title: 'Trafic observé',
+      rows: [
+        {
+          label: 'Sur 5 secondes',
+          value: `↓ 0,8${NBSP}Mbit/s, ↑ 0,3${NBSP}Mbit/s`,
+          spokenValue: `reçu 0,8${NBSP}Mbit/s, envoyé 0,3${NBSP}Mbit/s`,
+        },
+        {
+          label: 'Pic de la dernière heure',
+          value: `↓ 42,6${NBSP}Mbit/s, ↑ 3,1${NBSP}Mbit/s`,
+          spokenValue: `reçu 42,6${NBSP}Mbit/s, envoyé 3,1${NBSP}Mbit/s`,
+        },
+        {
+          label: 'Volume depuis le lancement',
+          value: `↓ 812,4${NBSP}Mo, ↑ 96,0${NBSP}Mo`,
+          spokenValue: `reçu 812,4${NBSP}Mo, envoyé 96,0${NBSP}Mo`,
+        },
+      ],
+    },
+  ],
+  refreshSeconds: 1,
+}
+client.lineDetails = {
+  section: {
+    title: 'Ligne',
+    rows: [{ label: 'Accès', value: 'Fibre (estimé)', spokenValue: 'Fibre (estimé)' }],
+  },
+  note: `La box ne décrit pas sa ligne${NBSP}: l'accès est estimé d'après les tests de débit sur ce réseau et la latence.`,
+}
 client.setThroughputPanel({
   isAllowed: scenario !== 'first',
   note: `Les tests ne partent que sur un clic, vers Cloudflare. Rapide${NBSP}: jusqu'à 4,2${NBSP}Mo. Complet${NBSP}: jusqu'à 155,8${NBSP}Mo. La latence en charge s'affiche sans compter dans l'état.`,

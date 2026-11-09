@@ -22,6 +22,8 @@ const BYTES_PER_GIGABYTE: u64 = 1_000_000_000;
 pub struct DetailRow {
     pub label: String,
     pub value: String,
+    /// What a screen reader says for `value`: words where the value shows arrows.
+    pub spoken_value: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -50,10 +52,47 @@ pub struct LineDetails {
 
 impl DetailRow {
     fn compose(key: &str, value: String, catalog: &TextCatalog) -> Self {
+        Self::from_texts(catalog.render_text(key), value)
+    }
+
+    /// A value read the way it is shown. O(1).
+    fn from_texts(label: String, value: String) -> Self {
         Self {
-            label: catalog.render_text(key),
+            label,
+            spoken_value: value.clone(),
             value,
         }
+    }
+
+    /// « ↓ 85 Mbit/s, ↑ 2,5 Mbit/s », said « reçu 85 Mbit/s, envoyé 2,5 Mbit/s ». O(1).
+    fn compose_pair(label: String, received: String, sent: String, catalog: &TextCatalog) -> Self {
+        let mut args = FluentArgs::new();
+        args.set("received", received);
+        args.set("sent", sent);
+        Self {
+            label,
+            value: catalog.render("details-pair", Some(&args)),
+            spoken_value: catalog.render("details-pair-spoken", Some(&args)),
+        }
+    }
+
+    /// The pair when one way is known, « valeur inconnue » for the other; `None` when neither
+    /// is. O(1).
+    fn compose_known_pair(
+        key: &str,
+        [received, sent]: [Option<String>; 2],
+        catalog: &TextCatalog,
+    ) -> Option<Self> {
+        if received.is_none() && sent.is_none() {
+            return None;
+        }
+        let unknown = || catalog.render_text("value-unknown");
+        Some(Self::compose_pair(
+            catalog.render_text(key),
+            received.unwrap_or_else(unknown),
+            sent.unwrap_or_else(unknown),
+            catalog,
+        ))
     }
 }
 
@@ -135,36 +174,33 @@ fn compose_wifi_section(wifi: &WifiLink, catalog: &TextCatalog) -> DetailSection
 
 /// O(1).
 fn compose_traffic_section(traffic: TrafficReading, catalog: &TextCatalog) -> DetailSection {
-    let format = |rate: Option<TrafficRate>| {
-        rate.map_or_else(
-            || catalog.render_text("details-traffic-waiting"),
-            |rate| {
-                format_pair(
-                    format_bitrate(rate.received, catalog),
-                    format_bitrate(rate.sent, catalog),
-                    catalog,
-                )
-            },
-        )
+    let compose_rate_row = |label: String, rate: Option<TrafficRate>| match rate {
+        Some(rate) => DetailRow::compose_pair(
+            label,
+            format_bitrate(rate.received, catalog),
+            format_bitrate(rate.sent, catalog),
+            catalog,
+        ),
+        None => DetailRow::from_texts(label, catalog.render_text("details-traffic-waiting")),
     };
-    let volume = format_pair(
-        format_bytes(traffic.volume.received, catalog),
-        format_bytes(traffic.volume.sent, catalog),
-        catalog,
-    );
     DetailSection {
         title: catalog.render_text("details-traffic"),
         rows: vec![
-            DetailRow {
-                label: catalog.render_value(
+            compose_rate_row(
+                catalog.render_value(
                     "details-traffic-now",
                     "seconds",
                     TRAFFIC_WINDOW.as_secs().to_string(),
                 ),
-                value: format(traffic.current),
-            },
-            DetailRow::compose("details-traffic-peak", format(traffic.peak), catalog),
-            DetailRow::compose("details-traffic-volume", volume, catalog),
+                traffic.current,
+            ),
+            compose_rate_row(catalog.render_text("details-traffic-peak"), traffic.peak),
+            DetailRow::compose_pair(
+                catalog.render_text("details-traffic-volume"),
+                format_bytes(traffic.volume.received, catalog),
+                format_bytes(traffic.volume.sent, catalog),
+                catalog,
+            ),
         ],
     }
 }
@@ -182,14 +218,18 @@ impl LineDetails {
             // Each way on its own: many boxes give one and not the other.
             let rates = [line.downstream_max, line.upstream_max]
                 .map(|rate| rate.map(|rate| format_bitrate(rate, catalog)));
-            if let Some(value) = format_known_pair(rates, catalog) {
-                rows.push(row("details-line-rate", value));
-            }
+            rows.extend(DetailRow::compose_known_pair(
+                "details-line-rate",
+                rates,
+                catalog,
+            ));
             let totals = [line.total_received, line.total_sent]
                 .map(|bytes| bytes.map(|bytes| format_bytes(bytes, catalog)));
-            if let Some(value) = format_known_pair(totals, catalog) {
-                rows.push(row("details-box-traffic", value));
-            }
+            rows.extend(DetailRow::compose_known_pair(
+                "details-box-traffic",
+                totals,
+                catalog,
+            ));
         }
         let note_key = match (reading.line, reading.access) {
             (Some(_), _) => "details-line-note",
@@ -213,30 +253,6 @@ const fn to_access_key(access: AccessEstimate) -> &'static str {
         AccessEstimate::EstimatedAdsl => "access-estimated-adsl",
         AccessEstimate::Unknown => "access-unknown",
     }
-}
-
-/// « ↓ 17 Mbit/s, ↑ valeur inconnue » when one way is known; `None` when neither is. O(1).
-fn format_known_pair(
-    [received, sent]: [Option<String>; 2],
-    catalog: &TextCatalog,
-) -> Option<String> {
-    if received.is_none() && sent.is_none() {
-        return None;
-    }
-    let unknown = || catalog.render_text("value-unknown");
-    Some(format_pair(
-        received.unwrap_or_else(unknown),
-        sent.unwrap_or_else(unknown),
-        catalog,
-    ))
-}
-
-/// « ↓ 85 Mbit/s, ↑ 2,5 Mbit/s ». O(1).
-fn format_pair(received: String, sent: String, catalog: &TextCatalog) -> String {
-    let mut args = FluentArgs::new();
-    args.set("received", received);
-    args.set("sent", sent);
-    catalog.render("details-pair", Some(&args))
 }
 
 /// « 850,0 Mo » below a gigabyte, « 9,0 Go » above. O(1).
@@ -288,6 +304,7 @@ mod tests {
                 band: WifiBand::FiveGhz,
             }),
             latency: None,
+            line_round_trip: None,
         }
     }
 
@@ -338,9 +355,14 @@ mod tests {
             insert_no_break_spaces("↓ 85~Mbit/s, ↑ 2,5~Mbit/s")
         );
         assert_eq!(
+            traffic[0].spoken_value,
+            insert_no_break_spaces("reçu 85~Mbit/s, envoyé 2,5~Mbit/s")
+        );
+        assert_eq!(
             traffic[1].value,
             catalog.render_text("details-traffic-waiting")
         );
+        assert_eq!(traffic[1].spoken_value, traffic[1].value);
         assert_eq!(
             traffic[2].value,
             insert_no_break_spaces("↓ 1,5~Go, ↑ 42,0~Mo")
@@ -442,6 +464,10 @@ mod tests {
         assert_eq!(
             rows[1].value,
             insert_no_break_spaces("↓ 17~Mbit/s, ↑ valeur inconnue")
+        );
+        assert_eq!(
+            rows[1].spoken_value,
+            insert_no_break_spaces("reçu 17~Mbit/s, envoyé valeur inconnue")
         );
     }
 

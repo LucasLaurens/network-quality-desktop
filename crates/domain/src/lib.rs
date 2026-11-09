@@ -13,6 +13,7 @@ mod hysteresis;
 mod latency_window;
 mod loss;
 mod offline;
+mod place;
 mod probe_outcome;
 mod segment;
 mod settings;
@@ -43,6 +44,7 @@ pub use latency_window::{
 };
 pub use loss::{LossRate, LossWindow};
 pub use offline::{OFFLINE_AFTER_SECONDS, OfflineDetector};
+pub use place::{PlaceName, PlaceNameTooLong};
 pub use probe_outcome::ProbeOutcome;
 pub use segment::{
     Fault, GatewayEcho, GatewayWindow, LOCAL_LATENCY_LIMIT, LOCAL_LOSS_LIMIT, LocalProblem,

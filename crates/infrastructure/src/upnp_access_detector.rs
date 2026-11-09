@@ -22,6 +22,10 @@ const BYTES_RECEIVED_ACTION: &str = "GetTotalBytesReceived";
 const BYTES_SENT_ACTION: &str = "GetTotalBytesSent";
 const ACCESS_TYPE_ARGUMENT: &str = "NewWANAccessType";
 const DOWNSTREAM_MAX_ARGUMENT: &str = "NewLayer1DownstreamMaxBitRate";
+/// The Orange Livebox names its downstream rate without « Max », against the standard.
+const DOWNSTREAM_ARGUMENT_WITHOUT_MAX: &str = "NewLayer1DownstreamBitRate";
+/// What a box answers for a 32-bit counter it does not keep, the Livebox among them.
+const COUNTER_NOT_KEPT: u64 = u32::MAX as u64;
 const UPSTREAM_MAX_ARGUMENT: &str = "NewLayer1UpstreamMaxBitRate";
 const BYTES_RECEIVED_ARGUMENT: &str = "NewTotalBytesReceived";
 const BYTES_SENT_ARGUMENT: &str = "NewTotalBytesSent";
@@ -94,9 +98,9 @@ async fn read_box_line_now(gateway: Option<Ipv4Addr>) -> Option<BoxLine> {
             &properties,
             received
                 .as_ref()
-                .and_then(|answer| read_count(answer, BYTES_RECEIVED_ARGUMENT)),
+                .and_then(|answer| read_total(answer, BYTES_RECEIVED_ARGUMENT)),
             sent.as_ref()
-                .and_then(|answer| read_count(answer, BYTES_SENT_ARGUMENT)),
+                .and_then(|answer| read_total(answer, BYTES_SENT_ARGUMENT)),
         ));
     }
     None
@@ -127,7 +131,8 @@ fn to_box_line(
             .map_or(WanAccessType::Other, |value| {
                 WanAccessType::from_upnp(value)
             }),
-        downstream_max: read_rate(DOWNSTREAM_MAX_ARGUMENT),
+        downstream_max: read_rate(DOWNSTREAM_MAX_ARGUMENT)
+            .or_else(|| read_rate(DOWNSTREAM_ARGUMENT_WITHOUT_MAX)),
         upstream_max: read_rate(UPSTREAM_MAX_ARGUMENT),
         total_received,
         total_sent,
@@ -137,6 +142,11 @@ fn to_box_line(
 /// O(length).
 fn read_count(answer: &HashMap<String, String>, name: &str) -> Option<u64> {
     answer.get(name)?.trim().parse().ok()
+}
+
+/// A traffic total; `None` for the marker of a counter the box does not keep. O(length).
+fn read_total(answer: &HashMap<String, String>, name: &str) -> Option<u64> {
+    read_count(answer, name).filter(|bytes| *bytes != COUNTER_NOT_KEPT)
 }
 
 #[cfg(test)]
@@ -176,6 +186,32 @@ mod tests {
                 total_received: Some(9_000),
                 total_sent: None,
             }
+        );
+    }
+
+    #[test]
+    fn reads_the_livebox_answer_despite_its_names() {
+        // Arrange
+        let properties = create_answer(&[
+            ("NewWANAccessType", "Ethernet"),
+            ("NewLayer1UpstreamMaxBitRate", "2621440000"),
+            ("NewLayer1DownstreamBitRate", "2621440000"),
+            ("NewPhysicalLinkStatus", "Up"),
+        ]);
+        let not_kept = create_answer(&[(BYTES_RECEIVED_ARGUMENT, "4294967295")]);
+        let kept = create_answer(&[(BYTES_RECEIVED_ARGUMENT, "4294967294")]);
+
+        // Act
+        let line = to_box_line(&properties, None, None);
+
+        // Assert
+        let fibre_link = Some(Bitrate::from_bits_per_second(2_621_440_000));
+        assert_eq!(line.downstream_max, fibre_link);
+        assert_eq!(line.upstream_max, fibre_link);
+        assert_eq!(read_total(&not_kept, BYTES_RECEIVED_ARGUMENT), None);
+        assert_eq!(
+            read_total(&kept, BYTES_RECEIVED_ARGUMENT),
+            Some(4_294_967_294)
         );
     }
 
