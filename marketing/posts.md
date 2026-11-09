@@ -27,15 +27,15 @@ Ce qu'elle fait, concrètement :
 
 • Tout reste sur votre machine. Historique et lieux en local, export CSV, effacement en un clic. Par défaut, seuls de petits pings quittent l'ordinateur ; les tests de débit ne partent que sur un clic.
 
-Elle tourne sur macOS, Windows et Linux, et elle est gratuite.
+Elle tourne sur macOS, Windows et Linux, et elle sera gratuite.
 
-Aujourd'hui, l'app est prête : je l'utilise tous les jours. Mais elle n'est pas sur l'App Store ni sur le Microsoft Store. Elle est née pour régler mon problème à moi, pas pour être vendue.
+Aujourd'hui, l'app est prête : je l'utilise tous les jours. Mais elle n'est pas encore disponible : ni en téléchargement, ni sur l'App Store, ni sur le Microsoft Store. Elle est née pour régler mon problème à moi, pas pour être vendue.
 
 Publier sur les stores, c'est un vrai travail en plus : signature des applications, validation, maintenance dans la durée. Je le ferai si l'idée parle à suffisamment de monde.
 
 Alors dites-le-moi : est-ce que vous l'utiliseriez ? Un commentaire, un like ou un partage m'aideront à décider. Si l'envie est là, elle arrivera sur les stores.
 
-#DevPerso #Teletravail #Visio #Reseau #macOS #Windows #Linux #OpenSource
+#DevPerso #Teletravail #Visio #Reseau #macOS #Windows #Linux
 
 ## Twitter / X
 
@@ -45,7 +45,7 @@ La visio hache : Wi-Fi, box ou opérateur ?
 
 J'ai créé pour moi une app qui répond en un clic : une pastille dans la barre des menus, la cause en une phrase, la latence en charge, et où la connexion tient.
 
-Prête, pas encore sur les stores. Ça vous tente ? Dites-le.
+Prête, pas encore en ligne. Ça vous tente ? Dites-le.
 
 ### Fil (si vous préférez détailler)
 
@@ -59,9 +59,9 @@ Prête, pas encore sur les stores. Ça vous tente ? Dites-le.
 
 5/ Un test de débit d'un clic mesure aussi la latence en charge : ce qui fait hacher une visio malgré un bon débit. Et l'app dit si votre ligne est fibre ou ADSL.
 
-6/ Tout reste en local, lieux compris. Gratuite. macOS, Windows, Linux.
+6/ Tout reste en local, lieux compris. macOS, Windows, Linux. Et elle sera gratuite.
 
-7/ Elle est prête, mais pas sur les stores : elle est née pour mon usage. Si elle vous donne envie, dites-le en réponse. Assez d'intérêt, et je la publie.
+7/ Elle est prête, mais pas encore en ligne : elle est née pour mon usage. Si elle vous donne envie, dites-le en réponse. Assez d'intérêt, et je la publie.
 
 ## Instagram
 
@@ -77,7 +77,7 @@ J'en avais assez de deviner, alors j'ai créé pour moi une petite app : Qualit�
 ⚡ Un test de débit d'un clic, avec la latence en charge : ce qui fait hacher une visio malgré un bon débit.
 🔒 Tout reste sur votre ordinateur.
 
-Gratuite, sur macOS, Windows et Linux. Elle est prête, mais pas encore sur les stores. Si elle vous tente, dites-le en commentaire : assez d'envies, et je la publie.
+Elle tourne sur macOS, Windows et Linux, et sera gratuite. Elle est prête, mais pas encore en ligne. Si elle vous tente, dites-le en commentaire : assez d'envies, et je la publie.
 
 #teletravail #visio #wifi #productivite #devperso #macos #windows #linux #remotework
 
@@ -100,6 +100,6 @@ Et comme je travaille un peu partout, j'ai ajouté une chose qui me sert tous le
 
 Elle fait aussi des tests de débit d'un clic, en mesurant ce qui compte vraiment pour une visio : la latence en charge, c'est-à-dire ce que devient la connexion quand la ligne est pleine. Et elle dit si votre ligne est en fibre ou en ADSL, en le demandant à la box quand elle répond.
 
-Vos données restent sur l'ordinateur : l'historique, les lieux, les tests. Elle est gratuite et tourne sur Mac, Windows et Linux.
+Vos données restent sur l'ordinateur : l'historique, les lieux, les tests. Elle tourne sur Mac, Windows et Linux, et elle sera gratuite.
 
-Elle est prête, mais pas sur les stores : la publier demande du travail en plus. Si elle vous intéresse, dites-le-moi en commentaire ou partagez à quelqu'un dont la visio hache aussi. Avec assez d'intérêt, je me lance.
+Elle est prête, mais pas encore en ligne : je l'utilise pour moi, et la publier demande du travail en plus. Si elle vous intéresse, dites-le-moi en commentaire ou partagez à quelqu'un dont la visio hache aussi. Avec assez d'intérêt, je me lance.
